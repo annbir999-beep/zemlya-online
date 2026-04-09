@@ -1,0 +1,110 @@
+import Cookies from "js-cookie";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
+
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const token = Cookies.get("access_token");
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(options.headers as Record<string, string>),
+  };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  const res = await fetch(`${API_URL}${path}`, { ...options, headers });
+
+  if (res.status === 401) {
+    Cookies.remove("access_token");
+    window.location.href = "/login";
+  }
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Ошибка запроса");
+  }
+
+  return res.json();
+}
+
+export const api = {
+  get: <T>(path: string) => request<T>(path),
+  post: <T>(path: string, body: unknown) =>
+    request<T>(path, { method: "POST", body: JSON.stringify(body) }),
+  patch: <T>(path: string, body: unknown) =>
+    request<T>(path, { method: "PATCH", body: JSON.stringify(body) }),
+  delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),
+};
+
+// Типы
+export interface LotListItem {
+  id: number;
+  external_id: string;
+  title: string;
+  cadastral_number?: string;
+  start_price?: number;
+  area_sqm?: number;
+  area_ha?: number;
+  land_purpose?: string;
+  auction_type?: string;
+  status: string;
+  region_name?: string;
+  address?: string;
+  auction_end_date?: string;
+  lat?: number;
+  lng?: number;
+  source: string;
+  lot_url?: string;
+}
+
+export interface LotDetail extends LotListItem {
+  description?: string;
+  deposit?: number;
+  final_price?: number;
+  price_per_sqm?: number;
+  organizer_name?: string;
+  submission_deadline?: string;
+  auction_start_date?: string;
+  rosreestr_data?: Record<string, unknown>;
+  ai_assessment?: AiAssessment;
+}
+
+export interface AiAssessment {
+  score: number;
+  price_estimate: { min: number; max: number; comment: string };
+  pros: string[];
+  cons: string[];
+  risks: string[];
+  summary: string;
+  recommended_use: string;
+  assessed_at: string;
+}
+
+export interface LotsResponse {
+  items: LotListItem[];
+  total: number;
+  page: number;
+  pages: number;
+}
+
+export interface UserProfile {
+  id: number;
+  email: string;
+  name?: string;
+  phone?: string;
+  telegram_id?: string;
+  subscription_plan: string;
+  subscription_expires_at?: string;
+  saved_filters_limit: number;
+  notification_email: boolean;
+  notification_telegram: boolean;
+  is_verified: boolean;
+}
+
+export interface Alert {
+  id: number;
+  name: string;
+  is_active: boolean;
+  channel: string;
+  filters: Record<string, unknown>;
+  last_triggered_at?: string;
+  created_at: string;
+}
