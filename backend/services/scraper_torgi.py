@@ -185,8 +185,8 @@ class TorgiGovScraper:
             resp.raise_for_status()
             data = resp.json()
             return data.get("content", [])
-        except httpx.HTTPError as e:
-            print(f"[torgi] HTTP ошибка: {e}")
+        except Exception as e:
+            print(f"[torgi] HTTP ошибка: {type(e).__name__}: {e}")
             return []
 
     async def _upsert_lot(self, raw: dict) -> int:
