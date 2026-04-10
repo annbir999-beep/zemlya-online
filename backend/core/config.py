@@ -38,6 +38,11 @@ class Settings(BaseSettings):
     TORGI_GOV_DELAY: float = 1.0
     AVITO_DELAY: float = 3.0
 
+    # Proxy for scraping
+    PROXY_HOST: str = ""
+    PROXY_USER: str = ""
+    PROXY_PASS: str = ""
+
     class Config:
         env_file = ".env"
 

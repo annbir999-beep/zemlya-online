@@ -133,8 +133,14 @@ def _parse_datetime(dt_str: Optional[str]) -> Optional[datetime]:
 class TorgiGovScraper:
     def __init__(self, db: AsyncSession):
         self.db = db
+        proxy_url = (
+            f"http://{settings.PROXY_USER}:{settings.PROXY_PASS}@{settings.PROXY_HOST}"
+            if getattr(settings, "PROXY_HOST", None)
+            else None
+        )
         self.client = httpx.AsyncClient(
             timeout=30.0,
+            proxy=proxy_url,
             headers={"User-Agent": "ZemlyaPro/1.0 (aggregator; contact: support@zemlya.pro)"},
         )
 
