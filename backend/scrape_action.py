@@ -13,7 +13,29 @@ from db.database import AsyncSessionLocal, engine, Base
 from services.scraper_torgi import TorgiGovScraper
 
 
+async def test_torgi_connection():
+    """Тестирует доступность torgi.gov перед основным парсингом."""
+    import httpx
+    url = "https://torgi.gov.ru/new/public/lots/api/v1/lots"
+    params = {"lotStatus": "PUBLISHED", "category": "ZU", "page": 0, "size": 1}
+    print(f"[test] Проверяем доступность {url} ...")
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(url, params=params)
+            print(f"[test] HTTP статус: {resp.status_code}")
+            print(f"[test] Заголовки ответа: {dict(resp.headers)}")
+            data = resp.json()
+            total = data.get("totalElements", "?")
+            print(f"[test] Всего лотов на API: {total}")
+            print(f"[test] Первый элемент content: {data.get('content', [{}])[0].get('id', 'нет') if data.get('content') else 'пусто'}")
+    except Exception as e:
+        print(f"[test] ОШИБКА: {type(e).__name__}: {e}")
+
+
 async def run():
+    # Test connectivity first
+    await test_torgi_connection()
+
     # Create tables if not exist
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
