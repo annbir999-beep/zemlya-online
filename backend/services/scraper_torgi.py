@@ -23,7 +23,7 @@ from services.rubrics import normalize_vri_to_rubric
 from core.config import settings
 
 
-TORGI_BASE = "https://torgi.gov.ru/new/public/lots/api/v1"
+TORGI_BASE = "https://torgi.gov.ru/new/api/public"
 
 # Маппинг категорий torgi.gov -> наш LandPurpose
 PURPOSE_MAP = {
@@ -141,7 +141,12 @@ class TorgiGovScraper:
         self.client = httpx.AsyncClient(
             timeout=30.0,
             proxy=proxy_url,
-            headers={"User-Agent": "ZemlyaPro/1.0 (aggregator; contact: support@zemlya.pro)"},
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "application/json, text/plain, */*",
+                "Accept-Language": "ru-RU,ru;q=0.9",
+                "Referer": "https://torgi.gov.ru/new/public/lots/lot",
+            },
         )
 
     async def run(self) -> int:
@@ -173,20 +178,30 @@ class TorgiGovScraper:
         return saved
 
     async def _fetch_page(self, page: int, size: int) -> list:
-        params = {
-            "lotStatus": "PUBLISHED,APPLICATIONS_SUBMISSION,AUCTION_IN_PROGRESS",
-            "category": "ZU",  # Земельный участок
-            "page": page,
-            "size": size,
-            "sort": "firstVersionPublicationDate,desc",
-        }
+        # Новый API принимает lotStatus как Set — передаём списком
+        params = [
+            ("lotStatus", "PUBLISHED"),
+            ("lotStatus", "APPLICATIONS_SUBMISSION"),
+            ("catCode", "301"),
+            ("byFirstVersion", "true"),
+            ("page", page),
+            ("size", size),
+            ("sort", "firstVersionPublicationDate,desc"),
+        ]
         try:
-            resp = await self.client.get(f"{TORGI_BASE}/lots", params=params)
+            resp = await self.client.get(f"{TORGI_BASE}/lotcards/search", params=params)
+            print(f"[torgi] HTTP статус: {resp.status_code}")
             resp.raise_for_status()
             data = resp.json()
+            total = data.get("totalElements", "?")
+            print(f"[torgi] Всего лотов: {total}, страница {page}")
             return data.get("content", [])
         except Exception as e:
             print(f"[torgi] HTTP ошибка: {type(e).__name__}: {e}")
+            try:
+                print(f"[torgi] Ответ сервера: {resp.text[:500]}")
+            except Exception:
+                pass
             return []
 
     async def _upsert_lot(self, raw: dict) -> int:
@@ -197,15 +212,18 @@ class TorgiGovScraper:
         lot = result.scalar_one_or_none()
 
         # Извлекаем данные
-        char = raw.get("characteristics", {})
+        # characteristics — прямой массив в новом API
+        char_list = raw.get("characteristics", [])
+        if isinstance(char_list, dict):
+            char_list = char_list.get("items", [])
         bidding = raw.get("biddForm", {})
         location_data = raw.get("lotAddress", {})
 
         area_sqm = None
-        for c in char.get("items", []):
-            if "площадь" in c.get("name", "").lower() or c.get("code") == "AREA":
+        for c in char_list:
+            if "площадь" in c.get("name", "").lower() or c.get("code") in ("AREA", "ZU_AREA"):
                 try:
-                    area_sqm = float(c.get("value", 0))
+                    area_sqm = float(str(c.get("value", "0")).replace(",", "."))
                 except (ValueError, TypeError):
                     pass
 
@@ -222,10 +240,10 @@ class TorgiGovScraper:
         lat = location_data.get("lat")
         lng = location_data.get("lon")
 
-        purpose_raw = raw.get("subject", {}).get("name", "")
+        purpose_raw = raw.get("lotName", "") or raw.get("subject", {}).get("name", "")
         vri_raw = ""
-        for c in char.get("items", []):
-            if "разрешённое" in c.get("name", "").lower() or c.get("code") == "VRI":
+        for c in char_list:
+            if "разрешённое" in c.get("name", "").lower() or c.get("code") in ("VRI", "ZU_VRI"):
                 vri_raw = c.get("value", "")
 
         # Извлекаем ЭТП
@@ -264,9 +282,10 @@ class TorgiGovScraper:
         if lot is None:
             lot = Lot(external_id=external_id, source=LotSource.TORGI_GOV)
 
-        lot.title = raw.get("subject", {}).get("name", "")[:500]
+        lot.title = (raw.get("lotName") or raw.get("subject", {}).get("name", ""))[:500]
         lot.description = raw.get("lotDescription", "")
-        lot.cadastral_number = char.get("cadastralNumber") or raw.get("cadastralNumber")
+        cadastral_raw = next((c.get("value") for c in char_list if c.get("code") in ("CADASTRAL_NUM", "ZU_CADASTRAL")), None)
+        lot.cadastral_number = cadastral_raw or raw.get("cadastralNumber")
         lot.notice_number = str(notice_number)[:200] if notice_number else None
         lot.start_price = start_price
         lot.deposit = float(deposit_val) if deposit_val else None
