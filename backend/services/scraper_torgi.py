@@ -134,7 +134,7 @@ class TorgiGovScraper:
     def __init__(self, db: AsyncSession):
         self.db = db
         proxy_url = (
-            f"http://{settings.PROXY_USER}:{settings.PROXY_PASS}@{settings.PROXY_HOST}"
+            f"socks5://{settings.PROXY_USER}:{settings.PROXY_PASS}@{settings.PROXY_HOST}"
             if getattr(settings, "PROXY_HOST", None)
             else None
         )

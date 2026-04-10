@@ -20,7 +20,7 @@ redis==5.2.1
 kombu==5.4.2
 
 # HTTP client (scraping)
-httpx==0.28.1
+httpx[socks]==0.28.1
 playwright==1.49.0
 beautifulsoup4==4.12.3
 lxml==5.3.0
