@@ -42,3 +42,5 @@ email-validator==2.2.0
 python-dotenv==1.0.1
 orjson==3.10.12
 httptools==0.6.4
+shapely==2.1.0
+numpy>=1.21
