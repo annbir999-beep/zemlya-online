@@ -153,10 +153,15 @@ class TorgiGovScraper:
         """Запускает полный цикл парсинга. Возвращает кол-во сохранённых/обновлённых лотов."""
         saved = 0
         page = 0
-        size = 100
+        size = 50
+        total_pages = None
 
         while True:
-            lots_data = await self._fetch_page(page, size)
+            lots_data, total_pages_resp = await self._fetch_page(page, size)
+            if total_pages is None and total_pages_resp is not None:
+                total_pages = total_pages_resp
+                print(f"[torgi] Всего страниц: {total_pages}")
+
             if not lots_data:
                 break
 
@@ -169,15 +174,17 @@ class TorgiGovScraper:
 
             await asyncio.sleep(settings.TORGI_GOV_DELAY)
 
-            # Если вернулось меньше size — это последняя страница
-            if len(lots_data) < size:
+            if total_pages is not None:
+                if page >= total_pages - 1:
+                    break
+            elif len(lots_data) < size:
                 break
             page += 1
 
         await self.client.aclose()
         return saved
 
-    async def _fetch_page(self, page: int, size: int) -> list:
+    async def _fetch_page(self, page: int, size: int) -> tuple:
         # Новый API принимает lotStatus как Set — передаём списком
         params = [
             ("lotStatus", "PUBLISHED"),
@@ -190,19 +197,20 @@ class TorgiGovScraper:
         ]
         try:
             resp = await self.client.get(f"{TORGI_BASE}/lotcards/search", params=params)
-            print(f"[torgi] HTTP статус: {resp.status_code}")
+            print(f"[torgi] HTTP статус: {resp.status_code}, страница {page}")
             resp.raise_for_status()
             data = resp.json()
             total = data.get("totalElements", "?")
-            print(f"[torgi] Всего лотов: {total}, страница {page}")
-            return data.get("content", [])
+            total_pages = data.get("totalPages")
+            print(f"[torgi] Лотов: {total}, страниц: {total_pages}")
+            return data.get("content", []), total_pages
         except Exception as e:
             print(f"[torgi] HTTP ошибка: {type(e).__name__}: {e}")
             try:
                 print(f"[torgi] Ответ сервера: {resp.text[:500]}")
             except Exception:
                 pass
-            return []
+            return [], None
 
     async def _upsert_lot(self, raw: dict) -> int:
         external_id = f"torgi_{raw['id']}"
