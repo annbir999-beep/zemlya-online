@@ -16,18 +16,28 @@ from services.scraper_torgi import TorgiGovScraper
 async def test_torgi_connection():
     """Тестирует доступность torgi.gov перед основным парсингом."""
     import httpx
+    from core.config import settings
+
+    proxy_host = getattr(settings, "PROXY_HOST", None)
+    proxy_user = getattr(settings, "PROXY_USER", None)
+    proxy_pass = getattr(settings, "PROXY_PASS", None)
+    proxy_url = (
+        f"socks5://{proxy_user}:{proxy_pass}@{proxy_host}"
+        if proxy_host
+        else None
+    )
+    print(f"[test] Прокси: {proxy_host or 'не настроен'}")
+
     url = "https://torgi.gov.ru/new/public/lots/api/v1/lots"
     params = {"lotStatus": "PUBLISHED", "category": "ZU", "page": 0, "size": 1}
     print(f"[test] Проверяем доступность {url} ...")
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=30.0, proxy=proxy_url) as client:
             resp = await client.get(url, params=params)
             print(f"[test] HTTP статус: {resp.status_code}")
-            print(f"[test] Заголовки ответа: {dict(resp.headers)}")
             data = resp.json()
             total = data.get("totalElements", "?")
             print(f"[test] Всего лотов на API: {total}")
-            print(f"[test] Первый элемент content: {data.get('content', [{}])[0].get('id', 'нет') if data.get('content') else 'пусто'}")
     except Exception as e:
         print(f"[test] ОШИБКА: {type(e).__name__}: {e}")
 
