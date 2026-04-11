@@ -82,9 +82,9 @@ class Lot(Base):
     source = Column(Enum(LotSource), nullable=False, default=LotSource.TORGI_GOV)
 
     # Основные данные
-    title = Column(String(500))
+    title = Column(Text)
     description = Column(Text)
-    cadastral_number = Column(String(30), index=True)
+    cadastral_number = Column(Text, index=True)
     notice_number = Column(String(200), index=True)   # Номер извещения/лота
 
     # ── Цена ──
@@ -108,14 +108,14 @@ class Lot(Base):
 
     # ── Назначение [TG] — данные torgi.gov ──
     land_purpose = Column(Enum(LandPurpose))
-    land_purpose_raw = Column(String(500))  # Оригинальная строка
-    category_tg = Column(String(300))       # Категория земель [TG]
-    vri_tg = Column(String(500))            # ВРИ [TG]
+    land_purpose_raw = Column(Text)          # Оригинальная строка
+    category_tg = Column(Text)              # Категория земель [TG]
+    vri_tg = Column(Text)                   # ВРИ [TG]
     rubric_tg = Column(Integer, index=True) # ID рубрики [TG] (1-40)
 
     # ── Назначение [КН] — данные Росреестра ──
-    category_kn = Column(String(300))       # Категория земель [КН]
-    vri_kn = Column(String(500))            # ВРИ [КН]
+    category_kn = Column(Text)              # Категория земель [КН]
+    vri_kn = Column(Text)                   # ВРИ [КН]
     rubric_kn = Column(Integer, index=True) # ID рубрики [КН] (1-40)
 
     # ── Тип торгов ──

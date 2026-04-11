@@ -261,7 +261,11 @@ class TorgiGovScraper:
             """Получить значение характеристики по коду."""
             for c in char_list:
                 if c.get("code") in codes:
-                    return c.get("characteristicValue") or c.get("value", "")
+                    val = c.get("characteristicValue") or c.get("value", "")
+                    # Multiselect возвращает список — берём первый элемент
+                    if isinstance(val, list):
+                        val = val[0].get("name", "") if val and isinstance(val[0], dict) else (str(val[0]) if val else "")
+                    return val or ""
             return ""
 
         area_sqm = None
