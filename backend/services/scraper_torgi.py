@@ -25,6 +25,37 @@ from core.config import settings
 
 TORGI_BASE = "https://torgi.gov.ru/new/api/public"
 
+# Маппинг subjectRFCode -> название региона
+REGION_MAP = {
+    "01": "Адыгея", "02": "Башкортостан", "03": "Бурятия", "04": "Алтай",
+    "05": "Дагестан", "06": "Ингушетия", "07": "Кабардино-Балкария", "08": "Калмыкия",
+    "09": "Карачаево-Черкесия", "10": "Карелия", "11": "Коми", "12": "Марий Эл",
+    "13": "Мордовия", "14": "Саха (Якутия)", "15": "Северная Осетия", "16": "Татарстан",
+    "17": "Тыва", "18": "Удмуртия", "19": "Хакасия", "20": "Чечня",
+    "21": "Чувашия", "22": "Алтайский край", "23": "Краснодарский край",
+    "24": "Красноярский край", "25": "Приморский край", "26": "Ставропольский край",
+    "27": "Хабаровский край", "28": "Амурская область", "29": "Архангельская область",
+    "30": "Астраханская область", "31": "Белгородская область", "32": "Брянская область",
+    "33": "Владимирская область", "34": "Волгоградская область", "35": "Вологодская область",
+    "36": "Воронежская область", "37": "Ивановская область", "38": "Иркутская область",
+    "39": "Калининградская область", "40": "Калужская область", "41": "Камчатский край",
+    "42": "Кемеровская область", "43": "Кировская область", "44": "Костромская область",
+    "45": "Курганская область", "46": "Курская область", "47": "Ленинградская область",
+    "48": "Липецкая область", "49": "Магаданская область", "50": "Московская область",
+    "51": "Мурманская область", "52": "Нижегородская область", "53": "Новгородская область",
+    "54": "Новосибирская область", "55": "Омская область", "56": "Оренбургская область",
+    "57": "Орловская область", "58": "Пензенская область", "59": "Пермский край",
+    "60": "Псковская область", "61": "Ростовская область", "62": "Рязанская область",
+    "63": "Самарская область", "64": "Саратовская область", "65": "Сахалинская область",
+    "66": "Свердловская область", "67": "Смоленская область", "68": "Тамбовская область",
+    "69": "Тверская область", "70": "Томская область", "71": "Тульская область",
+    "72": "Тюменская область", "73": "Ульяновская область", "74": "Челябинская область",
+    "75": "Забайкальский край", "76": "Ярославская область", "77": "Москва",
+    "78": "Санкт-Петербург", "79": "Еврейская АО", "83": "Ненецкий АО",
+    "86": "Ханты-Мансийский АО", "87": "Чукотский АО", "89": "Ямало-Ненецкий АО",
+    "91": "Крым", "92": "Севастополь",
+}
+
 # Маппинг категорий torgi.gov -> наш LandPurpose
 PURPOSE_MAP = {
     "Земли сельскохозяйственного назначения": LandPurpose.AGRICULTURAL,
@@ -220,20 +251,31 @@ class TorgiGovScraper:
         lot = result.scalar_one_or_none()
 
         # Извлекаем данные
-        # characteristics — прямой массив в новом API
+        # Новый API: characteristics — массив объектов с полем characteristicValue
         char_list = raw.get("characteristics", [])
         if isinstance(char_list, dict):
             char_list = char_list.get("items", [])
         bidding = raw.get("biddForm", {})
-        location_data = raw.get("lotAddress", {})
+
+        def get_char(codes):
+            """Получить значение характеристики по коду."""
+            for c in char_list:
+                if c.get("code") in codes:
+                    return c.get("characteristicValue") or c.get("value", "")
+            return ""
 
         area_sqm = None
-        for c in char_list:
-            if "площадь" in c.get("name", "").lower() or c.get("code") in ("AREA", "ZU_AREA"):
-                try:
-                    area_sqm = float(str(c.get("value", "0")).replace(",", "."))
-                except (ValueError, TypeError):
-                    pass
+        area_raw = get_char(["SquareZU", "AREA", "ZU_AREA"])
+        if area_raw:
+            try:
+                area_sqm = float(str(area_raw).replace(",", ".").replace(" ", ""))
+            except (ValueError, TypeError):
+                pass
+
+        # Регион из subjectRFCode
+        subject_code = str(raw.get("subjectRFCode", "")).zfill(2)
+        region_name = REGION_MAP.get(subject_code, "")
+        region_code = subject_code
 
         start_price = raw.get("priceMin") or raw.get("nmc")
         try:
@@ -241,18 +283,12 @@ class TorgiGovScraper:
         except (ValueError, TypeError):
             start_price = None
 
-        region_name = location_data.get("region", {}).get("name", "")
-        region_code = location_data.get("region", {}).get("code", "")
-        address = location_data.get("address", "")
-
-        lat = location_data.get("lat")
-        lng = location_data.get("lon")
+        address = ""
+        lat = None
+        lng = None
 
         purpose_raw = raw.get("lotName", "") or raw.get("subject", {}).get("name", "")
-        vri_raw = ""
-        for c in char_list:
-            if "разрешённое" in c.get("name", "").lower() or c.get("code") in ("VRI", "ZU_VRI"):
-                vri_raw = c.get("value", "")
+        vri_raw = get_char(["PermittedUse", "VRI", "ZU_VRI"])
 
         # Извлекаем ЭТП
         etp_name = raw.get("etpInfo", {}).get("name") or raw.get("etp", {}).get("name")
@@ -292,8 +328,8 @@ class TorgiGovScraper:
 
         lot.title = (raw.get("lotName") or raw.get("subject", {}).get("name", ""))[:500]
         lot.description = raw.get("lotDescription", "")
-        cadastral_raw = next((c.get("value") for c in char_list if c.get("code") in ("CADASTRAL_NUM", "ZU_CADASTRAL")), None)
-        lot.cadastral_number = cadastral_raw or raw.get("cadastralNumber")
+        cadastral_raw = get_char(["CadastralNumber", "CADASTRAL_NUM", "ZU_CADASTRAL"])
+        lot.cadastral_number = cadastral_raw or raw.get("cadastralNumber") or None
         lot.notice_number = str(notice_number)[:200] if notice_number else None
         lot.start_price = start_price
         lot.deposit = float(deposit_val) if deposit_val else None
