@@ -29,7 +29,7 @@ export default function MapView({ points, selectedId, onLotClick }: Props) {
 
   useEffect(() => {
     if (!mapRef.current) return;
-    if ((mapRef.current as Record<string, unknown>)._leaflet_id) return;
+    if ((mapRef.current as unknown as Record<string, unknown>)._leaflet_id) return;
 
     loadCss("https://unpkg.com/leaflet@1.9.4/dist/leaflet.css", "leaflet-css");
 
@@ -37,7 +37,7 @@ export default function MapView({ points, selectedId, onLotClick }: Props) {
       const L = mod.default;
 
       if (!mapRef.current) return;
-      if ((mapRef.current as Record<string, unknown>)._leaflet_id) return;
+      if ((mapRef.current as unknown as Record<string, unknown>)._leaflet_id) return;
 
       const map = L.map(mapRef.current, {
         center: [61.5, 105.3],
