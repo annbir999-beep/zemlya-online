@@ -391,9 +391,9 @@ export default function LotDetailPage({ params }: { params: Promise<{ id: string
                 ].map(item => (
                   <div key={item.label} style={{
                     display: "flex", justifyContent: "space-between",
-                    padding: "6px 0", borderBottom: "1px solid var(--border)",
+                    padding: "6px 8px", borderBottom: "1px solid var(--border)",
                     background: (item as { highlight?: boolean }).highlight ? "var(--primary-light)" : "transparent",
-                    borderRadius: 4, padding: "6px 8px",
+                    borderRadius: 4,
                   }}>
                     <span style={{ fontSize: 12, color: "var(--text-2)" }}>{item.label}</span>
                     <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>{item.value}</span>
