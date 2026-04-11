@@ -72,8 +72,12 @@ export interface LotDetail extends LotListItem {
   area_sqm_kn?: number;
   area_discrepancy?: string;
   land_purpose_raw?: string;
+  category_tg?: string;
   vri_tg?: string;
   rubric_tg?: number;
+  category_kn?: string;
+  vri_kn?: string;
+  rubric_kn?: number;
   auction_form?: string;
   deal_type?: string;
   etp?: string;
