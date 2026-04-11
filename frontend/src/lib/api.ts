@@ -58,13 +58,31 @@ export interface LotListItem {
 export interface LotDetail extends LotListItem {
   description?: string;
   deposit?: number;
+  deposit_pct?: number;
   final_price?: number;
   price_per_sqm?: number;
   organizer_name?: string;
   submission_deadline?: string;
+  submission_start?: string;
+  submission_end?: string;
   auction_start_date?: string;
+  notice_number?: string;
+  cadastral_cost?: number;
+  pct_price_to_cadastral?: number;
+  area_sqm_kn?: number;
+  area_discrepancy?: string;
+  land_purpose_raw?: string;
+  vri_tg?: string;
+  rubric_tg?: number;
+  auction_form?: string;
+  deal_type?: string;
+  etp?: string;
+  resale_type?: string;
+  region_code?: string;
+  published_at?: string;
   rosreestr_data?: Record<string, unknown>;
   ai_assessment?: AiAssessment;
+  raw_data?: Record<string, unknown>;
 }
 
 export interface AiAssessment {
