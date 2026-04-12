@@ -57,16 +57,30 @@ class RosreestrClient:
         attrs = feature.get("attrs") or feature.get("properties") or {}
         center = feature.get("center") or {}
 
-        # Координаты могут быть в center.y/x или geometry.coordinates
+        # Координаты могут быть в center.y/x или geometry.coordinates (EPSG:3857)
         lat = center.get("y")
         lng = center.get("x")
-        if not lat and feature.get("geometry"):
+
+        # Если center пустой — берём центроид из geometry
+        if (not lat or not lng) and feature.get("geometry"):
             coords = feature["geometry"].get("coordinates", [])
-            if coords and isinstance(coords[0], (int, float)):
-                lng, lat = coords[0], coords[1]
-            elif coords and isinstance(coords[0], list):
-                # Polygon — берём первую точку как приближение
-                lng, lat = coords[0][0][0], coords[0][0][1]
+            geom_type = feature["geometry"].get("type", "")
+            try:
+                from shapely.geometry import shape
+                geom = shape(feature["geometry"])
+                centroid = geom.centroid
+                lng, lat = centroid.x, centroid.y
+            except Exception:
+                pass
+
+        # Если координаты в метрах (EPSG:3857) — конвертируем в WGS84
+        if lat and lng and (abs(lat) > 90 or abs(lng) > 180):
+            try:
+                from pyproj import Transformer
+                transformer = Transformer.from_crs("EPSG:3857", "EPSG:4326", always_xy=True)
+                lng, lat = transformer.transform(lng, lat)
+            except Exception:
+                lat, lng = None, None
 
         result = {
             "cadastral_number": attrs.get("cn") or attrs.get("cadastral_number"),
