@@ -1,40 +1,42 @@
 """
-Клиент публичной кадастровой карты Росреестра (pkk.rosreestr.ru).
+Клиент НСПД (nspd.gov.ru) — публичная кадастровая карта.
 Открытый API — не требует регистрации или ключей.
+Эндпоинт: /api/geoportal/v2/search/geoportal
 """
 import httpx
 from typing import Optional
 
 
-PKK_BASE = "https://nspd.gov.ru/api"
+NSPD_BASE = "https://nspd.gov.ru"
 
 
 class RosreestrClient:
     def __init__(self):
         self.client = httpx.AsyncClient(
             timeout=15.0,
-            verify=False,  # pkk.rosreestr.ru использует самоподписанный сертификат
+            verify=False,
+            follow_redirects=True,
             headers={
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-                "Referer": "https://nspd.gov.ru/",
+                "Referer": "https://nspd.gov.ru/map?thematic=PKK",
                 "Accept": "application/json, text/plain, */*",
-                "Accept-Language": "ru-RU,ru;q=0.9",
+                "Accept-Language": "ru-RU,ru;q=0.9,en;q=0.8",
+                "Origin": "https://nspd.gov.ru",
             },
         )
 
     async def get_cadastral_info(self, cadastral_number: str) -> Optional[dict]:
         """
-        Получает данные по кадастровому номеру.
-        Возвращает dict с полями: area, address, category, vri, lat, lng, status
+        Получает данные по кадастровому номеру через НСПД.
+        Возвращает dict с полями: area_sqm, address, category, vri, lat, lng, cadastral_cost
         """
         if not cadastral_number:
             return None
 
-        # Определяем тип объекта (ЗУ = тип 1)
         try:
             resp = await self.client.get(
-                f"{PKK_BASE}/features/1",
-                params={"text": cadastral_number, "limit": 1, "skip": 0},
+                f"{NSPD_BASE}/api/geoportal/v2/search/geoportal",
+                params={"thematicSearchId": 1, "query": cadastral_number},
             )
             resp.raise_for_status()
             data = resp.json()
@@ -42,44 +44,59 @@ class RosreestrClient:
             print(f"[Росреестр] Ошибка запроса {cadastral_number}: {e}")
             return None
 
-        features = data.get("features", [])
+        # Ответ: {"data": {"features": [...]}} или {"features": [...]}
+        features = (
+            data.get("data", {}).get("features")
+            or data.get("features")
+            or []
+        )
         if not features:
             return None
 
         feature = features[0]
-        attrs = feature.get("attrs", {})
-        center = feature.get("center", {})
+        attrs = feature.get("attrs") or feature.get("properties") or {}
+        center = feature.get("center") or {}
+
+        # Координаты могут быть в center.y/x или geometry.coordinates
+        lat = center.get("y")
+        lng = center.get("x")
+        if not lat and feature.get("geometry"):
+            coords = feature["geometry"].get("coordinates", [])
+            if coords and isinstance(coords[0], (int, float)):
+                lng, lat = coords[0], coords[1]
+            elif coords and isinstance(coords[0], list):
+                # Polygon — берём первую точку как приближение
+                lng, lat = coords[0][0][0], coords[0][0][1]
 
         result = {
-            "cadastral_number": attrs.get("cn"),
-            "area_sqm": attrs.get("area_value"),
+            "cadastral_number": attrs.get("cn") or attrs.get("cadastral_number"),
+            "area_sqm": attrs.get("area_value") or attrs.get("area"),
             "address": attrs.get("address"),
-            "category": attrs.get("category_type"),
-            "vri": attrs.get("util_by_doc"),
+            "category": attrs.get("category_type") or attrs.get("category"),
+            "vri": attrs.get("util_by_doc") or attrs.get("vri"),
             "status": attrs.get("status"),
-            "owner_type": attrs.get("own_name"),
-            "cadastral_cost": attrs.get("cad_cost"),
-            "cadastral_cost_date": attrs.get("cad_cost_date"),
-            "lat": center.get("y"),
-            "lng": center.get("x"),
-            "rosreestr_id": feature.get("id"),
+            "cadastral_cost": attrs.get("cad_cost") or attrs.get("cadastral_cost"),
+            "lat": lat,
+            "lng": lng,
         }
 
-        # Убираем None-значения
         return {k: v for k, v in result.items() if v is not None}
 
     async def search_by_coords(self, lat: float, lng: float) -> Optional[dict]:
-        """Ищем участок по координатам (клик на карте)"""
+        """Ищем участок по координатам"""
         try:
             resp = await self.client.get(
-                f"{PKK_BASE}/features/1",
-                params={"sq": f'{{"type":"Point","coordinates":[{lng},{lat}]}}', "limit": 1, "skip": 0},
+                f"{NSPD_BASE}/api/geoportal/v2/search/geoportal",
+                params={
+                    "thematicSearchId": 1,
+                    "query": f"{lat},{lng}",
+                },
             )
             resp.raise_for_status()
             data = resp.json()
-            features = data.get("features", [])
+            features = data.get("data", {}).get("features") or data.get("features") or []
             if features:
-                attrs = features[0].get("attrs", {})
+                attrs = features[0].get("attrs") or features[0].get("properties") or {}
                 return {"cadastral_number": attrs.get("cn"), "area_sqm": attrs.get("area_value")}
         except httpx.HTTPError:
             pass
