@@ -31,6 +31,7 @@ def enrich_with_rosreestr(self):
 
 
 async def _enrich_rosreestr():
+    import asyncio
     from db.database import AsyncSessionLocal
     from sqlalchemy import select
     from models.lot import Lot
@@ -40,13 +41,22 @@ async def _enrich_rosreestr():
         result = await db.execute(
             select(Lot)
             .where(Lot.cadastral_number.isnot(None), Lot.rosreestr_data.is_(None))
-            .limit(50)
+            .limit(500)
         )
         lots = result.scalars().all()
         client = RosreestrClient()
         enriched = 0
+        failed = 0
         for lot in lots:
-            data = await client.get_cadastral_info(lot.cadastral_number)
+            # Берём первый кадастровый номер (может быть несколько через запятую/пробел)
+            cn_raw = lot.cadastral_number or ""
+            cn = cn_raw.split(",")[0].split(";")[0].strip()
+            if not cn:
+                continue
+
+            data = await client.get_cadastral_info(cn)
+            await asyncio.sleep(0.35)  # не перегружаем PKK
+
             if data:
                 from services.rubrics import normalize_vri_to_rubric
                 from models.lot import AreaDiscrepancy
@@ -84,8 +94,13 @@ async def _enrich_rosreestr():
                 lot.area_discrepancy = _calc_area_discrepancy(lot.area_sqm, lot.area_sqm_kn)
 
                 enriched += 1
+            else:
+                # Помечаем что запрашивали (пустой dict) — не будем повторять
+                lot.rosreestr_data = {}
+                failed += 1
+
         await db.commit()
-        print(f"[Росреестр] Обогащено лотов: {enriched}")
+        print(f"[Росреестр] Обогащено: {enriched}, не найдено в PKK: {failed}")
 
 
 @celery_app.task
