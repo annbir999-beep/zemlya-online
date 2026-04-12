@@ -85,8 +85,8 @@ async def _enrich_rosreestr():
                     except (ValueError, TypeError):
                         pass
 
-                lot.category_kn = data.get("category", "")[:300] if data.get("category") else None
-                lot.vri_kn = data.get("vri", "")[:500] if data.get("vri") else None
+                lot.category_kn = str(data["category"])[:300] if data.get("category") is not None else None
+                lot.vri_kn = str(data["vri"])[:500] if data.get("vri") is not None else None
                 lot.rubric_kn = normalize_vri_to_rubric(data.get("vri", "") or "")
 
                 # Расхождение площади TG vs КН
