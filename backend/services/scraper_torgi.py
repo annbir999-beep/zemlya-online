@@ -292,6 +292,8 @@ class TorgiGovScraper:
         lng = None
 
         purpose_raw = raw.get("lotName", "") or raw.get("subject", {}).get("name", "")
+        # Категория земель — ищем по нескольким возможным кодам
+        category_raw = get_char(["CategoryOfLand", "CATEGORY", "ZU_CATEGORY", "landCategory", "LandCategory"])
         vri_raw = get_char(["PermittedUse", "VRI", "ZU_VRI"])
 
         # Извлекаем ЭТП
@@ -343,7 +345,7 @@ class TorgiGovScraper:
         lot.price_per_sqm = round(start_price / area_sqm, 2) if (start_price and area_sqm and area_sqm > 0) else None
         lot.land_purpose = _parse_purpose(purpose_raw, vri_raw)
         lot.land_purpose_raw = f"{purpose_raw} / {vri_raw}".strip(" /")
-        lot.category_tg = purpose_raw[:300] if purpose_raw else None
+        lot.category_tg = category_raw[:300] if category_raw else None
         lot.vri_tg = vri_raw[:500] if vri_raw else None
         lot.rubric_tg = normalize_vri_to_rubric(vri_raw or purpose_raw)
         lot.auction_type = _parse_auction_type(bidding.get("name", ""))

@@ -381,16 +381,15 @@ export default function FilterSidebar({ filters, onChange, onReset }: Props) {
         </Section>
 
         {/* Категории TG */}
-        <Section title="Категория земель [TG]">
-          {categoryList.length > 0
-            ? <CheckGroup
-                items={categoryList.map(c => ({ value: c, label: c }))}
-                selected={(filters.category_tg as string[]) || []}
-                onToggle={v => toggleArr("category_tg", v)}
-              />
-            : <div style={{ fontSize: 12, color: "var(--text-3)" }}>Загрузка...</div>
-          }
-        </Section>
+        {categoryList.length > 0 && categoryList[0].length < 100 && (
+          <Section title="Категория земель [TG]">
+            <CheckGroup
+              items={categoryList.map(c => ({ value: c, label: c }))}
+              selected={(filters.category_tg as string[]) || []}
+              onToggle={v => toggleArr("category_tg", v)}
+            />
+          </Section>
+        )}
 
         {/* Вид сделки */}
         <Section title="Вид сделки">
