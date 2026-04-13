@@ -99,7 +99,7 @@ export default function MapView({ points, selectedId }: Props) {
         </div>
       `).addTo(layer);
     });
-  }, [points, selectedId, onLotClick]);
+  }, [points, selectedId]);
 
   return <div ref={mapRef} style={{ width: "100%", height: "100%" }} />;
 }
