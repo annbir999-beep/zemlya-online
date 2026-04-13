@@ -130,6 +130,8 @@ def build_filters(
     lat: Optional[float] = None,
     lng: Optional[float] = None,
     radius_km: Optional[float] = None,
+    # Наличие координат
+    has_coords: Optional[List[str]] = None,
 ) -> list:
     conditions = []
 
@@ -238,6 +240,13 @@ def build_filters(
     if lat is not None and lng is not None and radius_km is not None:
         point = ST_SetSRID(ST_MakePoint(lng, lat), 4326)
         conditions.append(ST_DWithin(Lot.location, point, radius_km * 1000))
+
+    # Наличие координат
+    if has_coords:
+        if "with_coords" in has_coords and "no_coords" not in has_coords:
+            conditions.append(Lot.location.isnot(None))
+        elif "no_coords" in has_coords and "with_coords" not in has_coords:
+            conditions.append(Lot.location.is_(None))
 
     return conditions
 
@@ -350,6 +359,7 @@ async def get_lots(
     lat: Optional[float] = Query(None),
     lng: Optional[float] = Query(None),
     radius_km: Optional[float] = Query(None, le=500),
+    has_coords: Optional[List[str]] = Query(None, alias="has_coords"),
     # Сортировка
     sort_by: str = Query("auction_end_date"),
     sort_order: str = Query("asc"),
@@ -375,6 +385,7 @@ async def get_lots(
         submission_start_from=submission_start_from, submission_start_to=submission_start_to,
         submission_end_from=submission_end_from, submission_end_to=submission_end_to,
         lat=lat, lng=lng, radius_km=radius_km,
+        has_coords=has_coords,
     )
 
     sort_columns = {
@@ -454,6 +465,16 @@ async def get_lots_for_map(
                 pass
 
     return {"points": points, "total": len(points)}
+
+
+@router.get("/etps")
+async def get_etps(db: AsyncSession = Depends(get_db)):
+    """Список уникальных ЭТП из БД"""
+    result = await db.execute(
+        select(Lot.etp).where(Lot.etp.isnot(None), Lot.etp != "").distinct()
+    )
+    etps = sorted([row[0] for row in result.all() if row[0]])
+    return {"etps": etps}
 
 
 @router.get("/rubrics")

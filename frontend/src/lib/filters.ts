@@ -116,6 +116,8 @@ export interface FiltersState {
   submission_start_to?: string;
   submission_end_from?: string;
   submission_end_to?: string;
+  // Местоположение
+  has_coords?: string[];
   // Сортировка и пагинация
   sort_by?: string;
   sort_order?: string;
@@ -165,6 +167,8 @@ export function filtersToQueryString(f: FiltersState & { per_page?: number }): s
   if (f.submission_start_to) params.set("submission_start_to", f.submission_start_to);
   if (f.submission_end_from) params.set("submission_end_from", f.submission_end_from);
   if (f.submission_end_to) params.set("submission_end_to", f.submission_end_to);
+  // Местоположение
+  if (f.has_coords?.length) f.has_coords.forEach(v => params.append("has_coords", v));
   // Сортировка и пагинация
   if (f.sort_by) params.set("sort_by", f.sort_by);
   if (f.sort_order) params.set("sort_order", f.sort_order);

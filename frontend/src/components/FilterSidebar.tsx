@@ -99,6 +99,7 @@ export default function FilterSidebar({ filters, onChange, onReset }: Props) {
   const [regionSearch, setRegionSearch] = useState("");
   const [rubricSections, setRubricSections] = useState<RubricSection[]>([]);
   const [rubricsBySection, setRubricsBySection] = useState<Record<string, Rubric[]>>({});
+  const [etpList, setEtpList] = useState<string[]>([]);
 
   useEffect(() => {
     fetch(`${API}/api/lots/rubrics/grouped`)
@@ -107,6 +108,11 @@ export default function FilterSidebar({ filters, onChange, onReset }: Props) {
         setRubricSections(d.sections || []);
         setRubricsBySection(d.rubrics_by_section || {});
       })
+      .catch(() => {});
+
+    fetch(`${API}/api/lots/etps`)
+      .then(r => r.json())
+      .then(d => setEtpList(d.etps || []))
       .catch(() => {});
   }, []);
 
@@ -341,9 +347,26 @@ export default function FilterSidebar({ filters, onChange, onReset }: Props) {
 
         {/* ЭТП */}
         <Section title="ЭТП">
-          <input className="input" placeholder="Электронная торговая площадка"
-            value={((filters.etp as string[]) || []).join(", ")}
-            onChange={e => set("etp", e.target.value ? [e.target.value] : undefined)} />
+          {etpList.length > 0
+            ? <CheckGroup
+                items={etpList.map(e => ({ value: e, label: e }))}
+                selected={(filters.etp as string[]) || []}
+                onToggle={v => toggleArr("etp", v)}
+              />
+            : <div style={{ fontSize: 12, color: "var(--text-3)" }}>Загрузка...</div>
+          }
+        </Section>
+
+        {/* Местоположение */}
+        <Section title="Местоположение">
+          <CheckGroup
+            items={[
+              { value: "with_coords", label: "Координаты определены" },
+              { value: "no_coords", label: "Координаты не определены" },
+            ]}
+            selected={(filters.has_coords as string[]) || []}
+            onToggle={v => toggleArr("has_coords", v)}
+          />
         </Section>
 
         {/* Кадастровый номер */}
