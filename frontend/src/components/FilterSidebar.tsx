@@ -100,7 +100,6 @@ export default function FilterSidebar({ filters, onChange, onReset }: Props) {
   const [rubricSections, setRubricSections] = useState<RubricSection[]>([]);
   const [rubricsBySection, setRubricsBySection] = useState<Record<string, Rubric[]>>({});
   const [etpList, setEtpList] = useState<string[]>([]);
-  const [categoryList, setCategoryList] = useState<string[]>([]);
   const [auctionTypeList, setAuctionTypeList] = useState<{ value: string; label: string }[]>([]);
   const [vriQuery, setVriQuery] = useState("");
   const [vriSuggestions, setVriSuggestions] = useState<string[]>([]);
@@ -122,7 +121,6 @@ export default function FilterSidebar({ filters, onChange, onReset }: Props) {
     fetch(`${API}/api/lots/categories`)
       .then(r => r.json())
       .then(d => {
-        setCategoryList(d.categories || []);
         const AT_LABELS: Record<string, string> = {
           sale: "Продажа",
           rent: "Аренда",
@@ -379,17 +377,6 @@ export default function FilterSidebar({ filters, onChange, onReset }: Props) {
             onToggle={v => toggleArr("auction_type", v)}
           />
         </Section>
-
-        {/* Категории TG */}
-        {categoryList.length > 0 && categoryList[0].length < 100 && (
-          <Section title="Категория земель [TG]">
-            <CheckGroup
-              items={categoryList.map(c => ({ value: c, label: c }))}
-              selected={(filters.category_tg as string[]) || []}
-              onToggle={v => toggleArr("category_tg", v)}
-            />
-          </Section>
-        )}
 
         {/* Вид сделки */}
         <Section title="Вид сделки">
