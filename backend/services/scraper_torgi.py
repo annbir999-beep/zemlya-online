@@ -308,10 +308,12 @@ class TorgiGovScraper:
             except (ValueError, TypeError):
                 pass
 
-        # Извлекаем форму проведения и вид сделки
+        # Извлекаем форму проведения, вид сделки и раздел torgi.gov
         procedure = raw.get("procedure", {})
         form_str = procedure.get("name", "") or bidding.get("name", "")
         deal_str = raw.get("dealType", {}).get("name", "") or raw.get("biddType", {}).get("name", "")
+        bidd_type = raw.get("biddType", {}) or {}
+        section_code = bidd_type.get("code", "") or bidd_type.get("id", "") or ""
 
         # Переуступка — 3 уровня
         resale_raw = (raw.get("resale") or raw.get("cessation") or "").lower()
@@ -348,9 +350,18 @@ class TorgiGovScraper:
         lot.category_tg = category_raw[:300] if category_raw else None
         lot.vri_tg = vri_raw[:500] if vri_raw else None
         lot.rubric_tg = normalize_vri_to_rubric(vri_raw or purpose_raw)
-        lot.auction_type = _parse_auction_type(bidding.get("name", ""))
+        # auction_type — определяем по deal_type и разделу
+        deal_type_parsed = _parse_deal_type(deal_str)
+        if deal_type_parsed == DealType.LEASE:
+            auction_type = AuctionType.RENT
+        elif "приватизац" in (deal_str or "").lower() or section_code in ("178FZ", "PRIV"):
+            auction_type = AuctionType.PRIVATIZATION
+        else:
+            auction_type = AuctionType.SALE
+        lot.auction_type = auction_type
         lot.auction_form = _parse_auction_form(form_str)
-        lot.deal_type = _parse_deal_type(deal_str)
+        lot.deal_type = deal_type_parsed
+        lot.section_tg = section_code[:100] if section_code else None
         lot.etp = etp_name[:200] if etp_name else None
         lot.resale_type = resale_type
         lot.status = _parse_status(raw.get("lotStatus", "PUBLISHED"))

@@ -122,6 +122,7 @@ class Lot(Base):
     auction_type = Column(Enum(AuctionType), default=AuctionType.SALE)
     auction_form = Column(Enum(AuctionForm))      # Форма проведения
     deal_type = Column(Enum(DealType))             # Вид сделки
+    section_tg = Column(String(100), index=True)  # Раздел torgi.gov (biddType.code: ZK, LK, KRT, PT и др.)
     etp = Column(String(200), index=True)          # ЭТП (электронная торговая площадка)
     resale_type = Column(Enum(ResaleType))         # Переуступка (3 уровня)
 
