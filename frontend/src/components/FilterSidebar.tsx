@@ -102,6 +102,8 @@ export default function FilterSidebar({ filters, onChange, onReset }: Props) {
   const [etpList, setEtpList] = useState<string[]>([]);
   const [categoryList, setCategoryList] = useState<string[]>([]);
   const [auctionTypeList, setAuctionTypeList] = useState<{ value: string; label: string }[]>([]);
+  const [vriQuery, setVriQuery] = useState("");
+  const [vriSuggestions, setVriSuggestions] = useState<string[]>([]);
 
   useEffect(() => {
     fetch(`${API}/api/lots/rubrics/grouped`)
@@ -133,6 +135,16 @@ export default function FilterSidebar({ filters, onChange, onReset }: Props) {
       })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetch(`${API}/api/lots/vri-search?q=${encodeURIComponent(vriQuery)}`)
+        .then(r => r.json())
+        .then(d => setVriSuggestions(d.items || []))
+        .catch(() => {});
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [vriQuery]);
 
   const set = (key: keyof FiltersState, value: unknown) =>
     onChange({ ...filters, [key]: value, page: 1 });
@@ -309,6 +321,54 @@ export default function FilterSidebar({ filters, onChange, onReset }: Props) {
               </div>
             );
           })}
+        </Section>
+
+        {/* ВРИ [TG] */}
+        <Section title="ВРИ [TG]">
+          <div style={{ position: "relative" }}>
+            <input
+              className="input"
+              placeholder="Поиск по виду разрешённого использования..."
+              value={vriQuery}
+              onChange={e => setVriQuery(e.target.value)}
+            />
+            {vriSuggestions.length > 0 && vriQuery && (
+              <div style={{
+                position: "absolute", top: "100%", left: 0, right: 0, zIndex: 10,
+                background: "var(--surface)", border: "1px solid var(--border)",
+                borderRadius: 6, maxHeight: 180, overflowY: "auto", boxShadow: "var(--shadow-md)"
+              }}>
+                {vriSuggestions.map(item => (
+                  <div
+                    key={item}
+                    style={{ padding: "6px 10px", fontSize: 12, cursor: "pointer" }}
+                    onMouseDown={() => {
+                      const cur = (filters.vri_tg as string[]) || [];
+                      if (!cur.includes(item)) set("vri_tg", [...cur, item]);
+                      setVriQuery("");
+                      setVriSuggestions([]);
+                    }}
+                  >
+                    {item}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          {/* Выбранные ВРИ */}
+          {((filters.vri_tg as string[]) || []).map(v => (
+            <div key={v} style={{
+              display: "flex", alignItems: "center", gap: 6,
+              background: "var(--primary-light, #eff6ff)", borderRadius: 4,
+              padding: "3px 8px", fontSize: 12
+            }}>
+              <span style={{ flex: 1 }}>{v}</span>
+              <button
+                onClick={() => set("vri_tg", ((filters.vri_tg as string[]) || []).filter(x => x !== v))}
+                style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-3)", fontSize: 14, lineHeight: 1 }}
+              >×</button>
+            </div>
+          ))}
         </Section>
 
         {/* Вид торгов */}
