@@ -113,6 +113,7 @@ def build_filters(
     auction_types: Optional[List[str]] = None,
     auction_forms: Optional[List[str]] = None,
     deal_types: Optional[List[str]] = None,
+    category_tg: Optional[List[str]] = None,
     # ЭТП
     etp: Optional[List[str]] = None,
     # Переуступка
@@ -205,6 +206,8 @@ def build_filters(
         conditions.append(Lot.auction_form.in_(auction_forms))
     if deal_types:
         conditions.append(Lot.deal_type.in_(deal_types))
+    if category_tg:
+        conditions.append(Lot.category_tg.in_(category_tg))
 
     # ЭТП
     if etp:
@@ -341,6 +344,7 @@ async def get_lots(
     auction_type: Optional[List[str]] = Query(None, alias="auction_type"),
     auction_form: Optional[List[str]] = Query(None, alias="auction_form"),
     deal_type: Optional[List[str]] = Query(None, alias="deal_type"),
+    category_tg: Optional[List[str]] = Query(None, alias="category_tg"),
     # ЭТП
     etp: Optional[List[str]] = Query(None, alias="etp"),
     # Переуступка
@@ -379,7 +383,7 @@ async def get_lots(
         area_kn_min=area_kn_min, area_kn_max=area_kn_max,
         area_discrepancy=area_discrepancy,
         land_purposes=purpose, rubric_tg=rubric_tg, rubric_kn=rubric_kn,
-        auction_types=auction_type, auction_forms=auction_form, deal_types=deal_type,
+        auction_types=auction_type, auction_forms=auction_form, deal_types=deal_type, category_tg=category_tg,
         etp=etp, resale_types=resale_type,
         sources=source, cadastral=cadastral, notice_number=notice_number,
         submission_start_from=submission_start_from, submission_start_to=submission_start_to,
@@ -475,6 +479,22 @@ async def get_etps(db: AsyncSession = Depends(get_db)):
     )
     etps = sorted([row[0] for row in result.all() if row[0]])
     return {"etps": etps}
+
+
+@router.get("/categories")
+async def get_categories(db: AsyncSession = Depends(get_db)):
+    """Уникальные категории TG и auction_type из БД"""
+    cat_result = await db.execute(
+        select(Lot.category_tg).where(Lot.category_tg.isnot(None), Lot.category_tg != "").distinct()
+    )
+    categories = sorted([row[0] for row in cat_result.all() if row[0]])
+
+    at_result = await db.execute(
+        select(Lot.auction_type).where(Lot.auction_type.isnot(None)).distinct()
+    )
+    auction_types = sorted([row[0].value if hasattr(row[0], 'value') else str(row[0]) for row in at_result.all() if row[0]])
+
+    return {"categories": categories, "auction_types": auction_types}
 
 
 @router.get("/rubrics")

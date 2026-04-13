@@ -100,6 +100,8 @@ export default function FilterSidebar({ filters, onChange, onReset }: Props) {
   const [rubricSections, setRubricSections] = useState<RubricSection[]>([]);
   const [rubricsBySection, setRubricsBySection] = useState<Record<string, Rubric[]>>({});
   const [etpList, setEtpList] = useState<string[]>([]);
+  const [categoryList, setCategoryList] = useState<string[]>([]);
+  const [auctionTypeList, setAuctionTypeList] = useState<{ value: string; label: string }[]>([]);
 
   useEffect(() => {
     fetch(`${API}/api/lots/rubrics/grouped`)
@@ -113,6 +115,22 @@ export default function FilterSidebar({ filters, onChange, onReset }: Props) {
     fetch(`${API}/api/lots/etps`)
       .then(r => r.json())
       .then(d => setEtpList(d.etps || []))
+      .catch(() => {});
+
+    fetch(`${API}/api/lots/categories`)
+      .then(r => r.json())
+      .then(d => {
+        setCategoryList(d.categories || []);
+        const AT_LABELS: Record<string, string> = {
+          sale: "Продажа",
+          rent: "Аренда",
+          priv: "Приватизация",
+        };
+        setAuctionTypeList((d.auction_types || []).map((v: string) => ({
+          value: v,
+          label: AT_LABELS[v] || v,
+        })));
+      })
       .catch(() => {});
   }, []);
 
@@ -295,9 +313,23 @@ export default function FilterSidebar({ filters, onChange, onReset }: Props) {
 
         {/* Вид торгов */}
         <Section title="Вид торгов">
-          <CheckGroup items={AUCTION_TYPES}
+          <CheckGroup
+            items={auctionTypeList.length ? auctionTypeList : AUCTION_TYPES}
             selected={(filters.auction_type as string[]) || []}
-            onToggle={v => toggleArr("auction_type", v)} />
+            onToggle={v => toggleArr("auction_type", v)}
+          />
+        </Section>
+
+        {/* Категории TG */}
+        <Section title="Категория земель [TG]">
+          {categoryList.length > 0
+            ? <CheckGroup
+                items={categoryList.map(c => ({ value: c, label: c }))}
+                selected={(filters.category_tg as string[]) || []}
+                onToggle={v => toggleArr("category_tg", v)}
+              />
+            : <div style={{ fontSize: 12, color: "var(--text-3)" }}>Загрузка...</div>
+          }
         </Section>
 
         {/* Вид сделки */}
