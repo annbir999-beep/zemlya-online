@@ -12,7 +12,7 @@ interface MapPoint {
 interface Props {
   points: MapPoint[];
   selectedId?: number;
-  onLotClick: (id: number) => void;
+  onLotClick?: (id: number) => void;
 }
 
 function loadCss(href: string, id: string) {
@@ -22,7 +22,7 @@ function loadCss(href: string, id: string) {
   document.head.appendChild(l);
 }
 
-export default function MapView({ points, selectedId, onLotClick }: Props) {
+export default function MapView({ points, selectedId }: Props) {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<unknown>(null);
   const layerRef = useRef<unknown>(null);
@@ -95,12 +95,10 @@ export default function MapView({ points, selectedId, onLotClick }: Props) {
         <div style="min-width:160px">
           <div style="font-weight:600;font-size:14px;margin-bottom:4px">${priceStr}</div>
           ${areaStr ? `<div style="font-size:12px;color:#64748b">${areaStr}</div>` : ""}
-          <button onclick="window.__onLotClick(${p.id})" style="margin-top:8px;padding:4px 10px;background:#2563eb;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12px;width:100%">Подробнее</button>
+          <a href="/lots/${p.id}" style="display:block;margin-top:8px;padding:4px 10px;background:#2563eb;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12px;width:100%;text-align:center;text-decoration:none;box-sizing:border-box">Подробнее →</a>
         </div>
       `).addTo(layer);
     });
-
-    (window as Record<string, unknown>).__onLotClick = onLotClick;
   }, [points, selectedId, onLotClick]);
 
   return <div ref={mapRef} style={{ width: "100%", height: "100%" }} />;
