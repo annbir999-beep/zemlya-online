@@ -124,5 +124,34 @@ export default function MapView({ points, selectedId }: Props) {
     });
   }, [points, selectedId]);
 
-  return <div ref={mapRef} style={{ width: "100%", height: "100%" }} />;
+  return (
+    <div style={{ position: "relative", width: "100%", height: "100%" }}>
+      <div ref={mapRef} style={{ width: "100%", height: "100%" }} />
+      {/* Легенда */}
+      <div style={{
+        position: "absolute", bottom: 28, right: 10, zIndex: 1000,
+        background: "rgba(255,255,255,0.93)", borderRadius: 8,
+        padding: "8px 12px", boxShadow: "0 1px 6px rgba(0,0,0,.2)",
+        fontSize: 11, lineHeight: 1.8, pointerEvents: "none",
+      }}>
+        {[
+          { emoji: "🏠", color: "#16a34a", label: "ИЖС" },
+          { emoji: "🌿", color: "#65a30d", label: "СНТ / Дача" },
+          { emoji: "🌾", color: "#84cc16", label: "ЛПХ / Сельхоз" },
+          { emoji: "🏪", color: "#dc2626", label: "Коммерческое" },
+          { emoji: "🏭", color: "#7c3aed", label: "Промышленное" },
+          { emoji: "🌲", color: "#15803d", label: "Лесной фонд" },
+          { emoji: "💧", color: "#0284c7", label: "Водный фонд" },
+          { emoji: "📍", color: "#2563eb", label: "Иное" },
+        ].map(item => (
+          <div key={item.label} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <div style={{ width: 14, height: 14, borderRadius: "50%", background: item.color, border: "2px solid #fff", boxShadow: "0 1px 3px rgba(0,0,0,.2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8, flexShrink: 0 }}>
+              {item.emoji}
+            </div>
+            <span style={{ color: "#374151" }}>{item.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
