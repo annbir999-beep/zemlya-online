@@ -296,8 +296,18 @@ class TorgiGovScraper:
         category_raw = get_char(["CategoryOfLand", "CATEGORY", "ZU_CATEGORY", "landCategory", "LandCategory"])
         vri_raw = get_char(["PermittedUse", "VRI", "ZU_VRI"])
 
-        # Извлекаем ЭТП
-        etp_name = raw.get("etpInfo", {}).get("name") or raw.get("etp", {}).get("name")
+        # Извлекаем ЭТП — поле etpCode ("ETP_SBAST", "ROSELTORG" и др.)
+        ETP_NAMES: dict = {
+            "ETP_SBAST": "Сбербанк АСТ",
+            "ROSELTORG": "Росэлторг",
+            "ZAKAZRF": "ЕЭТП",
+            "RTS": "РТС-тендер",
+            "AGZRT": "АГЗ РТ",
+            "TEKTORG": "ТЭК-Торг",
+            "ETPGPB": "ЭТП ГПБ",
+        }
+        etp_code = raw.get("etpCode") or ""
+        etp_name = ETP_NAMES.get(etp_code, etp_code) if etp_code else None
 
         # Извлекаем задаток %
         deposit_val = raw.get("deposit")
@@ -311,9 +321,9 @@ class TorgiGovScraper:
         # Извлекаем форму проведения, вид сделки и раздел torgi.gov
         procedure = raw.get("procedure", {})
         form_str = procedure.get("name", "") or bidding.get("name", "")
-        deal_str = raw.get("dealType", {}).get("name", "") or raw.get("biddType", {}).get("name", "")
+        deal_str = raw.get("dealType", {}).get("name", "") or ""
         bidd_type = raw.get("biddType", {}) or {}
-        section_code = bidd_type.get("code", "") or bidd_type.get("id", "") or ""
+        section_name = bidd_type.get("name", "") or ""  # "Аренда и продажа земельных участков"
 
         # Переуступка — 3 уровня
         resale_raw = (raw.get("resale") or raw.get("cessation") or "").lower()
@@ -354,14 +364,14 @@ class TorgiGovScraper:
         deal_type_parsed = _parse_deal_type(deal_str)
         if deal_type_parsed == DealType.LEASE:
             auction_type = AuctionType.RENT
-        elif "приватизац" in (deal_str or "").lower() or section_code in ("178FZ", "PRIV"):
+        elif "приватизац" in (deal_str or "").lower() or "приватизац" in section_name.lower():
             auction_type = AuctionType.PRIVATIZATION
         else:
             auction_type = AuctionType.SALE
         lot.auction_type = auction_type
         lot.auction_form = _parse_auction_form(form_str)
         lot.deal_type = deal_type_parsed
-        lot.section_tg = section_code[:100] if section_code else None
+        lot.section_tg = section_name[:200] if section_name else None
         lot.etp = etp_name[:200] if etp_name else None
         lot.resale_type = resale_type
         lot.status = _parse_status(raw.get("lotStatus", "PUBLISHED"))
