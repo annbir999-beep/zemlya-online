@@ -371,7 +371,7 @@ class TorgiGovScraper:
         lot.auction_type = auction_type
         lot.auction_form = _parse_auction_form(form_str)
         lot.deal_type = deal_type_parsed
-        lot.section_tg = section_name[:200] if section_name else None
+        lot.section_tg = section_name[:500] if section_name else None
         lot.etp = etp_name[:200] if etp_name else None
         lot.resale_type = resale_type
         lot.status = _parse_status(raw.get("lotStatus", "PUBLISHED"))
