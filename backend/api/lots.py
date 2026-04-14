@@ -480,8 +480,13 @@ async def get_lots_for_map(
     )
 
     q = select(
-        Lot.id, Lot.start_price, Lot.area_sqm, Lot.land_purpose,
-        Lot.rubric_tg, Lot.pct_price_to_cadastral, Lot.location,
+        Lot.id, Lot.start_price, Lot.area_sqm, Lot.area_sqm_kn,
+        Lot.land_purpose, Lot.rubric_tg, Lot.pct_price_to_cadastral,
+        Lot.cadastral_cost, Lot.cadastral_number, Lot.location,
+        Lot.auction_form, Lot.deal_type, Lot.resale_type, Lot.etp,
+        Lot.category_kn, Lot.vri_kn, Lot.category_tg, Lot.vri_tg,
+        Lot.submission_end, Lot.auction_end_date, Lot.lot_url,
+        Lot.region_name, Lot.notice_number,
     ).where(and_(*conditions, Lot.location.isnot(None))).limit(5000)
 
     rows = (await db.execute(q)).all()
@@ -497,9 +502,25 @@ async def get_lots_for_map(
                     "lng": point.x,
                     "price": row.start_price,
                     "area": row.area_sqm,
+                    "area_kn": row.area_sqm_kn,
                     "purpose": row.land_purpose.value if row.land_purpose else None,
                     "rubric_tg": row.rubric_tg,
                     "pct": row.pct_price_to_cadastral,
+                    "cadastral_cost": row.cadastral_cost,
+                    "cadastral_number": row.cadastral_number,
+                    "auction_form": row.auction_form.value if row.auction_form else None,
+                    "deal_type": row.deal_type.value if row.deal_type else None,
+                    "resale_type": row.resale_type.value if row.resale_type else None,
+                    "etp": row.etp,
+                    "category_kn": row.category_kn,
+                    "vri_kn": row.vri_kn,
+                    "category_tg": row.category_tg,
+                    "vri_tg": row.vri_tg,
+                    "submission_end": row.submission_end.isoformat() if row.submission_end else None,
+                    "auction_end_date": row.auction_end_date.isoformat() if row.auction_end_date else None,
+                    "lot_url": row.lot_url,
+                    "region_name": row.region_name,
+                    "notice_number": row.notice_number,
                 })
             except Exception:
                 pass
