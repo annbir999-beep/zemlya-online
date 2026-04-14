@@ -6,9 +6,13 @@ from services.rosreestr import RosreestrClient
 
 
 def _run(coro):
-    """Запускает корутину в текущем event loop воркера."""
-    loop = asyncio.get_event_loop()
-    return loop.run_until_complete(coro)
+    """Каждая задача получает свежий event loop — избегаем 'attached to a different loop'."""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        return loop.run_until_complete(coro)
+    finally:
+        loop.close()
 
 
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=300)
