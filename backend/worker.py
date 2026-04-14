@@ -38,5 +38,10 @@ celery_app.conf.update(
             "task": "tasks.scrape_tasks.update_lot_statuses",
             "schedule": crontab(minute=15, hour="*"),
         },
+        # Парсинг Авито — раз в сутки в 3:00 (топ-10 регионов, 3 страницы каждый)
+        "scrape-avito": {
+            "task": "tasks.scrape_tasks.scrape_avito",
+            "schedule": crontab(minute=0, hour=3),
+        },
     },
 )

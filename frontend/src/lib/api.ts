@@ -87,6 +87,8 @@ export interface LotDetail extends LotListItem {
   deal_type?: string;
   etp?: string;
   resale_type?: string;
+  sublease_allowed?: boolean;
+  assignment_allowed?: boolean;
   region_code?: string;
   published_at?: string;
   rosreestr_data?: Record<string, unknown>;

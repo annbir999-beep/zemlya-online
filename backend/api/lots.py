@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, func
+from sqlalchemy import select, and_, func, case
 from geoalchemy2.functions import ST_DWithin, ST_MakePoint, ST_SetSRID
 from typing import Optional, List
 from pydantic import BaseModel
@@ -43,6 +43,8 @@ class LotListItem(BaseModel):
     deal_type: Optional[str]
     etp: Optional[str]
     resale_type: Optional[str]
+    sublease_allowed: Optional[bool]
+    assignment_allowed: Optional[bool]
     status: str
     region_name: Optional[str]
     address: Optional[str]
@@ -120,6 +122,9 @@ def build_filters(
     etp: Optional[List[str]] = None,
     # Переуступка
     resale_types: Optional[List[str]] = None,
+    # Субаренда / переуступка (из текста)
+    sublease_allowed: Optional[bool] = None,
+    assignment_allowed: Optional[bool] = None,
     # Прочее
     sources: Optional[List[str]] = None,
     cadastral: Optional[str] = None,
@@ -223,6 +228,12 @@ def build_filters(
     if resale_types:
         conditions.append(Lot.resale_type.in_(resale_types))
 
+    # Субаренда / переуступка из текста
+    if sublease_allowed is not None:
+        conditions.append(Lot.sublease_allowed == sublease_allowed)
+    if assignment_allowed is not None:
+        conditions.append(Lot.assignment_allowed == assignment_allowed)
+
     # Источник
     if sources:
         conditions.append(Lot.source.in_(sources))
@@ -298,6 +309,8 @@ def _lot_to_item(lot: Lot) -> LotListItem:
         deal_type=lot.deal_type.value if lot.deal_type else None,
         etp=lot.etp,
         resale_type=lot.resale_type.value if lot.resale_type else None,
+        sublease_allowed=lot.sublease_allowed,
+        assignment_allowed=lot.assignment_allowed,
         status=lot.status.value,
         region_name=lot.region_name,
         address=lot.address,
@@ -357,6 +370,9 @@ async def get_lots(
     etp: Optional[List[str]] = Query(None, alias="etp"),
     # Переуступка
     resale_type: Optional[List[str]] = Query(None, alias="resale_type"),
+    # Субаренда / переуступка из текста
+    sublease_allowed: Optional[bool] = Query(None),
+    assignment_allowed: Optional[bool] = Query(None),
     # Источник
     source: Optional[List[str]] = Query(None, alias="source"),
     # Поиск
@@ -394,6 +410,7 @@ async def get_lots(
         auction_types=auction_type, auction_forms=auction_form, deal_types=deal_type,
         category_tg=category_tg, vri_tg=vri_tg, section_tg=section_tg,
         etp=etp, resale_types=resale_type,
+        sublease_allowed=sublease_allowed, assignment_allowed=assignment_allowed,
         sources=source, cadastral=cadastral, notice_number=notice_number,
         submission_start_from=submission_start_from, submission_start_to=submission_start_to,
         submission_end_from=submission_end_from, submission_end_to=submission_end_to,
@@ -410,8 +427,18 @@ async def get_lots(
         "deposit_pct": Lot.deposit_pct,
         "submission_end": Lot.submission_end,
     }
-    sort_col = sort_columns.get(sort_by, Lot.auction_end_date)
-    order_expr = sort_col.asc() if sort_order == "asc" else sort_col.desc()
+    if sort_by == "resale_priority":
+        # Приоритет: yes=1, with_notice=2, with_approval=3, no=4, NULL=5
+        order_expr = case(
+            (Lot.resale_type == "yes", 1),
+            (Lot.resale_type == "with_notice", 2),
+            (Lot.resale_type == "with_approval", 3),
+            (Lot.resale_type == "no", 4),
+            else_=5,
+        ).asc()
+    else:
+        sort_col = sort_columns.get(sort_by, Lot.auction_end_date)
+        order_expr = sort_col.asc() if sort_order == "asc" else sort_col.desc()
 
     count_q = select(func.count()).select_from(Lot).where(and_(*conditions))
     total = (await db.execute(count_q)).scalar()

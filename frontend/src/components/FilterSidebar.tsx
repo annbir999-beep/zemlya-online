@@ -412,9 +412,41 @@ export default function FilterSidebar({ filters, onChange, onReset }: Props) {
 
         {/* Переуступка */}
         <Section title="Переуступка">
+          <div style={{ fontSize: 12, color: "var(--text-3)", marginBottom: 6 }}>
+            Условие переуступки права аренды
+          </div>
           <CheckGroup items={RESALE_TYPES}
             selected={(filters.resale_type as string[]) || []}
             onToggle={v => toggleArr("resale_type", v)} />
+          <button
+            className="btn btn-ghost btn-sm"
+            style={{ marginTop: 6, fontSize: 11, color: "var(--primary)" }}
+            onClick={() => onChange({ ...filters, sort_by: "resale_priority", sort_order: "asc", page: 1 })}
+          >
+            ↑ Сортировать: сначала разрешённые
+          </button>
+        </Section>
+
+        {/* Субаренда */}
+        <Section title="Субаренда">
+          <div style={{ fontSize: 12, color: "var(--text-3)", marginBottom: 6 }}>
+            Ключевое слово найдено в описании лота
+          </div>
+          <label className="checkbox-item">
+            <input type="checkbox"
+              checked={filters.sublease_allowed === true}
+              onChange={e => set("sublease_allowed", e.target.checked ? true : undefined)} />
+            Субаренда упоминается
+          </label>
+          <label className="checkbox-item">
+            <input type="checkbox"
+              checked={filters.assignment_allowed === true}
+              onChange={e => set("assignment_allowed", e.target.checked ? true : undefined)} />
+            Переуступка прав упоминается
+          </label>
+          <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 4, fontStyle: "italic" }}>
+            Поиск по словам: субаренд, переуступ, уступк, цессия
+          </div>
         </Section>
 
         {/* Даты подачи заявок */}

@@ -138,6 +138,28 @@ def _calc_area_discrepancy(area_tg: Optional[float], area_kn: Optional[float]) -
     return AreaDiscrepancy.MAJOR
 
 
+SUBLEASE_KEYWORDS = ["субаренд"]
+ASSIGNMENT_KEYWORDS = ["переуступ", "уступк", "цессия", "третьим лицам"]
+
+
+def _detect_sublease_assignment(raw: dict, title: str, description: str) -> tuple:
+    """Ищем ключевые слова в тексте лота и атрибутах — возвращает (sublease, assignment)."""
+    texts = [
+        title or "",
+        description or "",
+        raw.get("lotDescription", "") or "",
+    ]
+    for attr in (raw.get("noticeAttributes") or []) + (raw.get("attributes") or []):
+        val = attr.get("value") or attr.get("characteristicValue") or ""
+        if isinstance(val, str):
+            texts.append(val)
+        texts.append(attr.get("fullName", "") or "")
+    combined = " ".join(texts).lower()
+    sublease = any(kw in combined for kw in SUBLEASE_KEYWORDS)
+    assignment = any(kw in combined for kw in ASSIGNMENT_KEYWORDS)
+    return sublease, assignment
+
+
 def _parse_status(lot_status: str) -> LotStatus:
     mapping = {
         "PUBLISHED": LotStatus.ACTIVE,
@@ -374,6 +396,11 @@ class TorgiGovScraper:
         lot.section_tg = section_name[:500] if section_name else None
         lot.etp = etp_name[:200] if etp_name else None
         lot.resale_type = resale_type
+        sublease, assignment = _detect_sublease_assignment(
+            raw, lot.title or "", lot.description or ""
+        )
+        lot.sublease_allowed = sublease if (sublease or assignment) else None
+        lot.assignment_allowed = assignment if (sublease or assignment) else None
         lot.status = _parse_status(raw.get("lotStatus", "PUBLISHED"))
         lot.region_code = str(region_code)
         lot.region_name = region_name

@@ -59,6 +59,14 @@ export default function LotCard({ lot, selected, compareIds = [], onSelect, onTo
       <div className="lot-card-title">{lot.title || "Земельный участок"}</div>
 
       <div className="lot-card-meta">
+        {lot.source === "avito" && (
+          <span className="badge" style={{ background: "#00aaff22", color: "#0077cc", fontWeight: 700, letterSpacing: "0.02em" }}>
+            Авито
+          </span>
+        )}
+        {lot.source === "torgi_gov" && (
+          <span className="badge badge-gray" style={{ fontSize: 10 }}>torgi.gov</span>
+        )}
         <span className={`badge ${status.cls}`}>{status.label}</span>
         {lot.land_purpose && (
           <span className="badge badge-gray">{PURPOSE_LABEL[lot.land_purpose] || lot.land_purpose}</span>

@@ -1,6 +1,7 @@
 import asyncio
 from worker import celery_app
 from services.scraper_torgi import TorgiGovScraper
+from services.scraper_avito import AvitoScraper
 from services.rosreestr import RosreestrClient
 
 
@@ -19,6 +20,23 @@ async def _scrape_torgi():
         scraper = TorgiGovScraper(db)
         saved = await scraper.run()
         print(f"[torgi.gov] Сохранено/обновлено лотов: {saved}")
+
+
+@celery_app.task(bind=True, max_retries=3, default_retry_delay=600)
+def scrape_avito(self, region_codes: list = None, pages_per_region: int = 3):
+    """Парсинг Авито — земельные участки для сравнения рыночных цен"""
+    try:
+        asyncio.run(_scrape_avito(region_codes, pages_per_region))
+    except Exception as exc:
+        raise self.retry(exc=exc)
+
+
+async def _scrape_avito(region_codes: list = None, pages_per_region: int = 3):
+    from db.database import AsyncSessionLocal
+    async with AsyncSessionLocal() as db:
+        scraper = AvitoScraper(db)
+        saved = await scraper.run(region_codes=region_codes, pages_per_region=pages_per_region)
+        print(f"[avito] Сохранено/обновлено лотов: {saved}")
 
 
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=600)
