@@ -115,6 +115,7 @@ def build_filters(
     deal_types: Optional[List[str]] = None,
     category_tg: Optional[List[str]] = None,
     vri_tg: Optional[List[str]] = None,
+    section_tg: Optional[List[str]] = None,
     # ЭТП
     etp: Optional[List[str]] = None,
     # Переуступка
@@ -211,6 +212,8 @@ def build_filters(
         conditions.append(Lot.category_tg.in_(category_tg))
     if vri_tg:
         conditions.append(Lot.vri_tg.in_(vri_tg))
+    if section_tg:
+        conditions.append(Lot.section_tg.in_(section_tg))
 
     # ЭТП
     if etp:
@@ -349,6 +352,7 @@ async def get_lots(
     deal_type: Optional[List[str]] = Query(None, alias="deal_type"),
     category_tg: Optional[List[str]] = Query(None, alias="category_tg"),
     vri_tg: Optional[List[str]] = Query(None, alias="vri_tg"),
+    section_tg: Optional[List[str]] = Query(None, alias="section_tg"),
     # ЭТП
     etp: Optional[List[str]] = Query(None, alias="etp"),
     # Переуступка
@@ -388,7 +392,7 @@ async def get_lots(
         area_discrepancy=area_discrepancy,
         land_purposes=purpose, rubric_tg=rubric_tg, rubric_kn=rubric_kn,
         auction_types=auction_type, auction_forms=auction_form, deal_types=deal_type,
-        category_tg=category_tg, vri_tg=vri_tg,
+        category_tg=category_tg, vri_tg=vri_tg, section_tg=section_tg,
         etp=etp, resale_types=resale_type,
         sources=source, cadastral=cadastral, notice_number=notice_number,
         submission_start_from=submission_start_from, submission_start_to=submission_start_to,
@@ -514,6 +518,16 @@ async def get_categories(db: AsyncSession = Depends(get_db)):
     auction_types = sorted([row[0].value if hasattr(row[0], 'value') else str(row[0]) for row in at_result.all() if row[0]])
 
     return {"categories": categories, "auction_types": auction_types}
+
+
+@router.get("/sections")
+async def get_sections_tg(db: AsyncSession = Depends(get_db)):
+    """Уникальные разделы torgi.gov (biddType.name) из БД"""
+    result = await db.execute(
+        select(Lot.section_tg).where(Lot.section_tg.isnot(None), Lot.section_tg != "").distinct()
+    )
+    sections = sorted([row[0] for row in result.all() if row[0]])
+    return {"sections": sections}
 
 
 @router.get("/rubrics")

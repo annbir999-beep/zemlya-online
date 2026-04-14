@@ -100,6 +100,7 @@ export default function FilterSidebar({ filters, onChange, onReset }: Props) {
   const [rubricSections, setRubricSections] = useState<RubricSection[]>([]);
   const [rubricsBySection, setRubricsBySection] = useState<Record<string, Rubric[]>>({});
   const [etpList, setEtpList] = useState<string[]>([]);
+  const [sectionList, setSectionList] = useState<string[]>([]);
   const [auctionTypeList, setAuctionTypeList] = useState<{ value: string; label: string }[]>([]);
   const [vriQuery, setVriQuery] = useState("");
   const [vriSuggestions, setVriSuggestions] = useState<string[]>([]);
@@ -116,6 +117,11 @@ export default function FilterSidebar({ filters, onChange, onReset }: Props) {
     fetch(`${API}/api/lots/etps`)
       .then(r => r.json())
       .then(d => setEtpList(d.etps || []))
+      .catch(() => {});
+
+    fetch(`${API}/api/lots/sections`)
+      .then(r => r.json())
+      .then(d => setSectionList(d.sections || []))
       .catch(() => {});
 
     fetch(`${API}/api/lots/categories`)
@@ -367,6 +373,18 @@ export default function FilterSidebar({ filters, onChange, onReset }: Props) {
               >×</button>
             </div>
           ))}
+        </Section>
+
+        {/* Раздел torgi.gov */}
+        <Section title="Раздел торгов">
+          {sectionList.length > 0
+            ? <CheckGroup
+                items={sectionList.map(s => ({ value: s, label: s }))}
+                selected={(filters.section_tg as string[]) || []}
+                onToggle={v => toggleArr("section_tg", v)}
+              />
+            : <div style={{ fontSize: 12, color: "var(--text-3)" }}>Загрузка...</div>
+          }
         </Section>
 
         {/* Вид торгов */}

@@ -104,6 +104,7 @@ export interface FiltersState {
   auction_type?: string[];
   auction_form?: string[];
   deal_type?: string[];
+  section_tg?: string[];
   vri_tg?: string[];
   etp?: string[];
   resale_type?: string[];
@@ -157,6 +158,7 @@ export function filtersToQueryString(f: FiltersState & { per_page?: number }): s
   if (f.auction_type?.length) f.auction_type.forEach((t) => params.append("auction_type", t));
   if (f.auction_form?.length) f.auction_form.forEach((t) => params.append("auction_form", t));
   if (f.deal_type?.length) f.deal_type.forEach((t) => params.append("deal_type", t));
+  if (f.section_tg?.length) f.section_tg.forEach((t) => params.append("section_tg", t));
   if (f.vri_tg?.length) f.vri_tg.forEach((t) => params.append("vri_tg", t));
   if (f.etp?.length) f.etp.forEach(e => params.append("etp", e));
   if (f.resale_type?.length) f.resale_type.forEach(r => params.append("resale_type", r));
