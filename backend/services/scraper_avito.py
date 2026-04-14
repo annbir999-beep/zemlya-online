@@ -231,14 +231,9 @@ def _extract_items_from_next_data(data: dict) -> list:
 class AvitoScraper:
     def __init__(self, db: AsyncSession):
         self.db = db
-        proxy_url = (
-            f"socks5://{settings.PROXY_USER}:{settings.PROXY_PASS}@{settings.PROXY_HOST}"
-            if getattr(settings, "PROXY_HOST", None)
-            else None
-        )
+        # Авито — российский сайт, с российского сервера прокси не нужен
         self.client = httpx.AsyncClient(
             timeout=30.0,
-            proxy=proxy_url,
             follow_redirects=True,
             headers={
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
