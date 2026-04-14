@@ -16,7 +16,7 @@ export default function MapPage() {
   const [filters, setFilters] = useState<FiltersState>(DEFAULT_FILTERS);
   const [selectedLot, setSelectedLot] = useState<LotListItem | null>(null);
   const [sidebarLots, setSidebarLots] = useState<LotListItem[]>([]);
-  const [mapPoints, setMapPoints] = useState<{ id: number; lat: number; lng: number; price?: number; area?: number; purpose?: string }[]>([]);
+  const [mapPoints, setMapPoints] = useState<{ id: number; lat: number; lng: number; price?: number; area?: number; purpose?: string; rubric_tg?: number; pct?: number }[]>([]);
   const [compareIds, setCompareIds] = useState<number[]>([]);
   const [loading, setLoading] = useState(false);
   const [total, setTotal] = useState(0);

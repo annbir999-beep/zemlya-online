@@ -7,6 +7,25 @@ interface MapPoint {
   lng: number;
   price?: number;
   area?: number;
+  purpose?: string;
+  rubric_tg?: number;
+  pct?: number;
+}
+
+// Цвет и эмодзи по категории назначения
+function getPurposeStyle(purpose?: string): { color: string; emoji: string } {
+  switch (purpose) {
+    case "izhs":         return { color: "#16a34a", emoji: "🏠" };
+    case "snt":          return { color: "#65a30d", emoji: "🌿" };
+    case "lpkh":         return { color: "#84cc16", emoji: "🌾" };
+    case "agricultural": return { color: "#ca8a04", emoji: "🌾" };
+    case "commercial":   return { color: "#dc2626", emoji: "🏪" };
+    case "industrial":   return { color: "#7c3aed", emoji: "🏭" };
+    case "forest":       return { color: "#15803d", emoji: "🌲" };
+    case "water":        return { color: "#0284c7", emoji: "💧" };
+    case "special":      return { color: "#9f1239", emoji: "⚠️" };
+    default:             return { color: "#2563eb", emoji: "📍" };
+  }
 }
 
 interface Props {
@@ -77,11 +96,13 @@ export default function MapView({ points, selectedId }: Props) {
 
     points.forEach((p) => {
       const isSelected = p.id === selectedId;
+      const { color, emoji } = getPurposeStyle(p.purpose);
+      const size = isSelected ? 22 : 16;
       const icon = L.divIcon({
         className: "",
-        html: `<div style="width:${isSelected ? 14 : 10}px;height:${isSelected ? 14 : 10}px;background:${isSelected ? "#dc2626" : "#2563eb"};border:2px solid #fff;border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,.3);cursor:pointer"></div>`,
-        iconSize: [isSelected ? 14 : 10, isSelected ? 14 : 10],
-        iconAnchor: [isSelected ? 7 : 5, isSelected ? 7 : 5],
+        html: `<div style="width:${size}px;height:${size}px;background:${isSelected ? "#dc2626" : color};border:2px solid #fff;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,.4);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:${isSelected ? 12 : 9}px;line-height:1">${emoji}</div>`,
+        iconSize: [size, size],
+        iconAnchor: [size / 2, size / 2],
       });
 
       const priceStr = p.price
@@ -90,12 +111,14 @@ export default function MapView({ points, selectedId }: Props) {
       const areaStr = p.area
         ? p.area >= 10_000 ? `${(p.area / 10_000).toFixed(2)} га` : `${p.area.toLocaleString("ru")} кв.м`
         : "";
+      const pctStr = p.pct ? `НЦ/КС: <b style="color:${p.pct < 50 ? "#16a34a" : "#64748b"}">${p.pct.toFixed(1)}%</b>` : "";
 
       L.marker([p.lat, p.lng], { icon }).bindPopup(`
-        <div style="min-width:160px">
+        <div style="min-width:170px">
           <div style="font-weight:600;font-size:14px;margin-bottom:4px">${priceStr}</div>
-          ${areaStr ? `<div style="font-size:12px;color:#64748b">${areaStr}</div>` : ""}
-          <a href="/lots/${p.id}" style="display:block;margin-top:8px;padding:4px 10px;background:#2563eb;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12px;width:100%;text-align:center;text-decoration:none;box-sizing:border-box">Подробнее →</a>
+          ${areaStr ? `<div style="font-size:12px;color:#64748b;margin-bottom:2px">${areaStr}</div>` : ""}
+          ${pctStr ? `<div style="font-size:12px;margin-bottom:4px">${pctStr}</div>` : ""}
+          <a href="/lots/${p.id}" style="display:block;margin-top:6px;padding:4px 10px;background:#2563eb;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12px;width:100%;text-align:center;text-decoration:none;box-sizing:border-box">Подробнее →</a>
         </div>
       `).addTo(layer);
     });
