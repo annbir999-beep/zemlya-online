@@ -49,6 +49,11 @@ export interface LotListItem {
   region_name?: string;
   address?: string;
   auction_end_date?: string;
+  submission_start?: string;
+  submission_end?: string;
+  cadastral_cost?: number;
+  pct_price_to_cadastral?: number;
+  vri_tg?: string;
   lat?: number;
   lng?: number;
   source: string;

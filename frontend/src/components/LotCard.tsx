@@ -66,10 +66,35 @@ export default function LotCard({ lot, selected, compareIds = [], onSelect, onTo
         {lot.auction_type === "rent" && <span className="badge badge-orange">Аренда</span>}
       </div>
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
         <span className="lot-card-price">{formatPrice(lot.start_price)}</span>
         <span style={{ fontSize: 12, color: "var(--text-3)" }}>{formatArea(lot.area_sqm)}</span>
       </div>
+
+      {/* Кадастровая стоимость и % НЦ/КС */}
+      {(lot.cadastral_cost || lot.pct_price_to_cadastral) && (
+        <div style={{ display: "flex", gap: 8, marginBottom: 5, flexWrap: "wrap" }}>
+          {lot.cadastral_cost && (
+            <span style={{ fontSize: 11, color: "var(--text-3)" }}>
+              КС: <b style={{ color: "var(--text-2)" }}>{formatPrice(lot.cadastral_cost)}</b>
+            </span>
+          )}
+          {lot.pct_price_to_cadastral && (
+            <span style={{ fontSize: 11, color: "var(--text-3)" }}>
+              НЦ/КС: <b style={{ color: lot.pct_price_to_cadastral < 50 ? "var(--success, #16a34a)" : "var(--text-2)" }}>
+                {lot.pct_price_to_cadastral.toFixed(1)}%
+              </b>
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* ВРИ */}
+      {lot.vri_tg && (
+        <div style={{ fontSize: 11, color: "var(--text-3)", marginBottom: 5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          {lot.vri_tg}
+        </div>
+      )}
 
       <div style={{ fontSize: 12, color: "var(--text-2)", display: "flex", gap: 8, flexWrap: "wrap" }}>
         {lot.region_name && <span>📍 {lot.region_name}</span>}
@@ -77,6 +102,14 @@ export default function LotCard({ lot, selected, compareIds = [], onSelect, onTo
           <span>⏰ {formatDate(lot.auction_end_date)}{dl && <b style={{ color: "var(--danger)", marginLeft: 4 }}>{dl}</b>}</span>
         )}
       </div>
+
+      {/* Даты заявок */}
+      {(lot.submission_start || lot.submission_end) && (
+        <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 4, display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {lot.submission_start && <span>Заявки с {formatDate(lot.submission_start)}</span>}
+          {lot.submission_end && <span>по {formatDate(lot.submission_end)}</span>}
+        </div>
+      )}
 
       <div className="lot-card-footer" onClick={(e) => e.stopPropagation()}>
         <a
