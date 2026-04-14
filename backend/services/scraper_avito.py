@@ -1,15 +1,12 @@
 """
 Парсер Avito — земельные участки для сравнения рыночных цен.
 
-Использует:
-  - httpx для запросов с браузерными заголовками
-  - BeautifulSoup + __NEXT_DATA__ JSON (Next.js стандарт)
-  - Playwright как fallback если страница не загрузилась без JS
+Использует RSS-фид Авито (?rss=1) — официальный XML-формат, не требует JS.
+URL: https://www.avito.ru/{region}/zemelnye_uchastki?s=104&rss=1
 
 Данные сохраняются в таблицу lots с source=AVITO.
 """
 import asyncio
-import json
 import re
 import httpx
 from bs4 import BeautifulSoup
@@ -195,38 +192,6 @@ def _parse_published_at(date_str: Optional[str]) -> Optional[datetime]:
     return now
 
 
-def _extract_items_from_next_data(data: dict) -> list:
-    """
-    Рекурсивно ищем массив items в __NEXT_DATA__ структуре.
-    Структура меняется от версии к версии, поэтому ищем гибко.
-    """
-    # Пробуем известные пути
-    try:
-        return data["props"]["pageProps"]["initialState"]["catalog"]["items"]
-    except (KeyError, TypeError):
-        pass
-
-    try:
-        return data["props"]["pageProps"]["items"]
-    except (KeyError, TypeError):
-        pass
-
-    # Рекурсивный поиск первого большого массива с объектами у которых есть "id" и "title"
-    def _search(obj, depth=0):
-        if depth > 6:
-            return None
-        if isinstance(obj, list) and len(obj) > 2:
-            if isinstance(obj[0], dict) and "id" in obj[0] and "title" in obj[0]:
-                return obj
-        if isinstance(obj, dict):
-            for v in obj.values():
-                result = _search(v, depth + 1)
-                if result:
-                    return result
-        return None
-
-    return _search(data) or []
-
 
 class AvitoScraper:
     def __init__(self, db: AsyncSession):
@@ -275,20 +240,23 @@ class AvitoScraper:
         return saved
 
     async def _scrape_page(self, slug: str, region_code: str, page: int) -> int:
+        """Парсим одну страницу RSS-фида Авито."""
         url = f"{AVITO_BASE}/{slug}/zemelnye_uchastki"
-        params = {"p": page, "s": 104}  # s=104 — сортировка по дате
+        params = {"s": 104, "rss": 1}  # rss=1 → XML-фид, s=104 → сортировка по дате
+        if page > 1:
+            params["p"] = page
 
         try:
             resp = await self.client.get(url, params=params)
             if resp.status_code != 200:
                 print(f"[avito] HTTP {resp.status_code} для {url}")
                 return 0
-            html = resp.text
+            content = resp.text
         except Exception as e:
             print(f"[avito] Ошибка запроса {url}: {e}")
             return 0
 
-        items = self._parse_page(html)
+        items = self._parse_rss(content)
         if not items:
             print(f"[avito] Нет лотов на странице {page} для {slug}")
             return 0
@@ -305,173 +273,77 @@ class AvitoScraper:
         print(f"[avito] {slug} стр.{page}: сохранено {saved}/{len(items)}")
         return saved
 
-    def _parse_page(self, html: str) -> list:
-        """Извлекаем листинги из HTML страницы Авито."""
-        soup = BeautifulSoup(html, "lxml")
+    def _parse_rss(self, xml: str) -> list:
+        """Парсим RSS XML от Авито."""
+        try:
+            soup = BeautifulSoup(xml, "lxml-xml")
+        except Exception:
+            soup = BeautifulSoup(xml, "lxml")
 
-        # Способ 1: __NEXT_DATA__ (Next.js)
-        next_tag = soup.find("script", {"id": "__NEXT_DATA__"})
-        if next_tag and next_tag.string:
+        items_out = []
+        for item in soup.find_all("item"):
             try:
-                data = json.loads(next_tag.string)
-                items = _extract_items_from_next_data(data)
-                if items:
-                    print(f"[avito] __NEXT_DATA__: найдено {len(items)} лотов")
-                    return items
-                else:
-                    # Логируем структуру для отладки
-                    props = data.get("props", {}).get("pageProps", {})
-                    print(f"[avito] __NEXT_DATA__ keys: {list(props.keys())[:10]}")
-            except (json.JSONDecodeError, Exception) as e:
-                print(f"[avito] __NEXT_DATA__ ошибка: {e}")
+                title = (item.find("title") or item.find("Title"))
+                title = title.get_text(strip=True) if title else ""
 
-        # Способ 2: window.__initialData__ (старый формат, иногда base64+gzip)
-        match = re.search(r'window\.__initialData__\s*=\s*"([^"]{100,})"', html)
-        if match:
-            try:
-                import base64
-                import gzip
-                raw = base64.b64decode(match.group(1))
-                text = gzip.decompress(raw).decode("utf-8")
-                data = json.loads(text)
-                items = _extract_items_from_next_data(data)
-                if items:
-                    print(f"[avito] __initialData__: найдено {len(items)} лотов")
-                    return items
-            except Exception as e:
-                print(f"[avito] __initialData__ ошибка: {e}")
+                link = item.find("link")
+                url = link.get_text(strip=True) if link else ""
+                if not url:
+                    link = item.find("guid")
+                    url = link.get_text(strip=True) if link else ""
 
-        # Способ 3: inline JSON с данными каталога
-        for pattern in [
-            r'"items"\s*:\s*(\[.*?\])\s*,\s*"(?:totalCount|pagination|page)"',
-            r'"catalog"\s*:\s*\{[^}]*"items"\s*:\s*(\[[^\]]{50,}\])',
-        ]:
-            m = re.search(pattern, html, re.DOTALL)
-            if m:
-                try:
-                    items = json.loads(m.group(1))
-                    if items and isinstance(items[0], dict) and "id" in items[0]:
-                        print(f"[avito] inline JSON: найдено {len(items)} лотов")
-                        return items
-                except Exception:
-                    pass
-
-        # Способ 4: Парсим HTML-карточки напрямую
-        cards = self._parse_html_cards(soup)
-        if cards:
-            print(f"[avito] HTML cards: найдено {len(cards)} лотов")
-        else:
-            # Диагностика: что за страница вернулась
-            title = soup.title.string if soup.title else "no title"
-            print(f"[avito] Не удалось распарсить. Title: {title!r}, HTML size: {len(html)}")
-        return cards
-
-    def _parse_html_cards(self, soup: BeautifulSoup) -> list:
-        """Fallback: парсим карточки из HTML напрямую по data-маркерам Авито."""
-        items = []
-        # Авито использует разные маркеры в зависимости от версии
-        cards = (
-            soup.find_all("div", attrs={"data-marker": "item"}) or
-            soup.find_all("article", attrs={"data-marker": "item"}) or
-            soup.find_all(attrs={"data-item-id": True}) or
-            soup.find_all("div", class_=re.compile(r"item[-_]", re.I))
-        )
-        for card in cards:
-            try:
-                # id
-                item_id = card.get("data-item-id") or card.get("id", "").replace("i", "")
-
-                # title
-                title_tag = card.find(attrs={"itemprop": "name"}) or \
-                            card.find("h3") or card.find("h2")
-                title = title_tag.get_text(strip=True) if title_tag else ""
-
-                # price
-                price_tag = card.find(attrs={"data-marker": "item-price"}) or \
-                            card.find(itemprop="price")
-                price_text = price_tag.get_text(strip=True) if price_tag else ""
-                price = self._parse_price(price_text)
-
-                # url
-                link = card.find("a", attrs={"data-marker": "item-title"}) or card.find("a", href=True)
-                item_url = link["href"] if link else ""
-                if item_url and not item_url.startswith("http"):
-                    item_url = AVITO_BASE + item_url
-
-                # location
-                loc_tag = card.find(attrs={"data-marker": "item-address"}) or \
-                          card.find(itemprop="address")
-                location = loc_tag.get_text(strip=True) if loc_tag else ""
-
-                # date
-                date_tag = card.find(attrs={"data-marker": "item-date"})
-                date_str = date_tag.get_text(strip=True) if date_tag else None
-
-                if not item_id or not title:
+                # ID из URL: /..._XXXXXXX
+                item_id = ""
+                m = re.search(r"_(\d+)(?:\?|$)", url)
+                if m:
+                    item_id = m.group(1)
+                if not item_id:
                     continue
 
-                items.append({
+                # Цена
+                price = None
+                price_tag = item.find("price") or item.find("Price")
+                if price_tag:
+                    price = self._parse_price(price_tag.get_text(strip=True))
+                if not price:
+                    # Цена может быть в description
+                    desc = item.find("description")
+                    desc_text = desc.get_text(strip=True) if desc else ""
+                    m_price = re.search(r"([\d\s]{4,})\s*руб", desc_text)
+                    if m_price:
+                        price = self._parse_price(m_price.group(1))
+
+                # Адрес
+                address_tag = item.find("address") or item.find("g:location")
+                address = address_tag.get_text(strip=True) if address_tag else ""
+
+                # Дата
+                pub_date = item.find("pubDate")
+                date_str = pub_date.get_text(strip=True) if pub_date else None
+
+                items_out.append({
                     "id": item_id,
                     "title": title,
                     "price": price,
-                    "url": item_url,
-                    "address": location,
+                    "url": url,
+                    "address": address,
                     "date": date_str,
                 })
             except Exception:
                 continue
-        return items
+
+        if not items_out:
+            # Диагностика
+            print(f"[avito] RSS: 0 item-тегов. Первые 200 символов: {xml[:200]!r}")
+
+        return items_out
 
     def _parse_price(self, text: str) -> Optional[float]:
         """'1 500 000 ₽' → 1500000.0"""
         digits = re.sub(r"[^\d]", "", text)
         return float(digits) if digits else None
 
-    def _extract_from_json_item(self, item: dict) -> dict:
-        """Нормализуем JSON-объект Авито к нашему формату."""
-        # Цена
-        price = None
-        price_data = item.get("priceDetailed") or item.get("price") or {}
-        if isinstance(price_data, dict):
-            price = price_data.get("value") or price_data.get("postfix")
-            if isinstance(price, str):
-                price = self._parse_price(price)
-        elif isinstance(price_data, (int, float)):
-            price = float(price_data)
-
-        # URL
-        url = item.get("url") or item.get("urlPath") or ""
-        if url and not url.startswith("http"):
-            url = AVITO_BASE + url
-
-        # Адрес / местоположение
-        loc = item.get("location") or {}
-        address = ""
-        if isinstance(loc, dict):
-            address = loc.get("name") or loc.get("address") or ""
-        elif isinstance(loc, str):
-            address = loc
-
-        # Дата
-        date_str = None
-        for k in ("date", "sortDate", "time", "createdAt"):
-            if item.get(k):
-                date_str = str(item[k])
-                break
-
-        return {
-            "id": str(item.get("id", "")),
-            "title": item.get("title") or item.get("name") or "",
-            "price": price,
-            "url": url,
-            "address": address,
-            "date": date_str,
-        }
-
     async def _upsert_lot(self, raw_item: dict, region_code: str) -> None:
-        # Нормализуем если пришёл JSON-объект Авито
-        if "priceDetailed" in raw_item or "urlPath" in raw_item or "location" in raw_item:
-            raw_item = self._extract_from_json_item(raw_item)
 
         item_id = str(raw_item.get("id", "")).strip()
         if not item_id:
