@@ -316,9 +316,14 @@ class AvitoScraper:
                 data = json.loads(next_tag.string)
                 items = _extract_items_from_next_data(data)
                 if items:
+                    print(f"[avito] __NEXT_DATA__: найдено {len(items)} лотов")
                     return items
-            except (json.JSONDecodeError, Exception):
-                pass
+                else:
+                    # Логируем структуру для отладки
+                    props = data.get("props", {}).get("pageProps", {})
+                    print(f"[avito] __NEXT_DATA__ keys: {list(props.keys())[:10]}")
+            except (json.JSONDecodeError, Exception) as e:
+                print(f"[avito] __NEXT_DATA__ ошибка: {e}")
 
         # Способ 2: window.__initialData__ (старый формат, иногда base64+gzip)
         match = re.search(r'window\.__initialData__\s*=\s*"([^"]{100,})"', html)
@@ -331,17 +336,46 @@ class AvitoScraper:
                 data = json.loads(text)
                 items = _extract_items_from_next_data(data)
                 if items:
+                    print(f"[avito] __initialData__: найдено {len(items)} лотов")
                     return items
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"[avito] __initialData__ ошибка: {e}")
 
-        # Способ 3: Парсим HTML-карточки напрямую
-        return self._parse_html_cards(soup)
+        # Способ 3: inline JSON с данными каталога
+        for pattern in [
+            r'"items"\s*:\s*(\[.*?\])\s*,\s*"(?:totalCount|pagination|page)"',
+            r'"catalog"\s*:\s*\{[^}]*"items"\s*:\s*(\[[^\]]{50,}\])',
+        ]:
+            m = re.search(pattern, html, re.DOTALL)
+            if m:
+                try:
+                    items = json.loads(m.group(1))
+                    if items and isinstance(items[0], dict) and "id" in items[0]:
+                        print(f"[avito] inline JSON: найдено {len(items)} лотов")
+                        return items
+                except Exception:
+                    pass
+
+        # Способ 4: Парсим HTML-карточки напрямую
+        cards = self._parse_html_cards(soup)
+        if cards:
+            print(f"[avito] HTML cards: найдено {len(cards)} лотов")
+        else:
+            # Диагностика: что за страница вернулась
+            title = soup.title.string if soup.title else "no title"
+            print(f"[avito] Не удалось распарсить. Title: {title!r}, HTML size: {len(html)}")
+        return cards
 
     def _parse_html_cards(self, soup: BeautifulSoup) -> list:
         """Fallback: парсим карточки из HTML напрямую по data-маркерам Авито."""
         items = []
-        cards = soup.find_all("div", attrs={"data-marker": "item"})
+        # Авито использует разные маркеры в зависимости от версии
+        cards = (
+            soup.find_all("div", attrs={"data-marker": "item"}) or
+            soup.find_all("article", attrs={"data-marker": "item"}) or
+            soup.find_all(attrs={"data-item-id": True}) or
+            soup.find_all("div", class_=re.compile(r"item[-_]", re.I))
+        )
         for card in cards:
             try:
                 # id
