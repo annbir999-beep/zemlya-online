@@ -5,11 +5,17 @@ from services.scraper_avito import AvitoScraper
 from services.rosreestr import RosreestrClient
 
 
+def _run(coro):
+    """Запускает корутину в текущем event loop воркера."""
+    loop = asyncio.get_event_loop()
+    return loop.run_until_complete(coro)
+
+
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=300)
 def scrape_torgi_gov(self):
     """Основной парсинг torgi.gov — земельные аукционы"""
     try:
-        asyncio.run(_scrape_torgi())
+        _run(_scrape_torgi())
     except Exception as exc:
         raise self.retry(exc=exc)
 
@@ -26,7 +32,7 @@ async def _scrape_torgi():
 def scrape_avito(self, region_codes: list = None, pages_per_region: int = 3):
     """Парсинг Авито — земельные участки для сравнения рыночных цен"""
     try:
-        asyncio.run(_scrape_avito(region_codes, pages_per_region))
+        _run(_scrape_avito(region_codes, pages_per_region))
     except Exception as exc:
         raise self.retry(exc=exc)
 
@@ -43,7 +49,7 @@ async def _scrape_avito(region_codes: list = None, pages_per_region: int = 3):
 def enrich_with_rosreestr(self):
     """Обогащаем участки данными из Росреестра (кадастровые данные)"""
     try:
-        asyncio.run(_enrich_rosreestr())
+        _run(_enrich_rosreestr())
     except Exception as exc:
         raise self.retry(exc=exc)
 
@@ -124,7 +130,7 @@ async def _enrich_rosreestr():
 @celery_app.task
 def update_lot_statuses():
     """Переводим завершённые аукционы в статус completed"""
-    asyncio.run(_update_statuses())
+    _run(_update_statuses())
 
 
 async def _update_statuses():

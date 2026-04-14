@@ -1,6 +1,15 @@
+import asyncio
 from celery import Celery
 from celery.schedules import crontab
+from celery.signals import worker_process_init
 from core.config import settings
+
+
+@worker_process_init.connect
+def init_worker_event_loop(**kwargs):
+    """Каждый воркер-процесс получает чистый event loop — избегаем 'attached to a different loop'."""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
 
 celery_app = Celery(
     "sotka",
