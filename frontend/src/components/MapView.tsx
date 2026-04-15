@@ -129,36 +129,41 @@ export default function MapView({ points, selectedId }: Props) {
       const FORM: Record<string,string> = { auction:"Электронный аукцион", tender:"Конкурс", public:"Публичное предложение", without:"Без торгов" };
       const RESALE: Record<string,string> = { yes:"Можно", with_notice:"Можно уведомив", with_approval:"Можно согласовав", no:"Нельзя" };
 
+      // Числовой ID из НСПД — не показываем, только текстовые категории
+      const cleanCat = (v?: string|null) => v && /^\d+$/.test(v.trim()) ? null : v;
+
       const row = (label: string, val?: string|null) =>
         val ? `<tr><td style="color:#94a3b8;padding:2px 8px 2px 0;font-size:11px;white-space:nowrap">${label}</td><td style="font-size:11px;padding:2px 0">${val}</td></tr>` : "";
 
       const pctColor = p.pct ? (p.pct < 50 ? "#16a34a" : p.pct < 100 ? "#64748b" : "#dc2626") : "#64748b";
 
+      // Заголовок попапа: цена или площадь
+      const header = p.price ? fmt(p.price) : (p.area ? fmtArea(p.area) : "Участок");
+
       L.marker([p.lat, p.lng], { icon }).bindPopup(`
-        <div style="min-width:220px;max-width:280px;font-family:system-ui,sans-serif">
-          <div style="font-weight:700;font-size:15px;margin-bottom:6px;color:#1e293b">${fmt(p.price)}</div>
+        <div style="min-width:240px;max-width:300px;font-family:system-ui,sans-serif">
+          <div style="font-weight:700;font-size:15px;margin-bottom:2px;color:#1e293b">${header}</div>
+          ${p.region_name ? `<div style="font-size:11px;color:#64748b;margin-bottom:6px">${p.region_name}</div>` : ""}
           <table style="border-collapse:collapse;width:100%">
             ${row("Кадастровый №", p.cadastral_number)}
-            ${row("Форма", p.auction_form ? FORM[p.auction_form] || p.auction_form : null)}
+            ${row("Форма торгов", p.auction_form ? FORM[p.auction_form] || p.auction_form : null)}
             ${row("Вид сделки", p.deal_type ? DEAL[p.deal_type] || p.deal_type : null)}
-            ${row("Категория {КН}", p.category_kn)}
-            ${row("ВРИ {КН}", p.vri_kn)}
-            ${row("Площадь {КН}", p.area_kn ? fmtArea(p.area_kn) : null)}
-            ${row("Площадь {TG}", p.area ? fmtArea(p.area) : null)}
+            ${row("Категория земель", cleanCat(p.category_kn) || cleanCat(p.category_tg))}
+            ${row("ВРИ", p.vri_kn || p.vri_tg)}
+            ${row("Площадь", p.area_kn ? fmtArea(p.area_kn) : (p.area ? fmtArea(p.area) : null))}
             ${row("Кадастр. стоимость", p.cadastral_cost ? fmt(p.cadastral_cost) : null)}
             ${p.pct ? `<tr><td style="color:#94a3b8;padding:2px 8px 2px 0;font-size:11px">% НЦ/КС</td><td style="font-size:11px;padding:2px 0;font-weight:600;color:${pctColor}">${p.pct.toFixed(1)}%</td></tr>` : ""}
-            ${row("Оконч. подач. заяв.", p.submission_end ? fmtDate(p.submission_end) : null)}
+            ${row("Конец заявок", p.submission_end ? fmtDate(p.submission_end) : null)}
             ${row("Дата торгов", p.auction_end_date ? fmtDate(p.auction_end_date) : null)}
             ${row("Переуступка", p.resale_type ? RESALE[p.resale_type] : null)}
-            ${row("ЭТП", p.etp || "отсутствует")}
-            ${row("Регион", p.region_name)}
+            ${p.etp && p.etp !== "отсутствует" ? row("ЭТП", p.etp) : ""}
           </table>
           <div style="margin-top:8px;display:flex;gap:6px">
             <a href="/lots/${p.id}" style="flex:1;padding:5px 8px;background:#2563eb;color:#fff;border-radius:6px;font-size:12px;text-align:center;text-decoration:none">Подробнее →</a>
             ${p.lot_url ? `<a href="${p.lot_url}" target="_blank" rel="noopener" style="flex:1;padding:5px 8px;background:#f1f5f9;color:#475569;border-radius:6px;font-size:12px;text-align:center;text-decoration:none">Оригинал ↗</a>` : ""}
           </div>
         </div>
-      `, { maxWidth: 300 }).addTo(layer);
+      `, { maxWidth: 310 }).addTo(layer);
     });
   }, [points, selectedId]);
 

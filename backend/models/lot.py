@@ -14,6 +14,7 @@ class LotSource(str, enum.Enum):
     TORGI_GOV = "torgi_gov"
     AVITO = "avito"
     CIAN = "cian"
+    DOMCLICK = "domclick"
 
 
 class LotStatus(str, enum.Enum):

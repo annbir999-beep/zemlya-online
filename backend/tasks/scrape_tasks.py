@@ -3,6 +3,7 @@ from worker import celery_app
 from services.scraper_torgi import TorgiGovScraper
 from services.scraper_avito import AvitoScraper
 from services.scraper_cian import CianScraper
+from services.scraper_domclick import DomclickScraper
 from services.rosreestr import RosreestrClient
 
 
@@ -147,6 +148,23 @@ async def _scrape_cian(region_codes: list = None, pages_per_region: int = 3):
         scraper = CianScraper(db)
         saved = await scraper.run(region_codes=region_codes, pages_per_region=pages_per_region)
         print(f"[cian] Сохранено/обновлено лотов: {saved}")
+
+
+@celery_app.task(bind=True, max_retries=3, default_retry_delay=600)
+def scrape_domclick(self, region_codes: list = None, pages_per_region: int = 3):
+    """Парсинг Домклик — земельные участки для сравнения рыночных цен"""
+    try:
+        _run(_scrape_domclick(region_codes, pages_per_region))
+    except Exception as exc:
+        raise self.retry(exc=exc)
+
+
+async def _scrape_domclick(region_codes: list = None, pages_per_region: int = 3):
+    from db.database import AsyncSessionLocal
+    async with AsyncSessionLocal() as db:
+        scraper = DomclickScraper(db)
+        saved = await scraper.run(region_codes=region_codes, pages_per_region=pages_per_region)
+        print(f"[domclick] Сохранено/обновлено лотов: {saved}")
 
 
 @celery_app.task

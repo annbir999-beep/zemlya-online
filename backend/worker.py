@@ -57,5 +57,10 @@ celery_app.conf.update(
             "task": "tasks.scrape_tasks.scrape_cian",
             "schedule": crontab(minute=0, hour=4),
         },
+        # Парсинг Домклик — раз в сутки в 5:00 (20 регионов)
+        "scrape-domclick": {
+            "task": "tasks.scrape_tasks.scrape_domclick",
+            "schedule": crontab(minute=0, hour=5),
+        },
     },
 )
