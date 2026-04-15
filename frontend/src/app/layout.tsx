@@ -5,6 +5,7 @@ import Header from "@/components/Header";
 export const metadata: Metadata = {
   title: "Земля.ОНЛАЙН — агрегатор земельных аукционов",
   description: "Найдите земельный участок на аукционе по всей России. Карта, фильтры, AI-оценка, алерты.",
+  icons: { icon: "/favicon.svg" },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

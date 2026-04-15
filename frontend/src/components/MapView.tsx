@@ -31,16 +31,16 @@ interface MapPoint {
 // Цвет и эмодзи по категории назначения
 function getPurposeStyle(purpose?: string): { color: string; emoji: string } {
   switch (purpose) {
-    case "izhs":         return { color: "#16a34a", emoji: "🏠" };
-    case "snt":          return { color: "#65a30d", emoji: "🌿" };
-    case "lpkh":         return { color: "#84cc16", emoji: "🌾" };
-    case "agricultural": return { color: "#ca8a04", emoji: "🌾" };
-    case "commercial":   return { color: "#dc2626", emoji: "🏪" };
-    case "industrial":   return { color: "#7c3aed", emoji: "🏭" };
-    case "forest":       return { color: "#15803d", emoji: "🌲" };
-    case "water":        return { color: "#0284c7", emoji: "💧" };
-    case "special":      return { color: "#9f1239", emoji: "⚠️" };
-    default:             return { color: "#2563eb", emoji: "📍" };
+    case "izhs":         return { color: "#16a34a", emoji: "🏠" }; // насыщенный зелёный
+    case "snt":          return { color: "#f59e0b", emoji: "🌿" }; // янтарный — отличается от ИЖС
+    case "lpkh":         return { color: "#84cc16", emoji: "🌾" }; // лайм
+    case "agricultural": return { color: "#a16207", emoji: "🌾" }; // коричнево-золотой
+    case "commercial":   return { color: "#dc2626", emoji: "🏪" }; // красный
+    case "industrial":   return { color: "#7c3aed", emoji: "🏭" }; // фиолетовый
+    case "forest":       return { color: "#047857", emoji: "🌲" }; // тёмно-зелёный (лес)
+    case "water":        return { color: "#0284c7", emoji: "💧" }; // синий
+    case "special":      return { color: "#be185d", emoji: "⚠️" }; // малиновый
+    default:             return { color: "#475569", emoji: "📍" }; // серый вместо синего
   }
 }
 
@@ -179,13 +179,14 @@ export default function MapView({ points, selectedId }: Props) {
       }}>
         {[
           { emoji: "🏠", color: "#16a34a", label: "ИЖС" },
-          { emoji: "🌿", color: "#65a30d", label: "СНТ / Дача" },
-          { emoji: "🌾", color: "#84cc16", label: "ЛПХ / Сельхоз" },
+          { emoji: "🌿", color: "#f59e0b", label: "СНТ / Дача" },
+          { emoji: "🌾", color: "#84cc16", label: "ЛПХ" },
+          { emoji: "🌾", color: "#a16207", label: "Сельхоз" },
           { emoji: "🏪", color: "#dc2626", label: "Коммерческое" },
           { emoji: "🏭", color: "#7c3aed", label: "Промышленное" },
-          { emoji: "🌲", color: "#15803d", label: "Лесной фонд" },
+          { emoji: "🌲", color: "#047857", label: "Лесной фонд" },
           { emoji: "💧", color: "#0284c7", label: "Водный фонд" },
-          { emoji: "📍", color: "#2563eb", label: "Иное" },
+          { emoji: "📍", color: "#475569", label: "Иное" },
         ].map(item => (
           <div key={item.label} style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <div style={{ width: 14, height: 14, borderRadius: "50%", background: item.color, border: "2px solid #fff", boxShadow: "0 1px 3px rgba(0,0,0,.2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8, flexShrink: 0 }}>

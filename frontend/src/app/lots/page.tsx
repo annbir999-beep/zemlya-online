@@ -116,14 +116,20 @@ export default function CatalogPage() {
                 <th style={th("left")}>Участок</th>
                 <th style={th()}>Статус</th>
                 <th style={th()}>Назначение</th>
-                <th style={th()}>Цена, ₽</th>
-                <th style={th()}>НЦ/КС</th>
-                <th style={th()}>Площадь [TG]</th>
+                {(["price", "pct_cadastral", "area", "deposit_pct", "auction_end_date", "submission_end"] as const).map((col, i) => {
+                  const labels: Record<string, string> = { price: "Цена, ₽", pct_cadastral: "НЦ/КС", area: "Площадь [TG]", deposit_pct: "Задаток", auction_end_date: "Конец торгов", submission_end: "Конец заявок" };
+                  const active = filters.sort_by === col;
+                  const asc = filters.sort_order === "asc";
+                  return (
+                    <th key={col} style={{ ...th(), cursor: "pointer", userSelect: "none", color: active ? "var(--primary)" : "var(--text-2)" }}
+                      onClick={() => setFilters(f => ({ ...f, sort_by: col, sort_order: active && asc ? "desc" : "asc", page: 1 }))}>
+                      {labels[col]} {active ? (asc ? "↑" : "↓") : <span style={{ opacity: 0.3 }}>↕</span>}
+                    </th>
+                  );
+                })}
                 <th style={th()}>Площадь [КН]</th>
-                <th style={th()}>Задаток</th>
                 <th style={th()}>Переуступка</th>
                 <th style={th()}>Регион</th>
-                <th style={th()}>Конец торгов</th>
                 <th style={th()}>Действия</th>
               </tr>
             </thead>
@@ -155,43 +161,46 @@ export default function CatalogPage() {
                     <td style={td()}>
                       {lot.land_purpose ? <span className="badge badge-gray" style={{ fontSize: 11 }}>{PURPOSE_LABEL[lot.land_purpose] || lot.land_purpose}</span> : "—"}
                     </td>
+                    {/* Цена */}
                     <td style={{ ...td(), fontWeight: 700, color: "var(--primary)", whiteSpace: "nowrap" }}>
-                      {fmtPrice(lot.start_price)} ₽
+                      {fmtPrice(lot.start_price)}
                     </td>
+                    {/* НЦ/КС */}
                     <td style={td()}>
-                      {(lot as LotListItem & { pct_price_to_cadastral?: number }).pct_price_to_cadastral
-                        ? <span style={{ fontWeight: 600 }}>{(lot as LotListItem & { pct_price_to_cadastral?: number }).pct_price_to_cadastral!.toFixed(0)}%</span>
+                      {lot.pct_price_to_cadastral
+                        ? <span style={{ fontWeight: 600, color: lot.pct_price_to_cadastral < 50 ? "#16a34a" : lot.pct_price_to_cadastral > 100 ? "#dc2626" : "var(--text)" }}>{lot.pct_price_to_cadastral.toFixed(0)}%</span>
                         : "—"}
                     </td>
+                    {/* Площадь TG */}
                     <td style={td()}>{fmtArea(lot.area_sqm)}</td>
+                    {/* Задаток */}
                     <td style={td()}>
-                      {(lot as LotListItem & { area_sqm_kn?: number }).area_sqm_kn
-                        ? fmtArea((lot as LotListItem & { area_sqm_kn?: number }).area_sqm_kn)
-                        : <span style={{ color: "var(--text-3)" }}>—</span>}
-                    </td>
-                    <td style={td()}>
-                      {(lot as LotListItem & { deposit?: number; deposit_pct?: number }).deposit
-                        ? <>
-                            {fmtPrice((lot as LotListItem & { deposit?: number }).deposit)}
-                            {(lot as LotListItem & { deposit_pct?: number }).deposit_pct &&
-                              <div style={{ fontSize: 11, color: "var(--text-3)" }}>
-                                {(lot as LotListItem & { deposit_pct?: number }).deposit_pct!.toFixed(1)}%
-                              </div>
-                            }
-                          </>
+                      {lot.deposit
+                        ? <>{fmtPrice(lot.deposit)}{lot.deposit_pct ? <div style={{ fontSize: 11, color: "var(--text-3)" }}>{lot.deposit_pct.toFixed(1)}%</div> : null}</>
                         : "—"}
                     </td>
-                    <td style={td()}>
-                      {(lot as LotListItem & { resale_type?: string }).resale_type
-                        ? <span style={{ fontSize: 11 }}>{RESALE_LABEL[(lot as LotListItem & { resale_type?: string }).resale_type!] || "—"}</span>
-                        : "—"}
-                    </td>
-                    <td style={{ ...td(), maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {lot.region_name || "—"}
-                    </td>
+                    {/* Конец торгов */}
                     <td style={{ ...td(), whiteSpace: "nowrap" }}>
                       <div>{fmtDate(lot.auction_end_date)}</div>
                       <div style={{ fontSize: 11 }}>{daysLeft(lot.auction_end_date)}</div>
+                    </td>
+                    {/* Конец заявок */}
+                    <td style={{ ...td(), whiteSpace: "nowrap", fontSize: 12 }}>
+                      {fmtDate(lot.submission_end)}
+                    </td>
+                    {/* Площадь КН */}
+                    <td style={td()}>
+                      {lot.area_sqm_kn ? fmtArea(lot.area_sqm_kn) : <span style={{ color: "var(--text-3)" }}>—</span>}
+                    </td>
+                    {/* Переуступка */}
+                    <td style={td()}>
+                      {lot.resale_type
+                        ? <span style={{ fontSize: 11 }}>{RESALE_LABEL[lot.resale_type] || "—"}</span>
+                        : "—"}
+                    </td>
+                    {/* Регион */}
+                    <td style={{ ...td(), maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {lot.region_name || "—"}
                     </td>
                     <td style={td()} onClick={e => e.stopPropagation()}>
                       <a href={`/lots/${lot.id}`} className="btn btn-ghost btn-sm" style={{ padding: "3px 8px" }}>
