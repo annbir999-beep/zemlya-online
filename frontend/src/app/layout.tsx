@@ -3,7 +3,7 @@ import "./globals.css";
 import Header from "@/components/Header";
 
 export const metadata: Metadata = {
-  title: "Земля.ПРО — агрегатор земельных аукционов",
+  title: "Земля.ОНЛАЙН — агрегатор земельных аукционов",
   description: "Найдите земельный участок на аукционе по всей России. Карта, фильтры, AI-оценка, алерты.",
 };
 

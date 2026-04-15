@@ -25,7 +25,7 @@ export default function Header() {
 
   return (
     <header className="header">
-      <Link href="/" className="header-logo">🌍 Земля.ПРО</Link>
+      <Link href="/" className="header-logo">🌍 Земля.ОНЛАЙН</Link>
 
       <nav className="header-nav">
         {nav.map((n) => (
