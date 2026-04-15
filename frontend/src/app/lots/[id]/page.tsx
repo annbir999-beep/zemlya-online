@@ -1,9 +1,34 @@
 "use client";
-import { useEffect, useState, use } from "react";
+import { useEffect, useState, use, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { api, LotDetail, AiAssessment } from "@/lib/api";
 import { getMe } from "@/lib/auth";
 import type { UserProfile } from "@/lib/api";
+
+function MiniMap({ lat, lng, title }: { lat: number; lng: number; title?: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!ref.current) return;
+    if ((ref.current as unknown as Record<string,unknown>)._leaflet_id) return;
+    const link = document.createElement("link");
+    link.rel = "stylesheet"; link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+    if (!document.getElementById("leaflet-css")) { link.id = "leaflet-css"; document.head.appendChild(link); }
+    import("leaflet").then(mod => {
+      const L = mod.default;
+      if (!ref.current || (ref.current as unknown as Record<string,unknown>)._leaflet_id) return;
+      const map = L.map(ref.current, { center: [lat, lng], zoom: 13, zoomControl: true });
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(map);
+      L.marker([lat, lng]).addTo(map).bindPopup(title || "Участок").openPopup();
+    });
+    return () => {
+      if (ref.current && (ref.current as unknown as Record<string,unknown>)._leaflet_id) {
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        (ref.current as unknown as { _leaflet?: { remove: () => void } })._leaflet?.remove?.();
+      }
+    };
+  }, [lat, lng, title]);
+  return <div ref={ref} style={{ width: "100%", height: 220 }} />;
+}
 
 const PURPOSE_LABEL: Record<string, string> = {
   izhs: "ИЖС", snt: "СНТ", lpkh: "ЛПХ", agricultural: "Сельхоз",
@@ -169,6 +194,17 @@ function AiPanel({ lotId, user }: { lotId: number; user: UserProfile | null }) {
   );
 }
 
+interface MarketLot {
+  id: number;
+  title?: string;
+  start_price?: number;
+  area_sqm?: number;
+  price_per_sqm?: number;
+  address?: string;
+  lot_url?: string;
+  source: string;
+}
+
 export default function LotDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
@@ -176,6 +212,7 @@ export default function LotDetailPage({ params }: { params: Promise<{ id: string
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState(false);
+  const [market, setMarket] = useState<MarketLot[]>([]);
 
   useEffect(() => {
     Promise.all([
@@ -184,6 +221,7 @@ export default function LotDetailPage({ params }: { params: Promise<{ id: string
     ]).then(([l, u]) => {
       setLot(l);
       setUser(u);
+      api.get<MarketLot[]>(`/api/lots/${id}/market`).then(setMarket).catch(() => {});
     }).catch(() => router.push("/lots"))
     .finally(() => setLoading(false));
   }, [id, router]);
@@ -281,6 +319,8 @@ export default function LotDetailPage({ params }: { params: Promise<{ id: string
                   <Row label="Вид сделки" value={lot.deal_type ? DEAL_TYPE_LABEL[lot.deal_type] : null} />
                   <Row label="ЭТП" value={lot.etp} />
                   <Row label="Переуступка" value={lot.resale_type ? RESALE_LABEL[lot.resale_type] : null} />
+                  {lot.sublease_allowed && <Row label="Субаренда" value={<span className="badge badge-green">Упоминается</span>} />}
+                  {lot.assignment_allowed && <Row label="Переуступка (текст)" value={<span className="badge badge-green">Упоминается</span>} />}
                   <Row label="Организатор" value={lot.organizer_name} />
                   <Row label="Номер извещения/лота" value={lot.notice_number} />
                   <Row label="Начало приёма заявок" value={fmtDate(lot.submission_start)} />
@@ -337,6 +377,36 @@ export default function LotDetailPage({ params }: { params: Promise<{ id: string
                 </p>
               </div>
             )}
+
+            {/* Сравнение с рынком */}
+            {market.length > 0 && (
+              <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
+                <div style={{ padding: "14px 16px", fontWeight: 700, fontSize: 15, borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 8 }}>
+                  Рыночные предложения
+                  <span style={{ fontSize: 12, fontWeight: 400, color: "var(--text-3)" }}>похожие участки в регионе (ЦИАН)</span>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+                  {market.map((m, i) => (
+                    <div key={m.id} style={{ padding: "10px 16px", borderBottom: i < market.length - 1 ? "1px solid var(--border)" : "none", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          {m.title || "Земельный участок"}
+                        </div>
+                        <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 2 }}>
+                          {m.area_sqm ? fmtArea(m.area_sqm) : "—"}
+                          {m.address ? ` · ${m.address.slice(0, 50)}` : ""}
+                        </div>
+                      </div>
+                      <div style={{ textAlign: "right", flexShrink: 0 }}>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)" }}>{fmtPrice(m.start_price)}</div>
+                        {m.price_per_sqm && <div style={{ fontSize: 11, color: "var(--text-3)" }}>{fmtPrice(m.price_per_sqm)}/м²</div>}
+                        {m.lot_url && <a href={m.lot_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: "var(--primary)" }}>ЦИАН ↗</a>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Right column — mini map + actions */}
@@ -347,17 +417,10 @@ export default function LotDetailPage({ params }: { params: Promise<{ id: string
                 <div style={{ padding: "12px 16px", fontWeight: 600, fontSize: 14, borderBottom: "1px solid var(--border)" }}>
                   На карте
                 </div>
-                <div style={{ height: 220, background: "var(--surface-2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <a
-                    href={`https://pkk.rosreestr.ru/#/search/${lot.cadastral_number || `${lot.lat},${lot.lng}`}`}
-                    target="_blank" rel="noopener noreferrer"
-                    className="btn btn-secondary btn-sm"
-                  >
-                    Открыть на ПКК ↗
-                  </a>
-                </div>
-                <div style={{ padding: "8px 16px", fontSize: 12, color: "var(--text-3)" }}>
-                  {lot.lat.toFixed(6)}, {lot.lng.toFixed(6)}
+                <MiniMap lat={lot.lat} lng={lot.lng} title={lot.title} />
+                <div style={{ padding: "8px 16px", fontSize: 12, color: "var(--text-3)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span>{lot.lat.toFixed(6)}, {lot.lng.toFixed(6)}</span>
+                  <a href={`https://pkk.rosreestr.ru/#/search/${lot.cadastral_number || `${lot.lat},${lot.lng}`}`} target="_blank" rel="noopener noreferrer" style={{ color: "var(--primary)", textDecoration: "none" }}>ПКК ↗</a>
                 </div>
               </div>
             )}

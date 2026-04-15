@@ -593,6 +593,59 @@ async def get_rubrics_grouped():
     }
 
 
+class MarketLot(BaseModel):
+    id: int
+    title: Optional[str]
+    start_price: Optional[float]
+    area_sqm: Optional[float]
+    price_per_sqm: Optional[float]
+    address: Optional[str]
+    lot_url: Optional[str]
+    source: str
+    class Config:
+        from_attributes = True
+
+
+@router.get("/{lot_id}/market", response_model=List[MarketLot])
+async def get_market_comparison(lot_id: int, db: AsyncSession = Depends(get_db)):
+    """Похожие рыночные лоты из ЦИАН в том же регионе."""
+    result = await db.execute(select(Lot).where(Lot.id == lot_id))
+    lot = result.scalar_one_or_none()
+    if not lot:
+        raise HTTPException(status_code=404, detail="Лот не найден")
+
+    q = (
+        select(Lot)
+        .where(
+            Lot.source == LotSource.CIAN,
+            Lot.region_code == lot.region_code,
+            Lot.start_price.isnot(None),
+        )
+        .order_by(Lot.published_at.desc())
+        .limit(6)
+    )
+    # Фильтр по похожей площади (±5x) если есть
+    if lot.area_sqm:
+        q = q.where(
+            Lot.area_sqm >= lot.area_sqm / 5,
+            Lot.area_sqm <= lot.area_sqm * 5,
+        )
+    rows = (await db.execute(q)).scalars().all()
+    return [
+        MarketLot(
+            id=r.id,
+            title=r.title,
+            start_price=r.start_price,
+            area_sqm=r.area_sqm,
+            price_per_sqm=r.price_per_sqm,
+            address=r.address,
+            lot_url=r.lot_url,
+            source=r.source.value if r.source else "cian",
+        )
+        for r in rows
+    ]
+
+
 @router.get("/{lot_id}", response_model=LotDetail)
 async def get_lot(lot_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Lot).where(Lot.id == lot_id))
