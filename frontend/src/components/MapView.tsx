@@ -40,7 +40,7 @@ function getPurposeStyle(purpose?: string): { color: string; emoji: string } {
     case "forest":       return { color: "#047857", emoji: "🌲" }; // тёмно-зелёный (лес)
     case "water":        return { color: "#0284c7", emoji: "💧" }; // синий
     case "special":      return { color: "#be185d", emoji: "⚠️" }; // малиновый
-    default:             return { color: "#475569", emoji: "📍" }; // серый вместо синего
+    default:             return { color: "#94a3b8", emoji: "📍" }; // светло-серый
   }
 }
 
@@ -186,7 +186,7 @@ export default function MapView({ points, selectedId }: Props) {
           { emoji: "🏭", color: "#7c3aed", label: "Промышленное" },
           { emoji: "🌲", color: "#047857", label: "Лесной фонд" },
           { emoji: "💧", color: "#0284c7", label: "Водный фонд" },
-          { emoji: "📍", color: "#475569", label: "Иное" },
+          { emoji: "📍", color: "#94a3b8", label: "Иное" },
         ].map(item => (
           <div key={item.label} style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <div style={{ width: 14, height: 14, borderRadius: "50%", background: item.color, border: "2px solid #fff", boxShadow: "0 1px 3px rgba(0,0,0,.2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8, flexShrink: 0 }}>
