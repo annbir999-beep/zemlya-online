@@ -221,7 +221,7 @@ class AvitoScraper:
             browser = await pw.chromium.launch(
                 headless=True,
                 args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
-                proxy={"server": PROXY_SERVER, "username": PROXY_USERNAME, "password": PROXY_PASSWORD},
+                proxy={"server": PROXY_SERVER},
             )
             context = await browser.new_context(
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
