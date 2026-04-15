@@ -2,6 +2,7 @@ import asyncio
 from worker import celery_app
 from services.scraper_torgi import TorgiGovScraper
 from services.scraper_avito import AvitoScraper
+from services.scraper_cian import CianScraper
 from services.rosreestr import RosreestrClient
 
 
@@ -129,6 +130,23 @@ async def _enrich_rosreestr():
 
         await db.commit()
         print(f"[Росреестр] Обогащено: {enriched}, не найдено в PKK: {failed}")
+
+
+@celery_app.task(bind=True, max_retries=3, default_retry_delay=600)
+def scrape_cian(self, region_codes: list = None, pages_per_region: int = 3):
+    """Парсинг ЦИАН — земельные участки для сравнения рыночных цен"""
+    try:
+        _run(_scrape_cian(region_codes, pages_per_region))
+    except Exception as exc:
+        raise self.retry(exc=exc)
+
+
+async def _scrape_cian(region_codes: list = None, pages_per_region: int = 3):
+    from db.database import AsyncSessionLocal
+    async with AsyncSessionLocal() as db:
+        scraper = CianScraper(db)
+        saved = await scraper.run(region_codes=region_codes, pages_per_region=pages_per_region)
+        print(f"[cian] Сохранено/обновлено лотов: {saved}")
 
 
 @celery_app.task

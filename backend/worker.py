@@ -52,5 +52,10 @@ celery_app.conf.update(
             "task": "tasks.scrape_tasks.scrape_avito",
             "schedule": crontab(minute=0, hour=3),
         },
+        # Парсинг ЦИАН — раз в сутки в 4:00 (15 регионов, 3 страницы каждый)
+        "scrape-cian": {
+            "task": "tasks.scrape_tasks.scrape_cian",
+            "schedule": crontab(minute=0, hour=4),
+        },
     },
 )
