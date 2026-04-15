@@ -21,6 +21,11 @@ from core.config import settings
 
 AVITO_BASE = "https://www.avito.ru"
 
+# Прокси для обхода блокировки Авито (datacenter IP блокируется)
+PROXY_SERVER = "http://45.139.110.68:8000"
+PROXY_USERNAME = "Q5fu2o"
+PROXY_PASSWORD = "3KNkAA"
+
 # Маппинг наших кодов регионов → slug Авито
 # Полный список на: https://www.avito.ru/all
 REGION_SLUGS: dict[str, str] = {
@@ -216,6 +221,7 @@ class AvitoScraper:
             browser = await pw.chromium.launch(
                 headless=True,
                 args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+                proxy={"server": PROXY_SERVER, "username": PROXY_USERNAME, "password": PROXY_PASSWORD},
             )
             context = await browser.new_context(
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
