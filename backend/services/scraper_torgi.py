@@ -56,36 +56,61 @@ REGION_MAP = {
     "91": "Крым", "92": "Севастополь",
 }
 
-# Маппинг категорий torgi.gov -> наш LandPurpose
-PURPOSE_MAP = {
-    "Земли сельскохозяйственного назначения": LandPurpose.AGRICULTURAL,
-    "Земли населённых пунктов": LandPurpose.IZhS,
-    "Земли промышленности": LandPurpose.INDUSTRIAL,
-    "Земли лесного фонда": LandPurpose.FOREST,
-    "Земли водного фонда": LandPurpose.WATER,
-    "Земли особо охраняемых территорий": LandPurpose.SPECIAL_PURPOSE,
-}
-
-VRI_MAP = {  # Вид разрешённого использования
-    "для индивидуального жилищного строительства": LandPurpose.IZhS,
-    "ижс": LandPurpose.IZhS,
-    "для ведения личного подсобного хозяйства": LandPurpose.LPKh,
-    "лпх": LandPurpose.LPKh,
-    "для садоводства": LandPurpose.SNT,
-    "для огородничества": LandPurpose.SNT,
-    "снт": LandPurpose.SNT,
-    "для коммерческого использования": LandPurpose.COMMERCIAL,
-    "для размещения объектов торговли": LandPurpose.COMMERCIAL,
-}
+# Ключевые слова -> LandPurpose (ищем подстрокой в нижнем регистре)
+PURPOSE_KEYWORDS: list[tuple[str, LandPurpose]] = [
+    # ИЖС
+    ("индивидуального жилищного строительства", LandPurpose.IZhS),
+    ("ижс", LandPurpose.IZhS),
+    ("жилищное строительство", LandPurpose.IZhS),
+    ("малоэтажн", LandPurpose.IZhS),
+    # СНТ / дача
+    ("садоводств", LandPurpose.SNT),
+    ("огородничеств", LandPurpose.SNT),
+    ("дачн", LandPurpose.SNT),
+    ("снт", LandPurpose.SNT),
+    ("днп", LandPurpose.SNT),
+    # ЛПХ
+    ("личного подсобного хозяйства", LandPurpose.LPKh),
+    ("лпх", LandPurpose.LPKh),
+    ("подсобн", LandPurpose.LPKh),
+    # Сельхоз
+    ("сельскохозяйственного назначения", LandPurpose.AGRICULTURAL),
+    ("сельскохоз", LandPurpose.AGRICULTURAL),
+    ("фермерского хозяйства", LandPurpose.AGRICULTURAL),
+    ("пашн", LandPurpose.AGRICULTURAL),
+    ("растениеводств", LandPurpose.AGRICULTURAL),
+    ("животноводств", LandPurpose.AGRICULTURAL),
+    ("для сельскохозяйств", LandPurpose.AGRICULTURAL),
+    # Коммерция
+    ("коммерческого использования", LandPurpose.COMMERCIAL),
+    ("объектов торговли", LandPurpose.COMMERCIAL),
+    ("торговл", LandPurpose.COMMERCIAL),
+    ("офисн", LandPurpose.COMMERCIAL),
+    ("деловой", LandPurpose.COMMERCIAL),
+    ("гостиниц", LandPurpose.COMMERCIAL),
+    # Промышленность
+    ("промышленност", LandPurpose.INDUSTRIAL),
+    ("производственн", LandPurpose.INDUSTRIAL),
+    ("складск", LandPurpose.INDUSTRIAL),
+    ("транспорт", LandPurpose.INDUSTRIAL),
+    ("энергетик", LandPurpose.INDUSTRIAL),
+    ("земли промышленн", LandPurpose.INDUSTRIAL),
+    # Лес
+    ("лесного фонда", LandPurpose.FOREST),
+    ("лесн", LandPurpose.FOREST),
+    # Вода
+    ("водного фонда", LandPurpose.WATER),
+    ("водн", LandPurpose.WATER),
+    # Спец
+    ("особо охраняем", LandPurpose.SPECIAL_PURPOSE),
+    ("запаса", LandPurpose.SPECIAL_PURPOSE),
+]
 
 
 def _parse_purpose(category_str: str, vri_str: str) -> LandPurpose:
-    raw = (vri_str or "").lower()
-    for keyword, purpose in VRI_MAP.items():
-        if keyword in raw:
-            return purpose
-    for keyword, purpose in PURPOSE_MAP.items():
-        if keyword in (category_str or ""):
+    combined = ((vri_str or "") + " " + (category_str or "")).lower()
+    for keyword, purpose in PURPOSE_KEYWORDS:
+        if keyword in combined:
             return purpose
     return LandPurpose.OTHER
 
