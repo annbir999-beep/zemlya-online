@@ -266,6 +266,8 @@ export default function LotDetailPage({ params }: { params: Promise<{ id: string
               {lot.land_purpose && <span className="badge badge-gray">{PURPOSE_LABEL[lot.land_purpose] || lot.land_purpose}</span>}
               {lot.auction_type === "rent" && <span className="badge badge-orange">Аренда</span>}
               {lot.source === "torgi_gov" && <span className="badge badge-blue">torgi.gov</span>}
+              {lot.source === "avito" && <span className="badge badge-orange">Авито</span>}
+              {lot.source === "cian" && <span className="badge badge-green">ЦИАН</span>}
             </div>
           </div>
           <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
