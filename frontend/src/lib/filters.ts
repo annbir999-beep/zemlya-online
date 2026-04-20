@@ -28,8 +28,6 @@ export const LOT_STATUSES = [
 
 export const SOURCES = [
   { value: "torgi_gov", label: "torgi.gov" },
-  { value: "avito", label: "Авито" },
-  { value: "cian", label: "ЦИАН" },
 ];
 
 export const SORT_OPTIONS = [
