@@ -645,12 +645,12 @@ async def get_market_comparison(lot_id: int, db: AsyncSession = Depends(get_db))
     q = (
         select(Lot)
         .where(
-            Lot.source == LotSource.CIAN,
+            Lot.source.in_([LotSource.CIAN, LotSource.AVITO]),
             Lot.region_code == lot.region_code,
             Lot.start_price.isnot(None),
         )
         .order_by(Lot.published_at.desc())
-        .limit(6)
+        .limit(8)
     )
     # Фильтр по похожей площади (±5x) если есть
     if lot.area_sqm:

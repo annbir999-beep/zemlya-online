@@ -385,7 +385,7 @@ export default function LotDetailPage({ params }: { params: Promise<{ id: string
               <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
                 <div style={{ padding: "14px 16px", fontWeight: 700, fontSize: 15, borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 8 }}>
                   Рыночные предложения
-                  <span style={{ fontSize: 12, fontWeight: 400, color: "var(--text-3)" }}>похожие участки в регионе (ЦИАН)</span>
+                  <span style={{ fontSize: 12, fontWeight: 400, color: "var(--text-3)" }}>похожие участки в регионе (ЦИАН, Авито)</span>
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
                   {market.map((m, i) => (
@@ -402,7 +402,7 @@ export default function LotDetailPage({ params }: { params: Promise<{ id: string
                       <div style={{ textAlign: "right", flexShrink: 0 }}>
                         <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)" }}>{fmtPrice(m.start_price)}</div>
                         {m.price_per_sqm && <div style={{ fontSize: 11, color: "var(--text-3)" }}>{fmtPrice(m.price_per_sqm)}/м²</div>}
-                        {m.lot_url && <a href={m.lot_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: "var(--primary)" }}>ЦИАН ↗</a>}
+                        {m.lot_url && <a href={m.lot_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: "var(--primary)" }}>{m.source === "avito" ? "Авито ↗" : "ЦИАН ↗"}</a>}
                       </div>
                     </div>
                   ))}
