@@ -411,7 +411,7 @@ async def get_lots(
         category_tg=category_tg, vri_tg=vri_tg, section_tg=section_tg,
         etp=etp, resale_types=resale_type,
         sublease_allowed=sublease_allowed, assignment_allowed=assignment_allowed,
-        sources=source, cadastral=cadastral, notice_number=notice_number,
+        sources=source if source else ["torgi_gov"], cadastral=cadastral, notice_number=notice_number,
         submission_start_from=submission_start_from, submission_start_to=submission_start_to,
         submission_end_from=submission_end_from, submission_end_to=submission_end_to,
         lat=lat, lng=lng, radius_km=radius_km,
@@ -502,7 +502,7 @@ async def get_lots_for_map(
         section_tg=section_tg, etp=etp,
         resale_types=resale_type,
         sublease_allowed=sublease_allowed, assignment_allowed=assignment_allowed,
-        sources=source, cadastral=cadastral,
+        sources=source if source else ["torgi_gov"], cadastral=cadastral,
         submission_end_from=submission_end_from, submission_end_to=submission_end_to,
         has_coords=has_coords,
     )
