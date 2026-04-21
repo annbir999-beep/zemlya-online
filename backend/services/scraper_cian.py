@@ -105,10 +105,9 @@ class CianScraper:
     ) -> int:
         payload = {
             "jsonQuery": {
-                "_type": "suburbansale",
+                "_type": "landsale",
                 "engine_version": {"type": "term", "value": 2},
                 "region": {"type": "terms", "value": [cian_id]},
-                "object_type": {"type": "terms", "value": [2]},  # 2 = земельный участок
                 "page": {"type": "term", "value": page},
             }
         }
