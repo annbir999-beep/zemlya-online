@@ -22,6 +22,7 @@ interface MapPoint {
   category_tg?: string;
   vri_tg?: string;
   submission_end?: string;
+  auction_start_date?: string;
   auction_end_date?: string;
   lot_url?: string;
   region_name?: string;
@@ -154,6 +155,7 @@ export default function MapView({ points, selectedId }: Props) {
             ${row("Кадастр. стоимость", p.cadastral_cost ? fmt(p.cadastral_cost) : null)}
             ${p.pct ? `<tr><td style="color:#94a3b8;padding:2px 8px 2px 0;font-size:11px">% НЦ/КС</td><td style="font-size:11px;padding:2px 0;font-weight:600;color:${pctColor}">${p.pct.toFixed(1)}%</td></tr>` : ""}
             ${row("Срок подачи заявок", p.submission_end ? fmtDate(p.submission_end) : null)}
+            ${row("Дата проведения торгов", p.auction_start_date ? fmtDate(p.auction_start_date) : null)}
             ${row("Переуступка", p.resale_type ? RESALE[p.resale_type] : null)}
             ${p.etp && p.etp !== "отсутствует" ? row("ЭТП", p.etp) : ""}
           </table>

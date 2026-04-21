@@ -327,6 +327,7 @@ export default function LotDetailPage({ params }: { params: Promise<{ id: string
                   <Row label="Номер извещения/лота" value={lot.notice_number} />
                   <Row label="Начало приёма заявок" value={fmtDate(lot.submission_start)} />
                   <Row label="Срок подачи заявок" value={fmtDate(lot.submission_end)} highlight />
+                  <Row label="Дата проведения торгов" value={fmtDate(lot.auction_start_date)} />
                 </tbody>
               </table>
             </div>

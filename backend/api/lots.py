@@ -513,7 +513,7 @@ async def get_lots_for_map(
         Lot.cadastral_cost, Lot.cadastral_number, Lot.location,
         Lot.auction_form, Lot.deal_type, Lot.resale_type, Lot.etp,
         Lot.category_kn, Lot.vri_kn, Lot.category_tg, Lot.vri_tg,
-        Lot.submission_end, Lot.auction_end_date, Lot.lot_url,
+        Lot.submission_end, Lot.auction_start_date, Lot.auction_end_date, Lot.lot_url,
         Lot.region_name, Lot.notice_number,
     ).where(and_(*conditions, Lot.location.isnot(None))).limit(5000)
 
@@ -545,6 +545,7 @@ async def get_lots_for_map(
                     "category_tg": row.category_tg,
                     "vri_tg": row.vri_tg,
                     "submission_end": row.submission_end.isoformat() if row.submission_end else None,
+                    "auction_start_date": row.auction_start_date.isoformat() if row.auction_start_date else None,
                     "auction_end_date": row.auction_end_date.isoformat() if row.auction_end_date else None,
                     "lot_url": row.lot_url,
                     "region_name": row.region_name,
