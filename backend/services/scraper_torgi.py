@@ -211,8 +211,11 @@ def _parse_datetime(dt_str: Optional[str]) -> Optional[datetime]:
 class TorgiGovScraper:
     def __init__(self, db: AsyncSession):
         self.db = db
+        # Тип прокси задаётся в PROXY_SCHEME (http/socks5/socks5h). По умолчанию HTTP —
+        # текущий 45.139.110.68:8000 это HTTP-прокси с Basic-auth.
+        scheme = getattr(settings, "PROXY_SCHEME", None) or "http"
         proxy_url = (
-            f"socks5://{settings.PROXY_USER}:{settings.PROXY_PASS}@{settings.PROXY_HOST}"
+            f"{scheme}://{settings.PROXY_USER}:{settings.PROXY_PASS}@{settings.PROXY_HOST}"
             if getattr(settings, "PROXY_HOST", None)
             else None
         )
