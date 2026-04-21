@@ -206,7 +206,7 @@ class CianScraper:
         lng = geo.get("coordinates", {}).get("lng") if geo.get("coordinates") else None
 
         # --- URL ---
-        lot_url = f"https://www.cian.ru/sale/suburban/{offer_id}/"
+        lot_url = f"https://www.cian.ru/sale/land/{offer_id}/"
 
         # --- Публикация ---
         published_raw = offer.get("addedTimestamp") or offer.get("creationDate")
