@@ -173,6 +173,62 @@ def update_lot_statuses():
     _run(_update_statuses())
 
 
+@celery_app.task(bind=True, max_retries=2, default_retry_delay=600)
+def enrich_torgi_details(self, batch_size: int = 300):
+    """Подтягиваем дату проведения торгов из детального API torgi.gov."""
+    try:
+        _run(_enrich_torgi_details(batch_size))
+    except Exception as exc:
+        raise self.retry(exc=exc)
+
+
+async def _enrich_torgi_details(batch_size: int):
+    import asyncio as _asyncio
+    from db.database import AsyncSessionLocal
+    from sqlalchemy import select
+    from models.lot import Lot, LotSource, LotStatus
+
+    async with AsyncSessionLocal() as db:
+        q = (
+            select(Lot)
+            .where(
+                Lot.source == LotSource.TORGI_GOV,
+                Lot.auction_start_date.is_(None),
+                Lot.status.in_([LotStatus.ACTIVE, LotStatus.UPCOMING]),
+            )
+            .limit(batch_size)
+        )
+        lots = (await db.execute(q)).scalars().all()
+        if not lots:
+            print("[torgi-details] Нет лотов для обогащения")
+            return
+
+        scraper = TorgiGovScraper(db)
+        updated = 0
+        try:
+            for i, lot in enumerate(lots, 1):
+                torgi_id = lot.external_id.removeprefix("torgi_") if lot.external_id else None
+                if not torgi_id:
+                    continue
+                try:
+                    dt = await scraper.fetch_auction_date(torgi_id)
+                    if dt:
+                        lot.auction_start_date = dt
+                        lot.auction_end_date = dt
+                        db.add(lot)
+                        updated += 1
+                except Exception as e:
+                    print(f"[torgi-details] {torgi_id}: {type(e).__name__}")
+                if i % 50 == 0:
+                    await db.commit()
+                    print(f"[torgi-details] {i}/{len(lots)} обработано, обновлено: {updated}")
+                await _asyncio.sleep(1.0)
+            await db.commit()
+            print(f"[torgi-details] Готово. Обновлено: {updated}/{len(lots)}")
+        finally:
+            await scraper.client.aclose()
+
+
 async def _update_statuses():
     from db.database import AsyncSessionLocal
     from sqlalchemy import update

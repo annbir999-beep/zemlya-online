@@ -462,3 +462,40 @@ class TorgiGovScraper:
         self.db.add(lot)
         await self.db.flush()
         return 1
+
+    async def fetch_auction_date(self, torgi_id: str) -> Optional[datetime]:
+        """Подтягивает дату проведения торгов из детального API torgi.gov.
+
+        Возвращает datetime или None. Пытается несколько эндпойнтов и ключей —
+        структура ответа у torgi.gov варьируется в зависимости от типа лота."""
+        for url in (
+            f"{TORGI_BASE}/lotcards/{torgi_id}",
+            f"{TORGI_BASE}/lotcards/byId/{torgi_id}",
+            f"{TORGI_BASE}/procedures/byLotId/{torgi_id}",
+        ):
+            try:
+                resp = await self.client.get(url)
+                if resp.status_code != 200:
+                    continue
+                data = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else None
+                if not isinstance(data, dict):
+                    continue
+                # Ищем в нескольких возможных местах
+                candidates = []
+                for key in ("auctionStartDate", "auctionDate", "biddingDate", "procedureDate"):
+                    v = data.get(key)
+                    if v:
+                        candidates.append(v)
+                proc = data.get("procedure") or data.get("parentProcedure") or {}
+                if isinstance(proc, dict):
+                    for key in ("auctionStartDate", "biddingDate", "procedureDate"):
+                        v = proc.get(key)
+                        if v:
+                            candidates.append(v)
+                for v in candidates:
+                    parsed = _parse_datetime(v)
+                    if parsed:
+                        return parsed
+            except Exception:
+                continue
+        return None

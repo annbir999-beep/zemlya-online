@@ -37,6 +37,11 @@ celery_app.conf.update(
             "task": "tasks.scrape_tasks.enrich_with_rosreestr",
             "schedule": crontab(minute=30, hour="*/6"),
         },
+        # Подтягивание даты торгов из детального API torgi — каждые 3 часа
+        "enrich-torgi-details": {
+            "task": "tasks.scrape_tasks.enrich_torgi_details",
+            "schedule": crontab(minute=45, hour="*/3"),
+        },
         # Проверка алертов и отправка уведомлений — каждые 30 минут
         "check-alerts": {
             "task": "tasks.alert_tasks.check_and_notify",
