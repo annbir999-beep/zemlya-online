@@ -642,23 +642,27 @@ async def get_market_comparison(lot_id: int, db: AsyncSession = Depends(get_db))
     if not lot:
         raise HTTPException(status_code=404, detail="Лот не найден")
 
-    q = (
-        select(Lot)
-        .where(
-            Lot.source.in_([LotSource.CIAN, LotSource.AVITO]),
-            Lot.region_code == lot.region_code,
-            Lot.start_price.isnot(None),
+    def _build_q(source_enum):
+        sub = (
+            select(Lot)
+            .where(
+                Lot.source == source_enum,
+                Lot.region_code == lot.region_code,
+                Lot.start_price.isnot(None),
+            )
+            .order_by(Lot.published_at.desc().nullslast())
+            .limit(4)
         )
-        .order_by(Lot.published_at.desc())
-        .limit(8)
-    )
-    # Фильтр по похожей площади (±5x) если есть
-    if lot.area_sqm:
-        q = q.where(
-            Lot.area_sqm >= lot.area_sqm / 5,
-            Lot.area_sqm <= lot.area_sqm * 5,
-        )
-    rows = (await db.execute(q)).scalars().all()
+        if lot.area_sqm:
+            sub = sub.where(
+                Lot.area_sqm >= lot.area_sqm / 5,
+                Lot.area_sqm <= lot.area_sqm * 5,
+            )
+        return sub
+
+    cian_rows = (await db.execute(_build_q(LotSource.CIAN))).scalars().all()
+    avito_rows = (await db.execute(_build_q(LotSource.AVITO))).scalars().all()
+    rows = list(cian_rows) + list(avito_rows)
     return [
         MarketLot(
             id=r.id,

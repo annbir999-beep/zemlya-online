@@ -160,6 +160,14 @@ class CianScraper:
         if not offer_id:
             return
 
+        # Только чистая земля — отсеиваем дома/дачи/коттеджи
+        category = (offer.get("category") or "").lower()
+        if category and "land" not in category:
+            return
+        title_lower = (offer.get("title") or "").lower()
+        if any(word in title_lower for word in ("дом", "коттедж", "таунхаус", "house")):
+            return
+
         external_id = f"cian_{offer_id}"
 
         result = await self.db.execute(select(Lot).where(Lot.external_id == external_id))
