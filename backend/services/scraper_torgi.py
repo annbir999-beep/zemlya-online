@@ -432,7 +432,9 @@ class TorgiGovScraper:
         lot.organizer_name = raw.get("organizer", {}).get("name", "")
         lot.lot_url = f"https://torgi.gov.ru/new/public/lots/lot/{raw['id']}"
         lot.auction_start_date = _parse_datetime(raw.get("auctionStartDate"))
-        lot.auction_end_date = _parse_datetime(raw.get("biddEndTime") or raw.get("auctionEndDate"))
+        lot.auction_end_date = _parse_datetime(
+            raw.get("auctionEndDate") or raw.get("auctionStartDate") or raw.get("biddEndTime")
+        )
         lot.submission_start = _parse_datetime(raw.get("biddStartTime") or raw.get("submissionStartDate"))
         lot.submission_end = _parse_datetime(raw.get("biddEndTime") or raw.get("submissionEndDate"))
 
