@@ -153,8 +153,7 @@ export default function MapView({ points, selectedId }: Props) {
             ${row("Площадь", p.area_kn ? fmtArea(p.area_kn) : (p.area ? fmtArea(p.area) : null))}
             ${row("Кадастр. стоимость", p.cadastral_cost ? fmt(p.cadastral_cost) : null)}
             ${p.pct ? `<tr><td style="color:#94a3b8;padding:2px 8px 2px 0;font-size:11px">% НЦ/КС</td><td style="font-size:11px;padding:2px 0;font-weight:600;color:${pctColor}">${p.pct.toFixed(1)}%</td></tr>` : ""}
-            ${row("Конец заявок", p.submission_end ? fmtDate(p.submission_end) : null)}
-            ${row("Дата торгов", p.auction_end_date ? fmtDate(p.auction_end_date) : null)}
+            ${row("Срок подачи заявок", p.submission_end ? fmtDate(p.submission_end) : null)}
             ${row("Переуступка", p.resale_type ? RESALE[p.resale_type] : null)}
             ${p.etp && p.etp !== "отсутствует" ? row("ЭТП", p.etp) : ""}
           </table>

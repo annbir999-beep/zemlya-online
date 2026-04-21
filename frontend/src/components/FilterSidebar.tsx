@@ -169,7 +169,7 @@ export default function FilterSidebar({ filters, onChange, onReset }: Props) {
     name.toLowerCase().includes(regionSearch.toLowerCase())
   );
 
-  const sortValue = filters.sort_by ? `${filters.sort_by}:${filters.sort_order || "asc"}` : "auction_end_date:asc";
+  const sortValue = filters.sort_by ? `${filters.sort_by}:${filters.sort_order || "asc"}` : "submission_end:asc";
 
   return (
     <aside className="sidebar" style={{ padding: 0 }}>

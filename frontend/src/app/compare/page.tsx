@@ -122,8 +122,7 @@ const FIELDS: FieldDef[] = [
   { label: "Номер извещения", get: l => l.notice_number, fmt: v => v ? String(v) : "—" },
   // Даты
   { group: "Даты", label: "Начало подачи заявок", get: l => l.submission_start, fmt: v => fmtDate(v as string) },
-  { label: "Конец подачи заявок", get: l => l.submission_end, fmt: v => fmtDate(v as string) },
-  { label: "Конец торгов", get: l => l.auction_end_date, fmt: v => fmtDate(v as string), highlight: true },
+  { label: "Срок подачи заявок", get: l => l.submission_end, fmt: v => fmtDate(v as string), highlight: true },
 ];
 
 // ─── Comparison helpers ───────────────────────────────────────────────────────

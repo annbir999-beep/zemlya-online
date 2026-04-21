@@ -431,20 +431,22 @@ class TorgiGovScraper:
         lot.address = address
         lot.organizer_name = raw.get("organizer", {}).get("name", "")
         lot.lot_url = f"https://torgi.gov.ru/new/public/lots/lot/{raw['id']}"
-        lot.auction_start_date = _parse_datetime(raw.get("auctionStartDate"))
-        lot.auction_end_date = _parse_datetime(
-            raw.get("auctionEndDate") or raw.get("auctionStartDate") or raw.get("biddEndTime")
-        )
-        lot.submission_start = _parse_datetime(raw.get("biddStartTime") or raw.get("submissionStartDate"))
-        lot.submission_end = _parse_datetime(raw.get("biddEndTime") or raw.get("submissionEndDate"))
+        # В API torgi.gov для земельных извещений отдаётся только срок подачи
+        # заявок (biddEndTime). Реальная дата торгов отсутствует. Поэтому
+        # auction_* = None, а submission_end = biddEndTime — единственная дата,
+        # по которой лот можно считать завершённым.
+        lot.auction_start_date = None
+        lot.auction_end_date = None
+        lot.submission_start = _parse_datetime(raw.get("biddStartTime") or raw.get("createDate"))
+        lot.submission_end = _parse_datetime(raw.get("biddEndTime"))
 
         api_status = _parse_status(raw.get("lotStatus", "PUBLISHED"))
         now_utc = datetime.now(timezone.utc)
         if api_status == LotStatus.CANCELLED:
             lot.status = LotStatus.CANCELLED
-        elif lot.auction_end_date and lot.auction_end_date < now_utc:
+        elif lot.submission_end and lot.submission_end < now_utc:
             lot.status = LotStatus.COMPLETED
-        elif lot.auction_start_date and lot.auction_start_date > now_utc:
+        elif lot.submission_start and lot.submission_start > now_utc:
             lot.status = LotStatus.UPCOMING
         else:
             lot.status = api_status

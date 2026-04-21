@@ -52,7 +52,7 @@ interface Props {
 export default function LotCard({ lot, selected, compareIds = [], onSelect, onToggleCompare }: Props) {
   const status = STATUS_CONFIG[lot.status] || { label: lot.status, cls: "badge-gray" };
   const inCompare = compareIds.includes(lot.id);
-  const dl = daysLeft(lot.auction_end_date);
+  const dl = daysLeft(lot.submission_end);
 
   return (
     <div className={`lot-card ${selected ? "selected" : ""}`} onClick={() => onSelect(lot)}>
@@ -106,16 +106,15 @@ export default function LotCard({ lot, selected, compareIds = [], onSelect, onTo
 
       <div style={{ fontSize: 12, color: "var(--text-2)", display: "flex", gap: 8, flexWrap: "wrap" }}>
         {lot.region_name && <span>📍 {lot.region_name}</span>}
-        {lot.auction_end_date && (
-          <span>⏰ {formatDate(lot.auction_end_date)}{dl && <b style={{ color: "var(--danger)", marginLeft: 4 }}>{dl}</b>}</span>
+        {lot.submission_end && (
+          <span>⏰ до {formatDate(lot.submission_end)}{dl && <b style={{ color: "var(--danger)", marginLeft: 4 }}>{dl}</b>}</span>
         )}
       </div>
 
-      {/* Даты заявок */}
-      {(lot.submission_start || lot.submission_end) && (
-        <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 4, display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {lot.submission_start && <span>Заявки с {formatDate(lot.submission_start)}</span>}
-          {lot.submission_end && <span>по {formatDate(lot.submission_end)}</span>}
+      {/* Начало приёма заявок */}
+      {lot.submission_start && (
+        <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 4 }}>
+          Заявки с {formatDate(lot.submission_start)}
         </div>
       )}
 

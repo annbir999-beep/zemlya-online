@@ -5,7 +5,7 @@ import { FiltersState, filtersToQueryString, SORT_OPTIONS } from "@/lib/filters"
 import type { LotListItem, LotsResponse } from "@/lib/api";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "";
-const DEFAULT_FILTERS: FiltersState = { status: "active", sort_by: "auction_end_date", sort_order: "asc", source: ["torgi_gov"] };
+const DEFAULT_FILTERS: FiltersState = { status: "active", sort_by: "submission_end", sort_order: "asc", source: ["torgi_gov"] };
 
 const PURPOSE_LABEL: Record<string, string> = {
   izhs: "ИЖС", snt: "СНТ", lpkh: "ЛПХ", agricultural: "Сельхоз",
@@ -67,7 +67,7 @@ export default function CatalogPage() {
   const toggleCompare = (id: number) =>
     setCompareIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : prev.length < 5 ? [...prev, id] : prev);
 
-  const sortValue = filters.sort_by ? `${filters.sort_by}:${filters.sort_order || "asc"}` : "auction_end_date:asc";
+  const sortValue = filters.sort_by ? `${filters.sort_by}:${filters.sort_order || "asc"}` : "submission_end:asc";
 
   const pages = data ? Math.ceil(data.total / 50) : 0;
 
@@ -116,8 +116,8 @@ export default function CatalogPage() {
                 <th style={th("left")}>Участок</th>
                 <th style={th()}>Статус</th>
                 <th style={th()}>Назначение</th>
-                {(["price", "pct_cadastral", "area", "deposit_pct", "auction_end_date", "submission_end"] as const).map((col, i) => {
-                  const labels: Record<string, string> = { price: "Цена, ₽", pct_cadastral: "НЦ/КС", area: "Площадь [TG]", deposit_pct: "Задаток", auction_end_date: "Конец торгов", submission_end: "Конец заявок" };
+                {(["price", "pct_cadastral", "area", "deposit_pct", "submission_end"] as const).map((col, i) => {
+                  const labels: Record<string, string> = { price: "Цена, ₽", pct_cadastral: "НЦ/КС", area: "Площадь [TG]", deposit_pct: "Задаток", submission_end: "Срок заявок" };
                   const active = filters.sort_by === col;
                   const asc = filters.sort_order === "asc";
                   return (
@@ -179,14 +179,10 @@ export default function CatalogPage() {
                         ? <>{fmtPrice(lot.deposit)}{lot.deposit_pct ? <div style={{ fontSize: 11, color: "var(--text-3)" }}>{lot.deposit_pct.toFixed(1)}%</div> : null}</>
                         : "—"}
                     </td>
-                    {/* Конец торгов */}
+                    {/* Срок заявок */}
                     <td style={{ ...td(), whiteSpace: "nowrap" }}>
-                      <div>{fmtDate(lot.auction_end_date)}</div>
-                      <div style={{ fontSize: 11 }}>{daysLeft(lot.auction_end_date)}</div>
-                    </td>
-                    {/* Конец заявок */}
-                    <td style={{ ...td(), whiteSpace: "nowrap", fontSize: 12 }}>
-                      {fmtDate(lot.submission_end)}
+                      <div>{fmtDate(lot.submission_end)}</div>
+                      <div style={{ fontSize: 11 }}>{daysLeft(lot.submission_end)}</div>
                     </td>
                     {/* Площадь КН */}
                     <td style={td()}>

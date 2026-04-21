@@ -31,7 +31,7 @@ export const SOURCES = [
 ];
 
 export const SORT_OPTIONS = [
-  { value: "auction_end_date:asc", label: "По дате торгов (ближайшие)" },
+  { value: "submission_end:asc", label: "По сроку подачи заявок (ближайшие)" },
   { value: "price:asc", label: "Цена: по возрастанию" },
   { value: "price:desc", label: "Цена: по убыванию" },
   { value: "area:asc", label: "Площадь: по возрастанию" },

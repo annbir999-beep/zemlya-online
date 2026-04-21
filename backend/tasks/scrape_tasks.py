@@ -185,8 +185,8 @@ async def _update_statuses():
             update(Lot)
             .where(
                 Lot.status.in_([LotStatus.ACTIVE, LotStatus.UPCOMING]),
-                Lot.auction_end_date.isnot(None),
-                Lot.auction_end_date < now,
+                Lot.submission_end.isnot(None),
+                Lot.submission_end < now,
             )
             .values(status=LotStatus.COMPLETED)
         )
@@ -194,9 +194,9 @@ async def _update_statuses():
             update(Lot)
             .where(
                 Lot.status == LotStatus.UPCOMING,
-                Lot.auction_start_date.isnot(None),
-                Lot.auction_start_date <= now,
-                (Lot.auction_end_date.is_(None)) | (Lot.auction_end_date >= now),
+                Lot.submission_start.isnot(None),
+                Lot.submission_start <= now,
+                (Lot.submission_end.is_(None)) | (Lot.submission_end >= now),
             )
             .values(status=LotStatus.ACTIVE)
         )
