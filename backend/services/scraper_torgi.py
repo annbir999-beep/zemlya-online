@@ -426,7 +426,6 @@ class TorgiGovScraper:
         )
         lot.sublease_allowed = sublease if (sublease or assignment) else None
         lot.assignment_allowed = assignment if (sublease or assignment) else None
-        lot.status = _parse_status(raw.get("lotStatus", "PUBLISHED"))
         lot.region_code = str(region_code)
         lot.region_name = region_name
         lot.address = address
@@ -436,6 +435,17 @@ class TorgiGovScraper:
         lot.auction_end_date = _parse_datetime(raw.get("biddEndTime") or raw.get("auctionEndDate"))
         lot.submission_start = _parse_datetime(raw.get("biddStartTime") or raw.get("submissionStartDate"))
         lot.submission_end = _parse_datetime(raw.get("biddEndTime") or raw.get("submissionEndDate"))
+
+        api_status = _parse_status(raw.get("lotStatus", "PUBLISHED"))
+        now_utc = datetime.now(timezone.utc)
+        if api_status == LotStatus.CANCELLED:
+            lot.status = LotStatus.CANCELLED
+        elif lot.auction_end_date and lot.auction_end_date < now_utc:
+            lot.status = LotStatus.COMPLETED
+        elif lot.auction_start_date and lot.auction_start_date > now_utc:
+            lot.status = LotStatus.UPCOMING
+        else:
+            lot.status = api_status
         lot.published_at = _parse_datetime(raw.get("firstVersionPublicationDate"))
         lot.raw_data = raw
 

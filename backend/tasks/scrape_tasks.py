@@ -175,16 +175,30 @@ def update_lot_statuses():
 
 async def _update_statuses():
     from db.database import AsyncSessionLocal
-    from sqlalchemy import select, update
+    from sqlalchemy import update
     from models.lot import Lot, LotStatus
     from datetime import datetime, timezone
 
     now = datetime.now(timezone.utc)
     async with AsyncSessionLocal() as db:
-        await db.execute(
+        r1 = await db.execute(
             update(Lot)
-            .where(Lot.status == LotStatus.ACTIVE, Lot.auction_end_date < now)
+            .where(
+                Lot.status.in_([LotStatus.ACTIVE, LotStatus.UPCOMING]),
+                Lot.auction_end_date.isnot(None),
+                Lot.auction_end_date < now,
+            )
             .values(status=LotStatus.COMPLETED)
         )
+        r2 = await db.execute(
+            update(Lot)
+            .where(
+                Lot.status == LotStatus.UPCOMING,
+                Lot.auction_start_date.isnot(None),
+                Lot.auction_start_date <= now,
+                (Lot.auction_end_date.is_(None)) | (Lot.auction_end_date >= now),
+            )
+            .values(status=LotStatus.ACTIVE)
+        )
         await db.commit()
-        print("[statuses] Статусы лотов обновлены")
+        print(f"[statuses] → COMPLETED: {r1.rowcount}, → ACTIVE: {r2.rowcount}")
