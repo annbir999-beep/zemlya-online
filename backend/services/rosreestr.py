@@ -2,8 +2,11 @@
 Клиент НСПД (nspd.gov.ru) — публичная кадастровая карта.
 Открытый API — не требует регистрации или ключей.
 Эндпоинт: /api/geoportal/v2/search/geoportal
+
+Используем curl-cffi с Chrome TLS fingerprint — у httpx НСПД возвращает 502.
 """
-import httpx
+import httpx  # оставляем для HTTPError совместимости
+from curl_cffi.requests import AsyncSession
 from typing import Optional
 
 
@@ -19,13 +22,12 @@ class RosreestrClient:
             if getattr(settings, "PROXY_HOST", None)
             else None
         )
-        self.client = httpx.AsyncClient(
-            timeout=30.0,
+        self.client = AsyncSession(
+            timeout=30,
             verify=False,
-            follow_redirects=True,
             proxy=proxy_url,
+            impersonate="chrome124",
             headers={
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
                 "Referer": "https://nspd.gov.ru/map?thematic=PKK",
                 "Accept": "application/json, text/plain, */*",
                 "Accept-Language": "ru-RU,ru;q=0.9,en;q=0.8",
@@ -46,10 +48,12 @@ class RosreestrClient:
                 f"{NSPD_BASE}/api/geoportal/v2/search/geoportal",
                 params={"thematicSearchId": 1, "query": cadastral_number},
             )
-            resp.raise_for_status()
+            if resp.status_code != 200:
+                print(f"[Росреестр] {cadastral_number}: HTTP {resp.status_code}")
+                return None
             data = resp.json()
-        except httpx.HTTPError as e:
-            print(f"[Росреестр] Ошибка запроса {cadastral_number}: {e}")
+        except Exception as e:
+            print(f"[Росреестр] Ошибка запроса {cadastral_number}: {type(e).__name__}")
             return None
 
         # Ответ: {"data": {"features": [...]}} или {"features": [...]}
@@ -114,13 +118,14 @@ class RosreestrClient:
                     "query": f"{lat},{lng}",
                 },
             )
-            resp.raise_for_status()
+            if resp.status_code != 200:
+                return None
             data = resp.json()
             features = data.get("data", {}).get("features") or data.get("features") or []
             if features:
                 attrs = features[0].get("attrs") or features[0].get("properties") or {}
                 return {"cadastral_number": attrs.get("cn"), "area_sqm": attrs.get("area_value")}
-        except httpx.HTTPError:
+        except Exception:
             pass
         return None
 
