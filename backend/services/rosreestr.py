@@ -66,7 +66,9 @@ class RosreestrClient:
             return None
 
         feature = features[0]
-        attrs = feature.get("attrs") or feature.get("properties") or {}
+        props = feature.get("properties") or {}
+        attrs = feature.get("attrs") or props
+        options = props.get("options") or {}
         center = feature.get("center") or {}
 
         # Координаты могут быть в center.y/x или geometry.coordinates (EPSG:3857)
@@ -75,8 +77,6 @@ class RosreestrClient:
 
         # Если center пустой — берём центроид из geometry
         if (not lat or not lng) and feature.get("geometry"):
-            coords = feature["geometry"].get("coordinates", [])
-            geom_type = feature["geometry"].get("type", "")
             try:
                 from shapely.geometry import shape
                 geom = shape(feature["geometry"])
@@ -94,14 +94,16 @@ class RosreestrClient:
             except Exception:
                 lat, lng = None, None
 
+        # Приоритет: options (новый НСПД API) → attrs (старый формат)
         result = {
-            "cadastral_number": attrs.get("cn") or attrs.get("cadastral_number"),
-            "area_sqm": attrs.get("area_value") or attrs.get("area"),
-            "address": attrs.get("address"),
-            "category": attrs.get("category_type") or attrs.get("category"),
-            "vri": attrs.get("util_by_doc") or attrs.get("vri"),
-            "status": attrs.get("status"),
-            "cadastral_cost": attrs.get("cad_cost") or attrs.get("cadastral_cost"),
+            "cadastral_number": options.get("cad_num") or attrs.get("cn") or attrs.get("cadastral_number"),
+            "area_sqm": options.get("area") or options.get("specified_area") or options.get("declared_area") or attrs.get("area_value"),
+            "address": options.get("readable_address") or attrs.get("address"),
+            "category": options.get("land_record_category_type") or props.get("categoryName") or attrs.get("category"),
+            "vri": options.get("permitted_use_established_by_document") or attrs.get("util_by_doc") or attrs.get("vri"),
+            "status": options.get("status") or attrs.get("status"),
+            "cadastral_cost": options.get("cost_value") or attrs.get("cad_cost"),
+            "cost_determination_date": options.get("cost_determination_date"),
             "lat": lat,
             "lng": lng,
         }
@@ -130,4 +132,9 @@ class RosreestrClient:
         return None
 
     async def close(self):
-        await self.client.aclose()
+        # curl_cffi AsyncSession exposes close() (not aclose())
+        closer = getattr(self.client, "aclose", None) or getattr(self.client, "close", None)
+        if closer is not None:
+            result = closer()
+            if hasattr(result, "__await__"):
+                await result
