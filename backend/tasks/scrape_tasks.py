@@ -62,11 +62,17 @@ def enrich_with_rosreestr(self):
 
 async def _enrich_rosreestr():
     import asyncio
-    from db.database import AsyncSessionLocal
     from sqlalchemy import select
+    from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+    from core.config import settings
     from models.lot import Lot
 
-    async with AsyncSessionLocal() as db:
+    # Свежий engine на каждый вызов — иначе asyncpg-соединения из предыдущего
+    # event loop ломают Celery worker.
+    engine = create_async_engine(settings.DATABASE_URL, echo=False, pool_pre_ping=True)
+    SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
+
+    async with SessionLocal() as db:
         # Лоты с кадастром без кадастровой стоимости или без координат
         result = await db.execute(
             select(Lot)
@@ -135,6 +141,9 @@ async def _enrich_rosreestr():
 
         await db.commit()
         print(f"[Росреестр] Обогащено: {enriched}, не найдено в PKK: {failed}")
+
+    await client.close()
+    await engine.dispose()
 
 
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=600)
