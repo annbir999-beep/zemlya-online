@@ -67,10 +67,14 @@ async def _enrich_rosreestr():
     from models.lot import Lot
 
     async with AsyncSessionLocal() as db:
-        # Берём лоты без данных Росреестра с кадастровым номером
+        # Лоты с кадастром без кадастровой стоимости или без координат
         result = await db.execute(
             select(Lot)
-            .where(Lot.cadastral_number.isnot(None), Lot.rosreestr_data.is_(None))
+            .where(
+                Lot.cadastral_number.isnot(None),
+                Lot.cadastral_number != "",
+                (Lot.cadastral_cost.is_(None)) | (Lot.location.is_(None)),
+            )
             .limit(500)
         )
         lots = result.scalars().all()
