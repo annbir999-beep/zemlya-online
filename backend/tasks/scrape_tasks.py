@@ -188,13 +188,18 @@ async def _enrich_torgi_details(batch_size: int):
     from sqlalchemy import select
     from models.lot import Lot, LotSource, LotStatus
 
+    from sqlalchemy import or_
     async with AsyncSessionLocal() as db:
         q = (
             select(Lot)
             .where(
                 Lot.source == LotSource.TORGI_GOV,
-                Lot.auction_start_date.is_(None),
                 Lot.status.in_([LotStatus.ACTIVE, LotStatus.UPCOMING]),
+                or_(
+                    Lot.auction_start_date.is_(None),
+                    Lot.deposit.is_(None),
+                    Lot.start_price.is_(None),
+                ),
             )
             .limit(batch_size)
         )
@@ -211,12 +216,30 @@ async def _enrich_torgi_details(batch_size: int):
                 if not torgi_id:
                     continue
                 try:
-                    dt = await scraper.fetch_auction_date(torgi_id)
-                    if dt:
-                        lot.auction_start_date = dt
-                        lot.auction_end_date = dt
-                        db.add(lot)
-                        updated += 1
+                    det = await scraper.fetch_lot_details(torgi_id)
+                    if det:
+                        changed = False
+                        dt = det.get("auction_start_date")
+                        if dt and not lot.auction_start_date:
+                            lot.auction_start_date = dt
+                            lot.auction_end_date = dt
+                            changed = True
+                        if det.get("deposit") is not None and not lot.deposit:
+                            lot.deposit = det["deposit"]
+                            changed = True
+                        if det.get("price_min") is not None and not lot.start_price:
+                            lot.start_price = det["price_min"]
+                            changed = True
+                        if det.get("address") and not lot.address:
+                            lot.address = det["address"]
+                            changed = True
+                        # Пересчёт задатка в процентах
+                        if lot.deposit and lot.start_price and not lot.deposit_pct:
+                            lot.deposit_pct = round(lot.deposit / lot.start_price * 100, 2)
+                            changed = True
+                        if changed:
+                            db.add(lot)
+                            updated += 1
                 except Exception as e:
                     print(f"[torgi-details] {torgi_id}: {type(e).__name__}")
                 if i % 50 == 0:

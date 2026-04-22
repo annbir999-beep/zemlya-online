@@ -467,14 +467,18 @@ class TorgiGovScraper:
         return 1
 
     async def fetch_auction_date(self, torgi_id: str) -> Optional[datetime]:
-        """Подтягивает дату проведения торгов из детального API torgi.gov.
+        """Устарело — используй fetch_lot_details. Оставлено для обратной совместимости."""
+        details = await self.fetch_lot_details(torgi_id)
+        return details.get("auction_start_date") if details else None
 
-        Возвращает datetime или None. Пытается несколько эндпойнтов и ключей —
-        структура ответа у torgi.gov варьируется в зависимости от типа лота."""
+    async def fetch_lot_details(self, torgi_id: str) -> Optional[dict]:
+        """Подтягивает детальные данные лота с torgi.gov.
+
+        Возвращает dict c полями auction_start_date, deposit, price_min,
+        price_step, address или None если эндпойнт недоступен/пустой."""
         for url in (
             f"{TORGI_BASE}/lotcards/{torgi_id}",
             f"{TORGI_BASE}/lotcards/byId/{torgi_id}",
-            f"{TORGI_BASE}/procedures/byLotId/{torgi_id}",
         ):
             try:
                 resp = await self.client.get(url)
@@ -483,22 +487,36 @@ class TorgiGovScraper:
                 data = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else None
                 if not isinstance(data, dict):
                     continue
-                # Ищем в нескольких возможных местах
-                candidates = []
-                for key in ("auctionStartDate", "auctionDate", "biddingDate", "procedureDate"):
-                    v = data.get(key)
-                    if v:
-                        candidates.append(v)
-                proc = data.get("procedure") or data.get("parentProcedure") or {}
-                if isinstance(proc, dict):
-                    for key in ("auctionStartDate", "biddingDate", "procedureDate"):
-                        v = proc.get(key)
-                        if v:
-                            candidates.append(v)
-                for v in candidates:
-                    parsed = _parse_datetime(v)
-                    if parsed:
-                        return parsed
+                result: dict = {}
+                dt = _parse_datetime(
+                    data.get("auctionStartDate")
+                    or (data.get("procedure") or {}).get("auctionStartDate")
+                    or (data.get("parentProcedure") or {}).get("auctionStartDate")
+                )
+                if dt:
+                    result["auction_start_date"] = dt
+                try:
+                    v = data.get("deposit")
+                    if v is not None:
+                        result["deposit"] = float(v)
+                except (ValueError, TypeError):
+                    pass
+                try:
+                    v = data.get("priceMin")
+                    if v is not None:
+                        result["price_min"] = float(v)
+                except (ValueError, TypeError):
+                    pass
+                try:
+                    v = data.get("priceStep")
+                    if v is not None:
+                        result["price_step"] = float(v)
+                except (ValueError, TypeError):
+                    pass
+                v = data.get("estateAddress")
+                if v and isinstance(v, str):
+                    result["address"] = v[:500]
+                return result if result else None
             except Exception:
                 continue
         return None
