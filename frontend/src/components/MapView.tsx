@@ -160,7 +160,7 @@ export default function MapView({ points, selectedId }: Props) {
             ${p.etp && p.etp !== "отсутствует" ? row("ЭТП", p.etp) : ""}
           </table>
           <div style="margin-top:8px;display:flex;gap:6px">
-            <a href="/lots/${p.id}" style="flex:1;padding:5px 8px;background:#2563eb;color:#fff;border-radius:6px;font-size:12px;text-align:center;text-decoration:none">Подробнее →</a>
+            <a href="/lots/${p.id}" target="_blank" rel="noopener" style="flex:1;padding:5px 8px;background:#2563eb;color:#fff;border-radius:6px;font-size:12px;text-align:center;text-decoration:none">Подробнее →</a>
             ${p.lot_url ? `<a href="${p.lot_url}" target="_blank" rel="noopener" style="flex:1;padding:5px 8px;background:#f1f5f9;color:#475569;border-radius:6px;font-size:12px;text-align:center;text-decoration:none">Оригинал ↗</a>` : ""}
           </div>
         </div>

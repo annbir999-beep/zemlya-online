@@ -121,6 +121,8 @@ export default function LotCard({ lot, selected, compareIds = [], onSelect, onTo
       <div className="lot-card-footer" onClick={(e) => e.stopPropagation()}>
         <a
           href={`/lots/${lot.id}`}
+          target="_blank"
+          rel="noopener noreferrer"
           className="btn btn-ghost btn-sm"
         >
           Подробнее →
