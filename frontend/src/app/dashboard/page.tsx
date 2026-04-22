@@ -21,8 +21,8 @@ export default function DashboardPage() {
       if (!u) { router.push("/login"); return; }
       setUser(u);
     });
-    api.get<{ items: Alert[] }>("/api/alerts").then((d) => setAlerts(d.items));
-    api.get<{ items: typeof savedLots }>("/api/users/saved-lots").then((d) => setSavedLots(d.items));
+    api.get<Alert[] | { items: Alert[] }>("/api/alerts").then((d) => setAlerts(Array.isArray(d) ? d : (d?.items ?? [])));
+    api.get<typeof savedLots | { items: typeof savedLots }>("/api/users/saved-lots").then((d) => setSavedLots(Array.isArray(d) ? d : (d?.items ?? [])));
   }, [router]);
 
   const toggleAlert = async (id: number) => {
