@@ -12,10 +12,18 @@ NSPD_BASE = "https://nspd.gov.ru"
 
 class RosreestrClient:
     def __init__(self):
+        from core.config import settings
+        scheme = getattr(settings, "PROXY_SCHEME", None) or "http"
+        proxy_url = (
+            f"{scheme}://{settings.PROXY_USER}:{settings.PROXY_PASS}@{settings.PROXY_HOST}"
+            if getattr(settings, "PROXY_HOST", None)
+            else None
+        )
         self.client = httpx.AsyncClient(
-            timeout=15.0,
+            timeout=30.0,
             verify=False,
             follow_redirects=True,
+            proxy=proxy_url,
             headers={
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
                 "Referer": "https://nspd.gov.ru/map?thematic=PKK",
