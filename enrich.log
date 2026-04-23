@@ -829,3 +829,15 @@ Traceback (most recent call last):
     ov.getresult()
     ~~~~~~~~~~~~^^
 OSError: [WinError 121] Превышен таймаут семафора
+Traceback (most recent call last):
+  File "C:\Users\Анна\Documents\project\sotka\enrich_local.py", line 21, in <module>
+    from services.rosreestr import RosreestrClient
+  File "C:\Users\Анна\Documents\project\sotka\backend\services\rosreestr.py", line 9, in <module>
+    from curl_cffi.requests import AsyncSession
+ModuleNotFoundError: No module named 'curl_cffi'
+Traceback (most recent call last):
+  File "C:\Users\Анна\Documents\project\sotka\enrich_local.py", line 21, in <module>
+    from services.rosreestr import RosreestrClient
+  File "C:\Users\Анна\Documents\project\sotka\backend\services\rosreestr.py", line 9, in <module>
+    from curl_cffi.requests import AsyncSession
+ModuleNotFoundError: No module named 'curl_cffi'
