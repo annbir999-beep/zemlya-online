@@ -103,11 +103,14 @@ class CianScraper:
     async def _scrape_page(
         self, client: httpx.AsyncClient, cian_id: int, region_code: str, page: int
     ) -> int:
+        # _type=landsale возвращает flatRent (sic!), а _type=suburbansale с
+        # object_type:[3] — именно земельные участки (category=landSale).
         payload = {
             "jsonQuery": {
-                "_type": "landsale",
+                "_type": "suburbansale",
                 "engine_version": {"type": "term", "value": 2},
                 "region": {"type": "terms", "value": [cian_id]},
+                "object_type": {"type": "terms", "value": [3]},
                 "page": {"type": "term", "value": page},
             }
         }
