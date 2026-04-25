@@ -46,6 +46,7 @@ export interface LotListItem {
   land_purpose?: string;
   auction_type?: string;
   status: string;
+  region_code?: string;
   region_name?: string;
   address?: string;
   auction_end_date?: string;

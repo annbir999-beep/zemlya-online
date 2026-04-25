@@ -46,6 +46,7 @@ class LotListItem(BaseModel):
     sublease_allowed: Optional[bool]
     assignment_allowed: Optional[bool]
     status: str
+    region_code: Optional[str]
     region_name: Optional[str]
     address: Optional[str]
     auction_end_date: Optional[str]
@@ -317,6 +318,7 @@ def _lot_to_item(lot: Lot) -> LotListItem:
         sublease_allowed=lot.sublease_allowed,
         assignment_allowed=lot.assignment_allowed,
         status=lot.status.value,
+        region_code=lot.region_code,
         region_name=lot.region_name,
         address=lot.address,
         auction_end_date=lot.auction_end_date.isoformat() if lot.auction_end_date else None,
@@ -692,6 +694,13 @@ async def get_market_comparison(lot_id: int, db: AsyncSession = Depends(get_db))
         )
         for r in rows
     ]
+
+
+@router.get("/region-data/{region_code}")
+async def get_region_data(region_code: str):
+    """Региональные особенности: % выкупа сельхозки, разрешение строить КФХ, % перераспределения."""
+    from services.regional_data import get_regional_data
+    return get_regional_data(region_code)
 
 
 @router.get("/{lot_id}", response_model=LotDetail)

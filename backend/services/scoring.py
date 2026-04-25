@@ -10,6 +10,7 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.lot import Lot, LotSource, LotStatus, LandPurpose, DealType, ResaleType
+from services.regional_data import AGRO_BUYOUT_PCT, KFH_HOUSE_ALLOWED
 
 
 # ── Бейджи ────────────────────────────────────────────────────────────────────
@@ -21,6 +22,8 @@ BADGE_COMMERCE = "commerce"    # 🏪 Коммерция/промка
 BADGE_URGENT = "urgent"        # ⚡ <72ч до подачи + скидка
 BADGE_RENT_BUYOUT = "rent"     # 🔁 Аренда с выкупом
 BADGE_HOT = "hot"              # 🔥 Скор 80+
+BADGE_CHEAP_BUYOUT = "cheap_buyout"   # 💰 Дешёвый региональный выкуп <=15%
+BADGE_KFH_HOUSE = "kfh_house"         # 🏡 Можно строить КФХ-дом на сельхозке
 
 
 async def compute_market_medians(db: AsyncSession) -> dict:
@@ -143,7 +146,29 @@ def compute_score_and_badges(lot: Lot, market_psqm: Optional[float]) -> tuple[in
         score += 15
         badges.append(BADGE_RENT_BUYOUT)
 
-    # ── 8. Финальный bound + горячий бейдж ──
+    # ── 8. Региональный льготный выкуп сельхозки (max +20) ──
+    if lot.deal_type == DealType.LEASE and purpose == LandPurpose.AGRICULTURAL and lot.region_code:
+        rc = lot.region_code.zfill(2)
+        info = AGRO_BUYOUT_PCT.get(rc) or {}
+        bp = info.get("pct")
+        if bp is not None:
+            if bp <= 5:
+                score += 20
+                badges.append(BADGE_CHEAP_BUYOUT)
+            elif bp <= 15:
+                score += 12
+                badges.append(BADGE_CHEAP_BUYOUT)
+            elif bp <= 25:
+                score += 5
+
+        # Можно ли строить КФХ-дом на сельхозке
+        if KFH_HOUSE_ALLOWED.get(rc) is True:
+            score += 8
+            badges.append(BADGE_KFH_HOUSE)
+        elif KFH_HOUSE_ALLOWED.get(rc) is False:
+            score -= 10  # без права постройки сельхозка теряет ценность
+
+    # ── 9. Финальный bound + горячий бейдж ──
     score = max(0, min(100, score))
     if score >= 80:
         badges.append(BADGE_HOT)

@@ -9,6 +9,8 @@ const BADGE_LABELS: Record<string, { emoji: string; label: string; color: string
   commerce: { emoji: "🏪", label: "Коммерция",       color: "#dc2626", bg: "#fee2e2" },
   urgent:   { emoji: "⚡", label: "Срочно",           color: "#ea580c", bg: "#ffedd5" },
   rent:     { emoji: "🔁", label: "Аренда с выкупом", color: "#0284c7", bg: "#e0f2fe" },
+  cheap_buyout: { emoji: "💰", label: "Дешёвый выкуп", color: "#0d9488", bg: "#ccfbf1" },
+  kfh_house:    { emoji: "🏡", label: "КФХ-дом разрешён", color: "#16a34a", bg: "#dcfce7" },
 };
 
 function scoreColor(score: number): string {

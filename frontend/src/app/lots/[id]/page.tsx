@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { api, LotDetail, AiAssessment } from "@/lib/api";
 import { getMe } from "@/lib/auth";
 import type { UserProfile } from "@/lib/api";
+import { RegionInfo, RegionData } from "@/components/RegionInfo";
+import { ScoreCircle, ScoreBadges, DiscountTag } from "@/components/ScoreBadge";
 
 function MiniMap({ lat, lng, title }: { lat: number; lng: number; title?: string }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -213,6 +215,7 @@ export default function LotDetailPage({ params }: { params: Promise<{ id: string
   const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState(false);
   const [market, setMarket] = useState<MarketLot[]>([]);
+  const [regionData, setRegionData] = useState<RegionData | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -222,6 +225,11 @@ export default function LotDetailPage({ params }: { params: Promise<{ id: string
       setLot(l);
       setUser(u);
       api.get<MarketLot[]>(`/api/lots/${id}/market`).then(setMarket).catch(() => {});
+      // Региональные особенности — выкуп / стройка КФХ / перераспределение
+      const regionCode = (l as { region_code?: string }).region_code || "";
+      if (regionCode) {
+        api.get<RegionData>(`/api/lots/region-data/${regionCode}`).then(setRegionData).catch(() => {});
+      }
     }).catch(() => router.push("/lots"))
     .finally(() => setLoading(false));
   }, [id, router]);
@@ -257,18 +265,21 @@ export default function LotDetailPage({ params }: { params: Promise<{ id: string
 
         {/* Header */}
         <div style={{ display: "flex", gap: 12, alignItems: "flex-start", marginBottom: 20, flexWrap: "wrap" }}>
+          <ScoreCircle score={lot.score} size={56} />
           <div style={{ flex: 1 }}>
             <h1 style={{ fontSize: 20, fontWeight: 700, marginBottom: 8, lineHeight: 1.3 }}>
               {lot.title || "Земельный участок"}
             </h1>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
               <span className={`badge ${status.cls}`}>{status.label}</span>
               {lot.land_purpose && <span className="badge badge-gray">{PURPOSE_LABEL[lot.land_purpose] || lot.land_purpose}</span>}
               {lot.auction_type === "rent" && <span className="badge badge-orange">Аренда</span>}
               {lot.source === "torgi_gov" && <span className="badge badge-blue">torgi.gov</span>}
               {lot.source === "avito" && <span className="badge badge-orange">Авито</span>}
               {lot.source === "cian" && <span className="badge badge-green">ЦИАН</span>}
+              <DiscountTag pct={lot.discount_to_market_pct} />
             </div>
+            <ScoreBadges badges={lot.score_badges} max={6} />
           </div>
           <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
             <button className={`btn btn-sm ${saved ? "btn-primary" : "btn-secondary"}`} onClick={toggleSave}>
@@ -368,6 +379,9 @@ export default function LotDetailPage({ params }: { params: Promise<{ id: string
                 </tbody>
               </table>
             </div>
+
+            {/* Региональные особенности (выкуп, КФХ-дом, перераспределение) */}
+            <RegionInfo data={regionData} regionName={lot.region_name} cadastralCost={lot.cadastral_cost} />
 
             {/* Описание */}
             {lot.description && (
