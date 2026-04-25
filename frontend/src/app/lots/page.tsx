@@ -115,6 +115,7 @@ export default function CatalogPage() {
                 </th>
                 <th style={th("left")}>Участок</th>
                 <th style={th()}>Статус</th>
+                <th style={th()}>Сделка</th>
                 <th style={th()}>Назначение</th>
                 {(["price", "pct_cadastral", "area", "deposit_pct", "submission_end"] as const).map((col, i) => {
                   const labels: Record<string, string> = { price: "Цена, ₽", pct_cadastral: "НЦ/КС", area: "Площадь [TG]", deposit_pct: "Задаток", submission_end: "Срок заявок" };
@@ -157,6 +158,12 @@ export default function CatalogPage() {
                     </td>
                     <td style={td()}>
                       <span className={`badge ${status.cls}`} style={{ fontSize: 11 }}>{status.label}</span>
+                    </td>
+                    <td style={td()}>
+                      {lot.deal_type === "lease" ? <span className="badge badge-orange" style={{ fontSize: 11 }}>Аренда</span> :
+                       lot.deal_type === "ownership" ? <span className="badge badge-blue" style={{ fontSize: 11 }}>Продажа</span> :
+                       lot.deal_type === "free_use" ? <span className="badge badge-gray" style={{ fontSize: 11 }}>Безвозмездное</span> :
+                       <span className="badge badge-gray" style={{ fontSize: 11 }}>—</span>}
                     </td>
                     <td style={td()}>
                       {lot.land_purpose ? <span className="badge badge-gray" style={{ fontSize: 11 }}>{PURPOSE_LABEL[lot.land_purpose] || lot.land_purpose}</span> : "—"}
