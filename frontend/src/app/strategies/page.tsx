@@ -248,6 +248,77 @@ export default function StrategiesPage() {
         ]}
       />
 
+      <h2 style={{ fontSize: 20, fontWeight: 700, marginTop: 32, marginBottom: 12 }}>🎁 Программы бесплатного получения земли</h2>
+      <p style={{ color: "var(--text-3)", fontSize: 13, marginBottom: 16, lineHeight: 1.5 }}>
+        Помимо аукционов, есть способы получить участок без оплаты — через льготные категории или федеральные/региональные программы.
+      </p>
+
+      <div style={{ background: "white", border: "1px solid var(--border)", borderRadius: 12, padding: 20, marginBottom: 16 }}>
+        <h3 style={{ fontSize: 16, fontWeight: 700, marginTop: 0, marginBottom: 10, color: "#16a34a" }}>🏝 Федеральные программы &laquo;гектар&raquo;</h3>
+        <div style={{ marginBottom: 12 }}>
+          <b>Дальневосточный гектар</b> — ФЗ-119
+          <ul style={{ margin: "4px 0 0", paddingLeft: 20, fontSize: 13, lineHeight: 1.5 }}>
+            <li>1 га на 1 человека (1 раз в жизни)</li>
+            <li>Регионы: <b>ДФО (11 регионов)</b> — Якутия, Бурятия, Забайкалье, Приморье, Хабаровский, Амурская, Камчатка, Магадан, Сахалин, Еврейская АО, Чукотка</li>
+            <li>Любой ВРИ (ИЖС, ЛПХ, садоводство, огородничество, с/х, коммерция)</li>
+            <li>5 лет испытательный срок → собственность бесплатно</li>
+            <li>Сайт: <a href="https://надальнийвосток.рф" target="_blank" style={{ color: "var(--primary)" }}>надальнийвосток.рф</a></li>
+          </ul>
+        </div>
+        <div>
+          <b>Арктический гектар</b> — ФЗ-247 (с 2021)
+          <ul style={{ margin: "4px 0 0", paddingLeft: 20, fontSize: 13, lineHeight: 1.5 }}>
+            <li>Регионы Арктической зоны: <b>НАО, Мурманская, Архангельская, Карелия, Коми, ЯНАО, Чукотка, северные районы Якутии и Красноярского края</b></li>
+            <li>Условия аналогичны ДВ-гектару</li>
+          </ul>
+        </div>
+      </div>
+
+      <div style={{ background: "white", border: "1px solid var(--border)", borderRadius: 12, padding: 20, marginBottom: 16 }}>
+        <h3 style={{ fontSize: 16, fontWeight: 700, marginTop: 0, marginBottom: 10, color: "#7c3aed" }}>👨‍👩‍👧‍👦 Льготные категории по ст. 39.5 ЗК</h3>
+        <p style={{ fontSize: 13, color: "var(--text-2)", marginTop: 0, marginBottom: 12 }}>Сразу в собственность <b>бесплатно</b>, обычно 10-15 соток ИЖС/Сад в зависимости от региона. Очередь 1-15 лет.</p>
+        <ul style={{ margin: 0, paddingLeft: 20, fontSize: 13, lineHeight: 1.7 }}>
+          <li><b>Многодетные семьи</b> (3+ детей) — везде. В Москве/МО/СПб обычно денежная компенсация (300-700 тыс ₽) вместо участка</li>
+          <li><b>Ветераны боевых действий</b> — везде, очередь короче</li>
+          <li><b>Инвалиды I-II групп</b> — везде</li>
+          <li><b>Чернобыльцы и приравненные</b> — отдельная очередь</li>
+          <li><b>Военнослужащие</b> со стажем 10+ лет — ст. 39.5 ЗК + ФЗ-76</li>
+          <li><b>Сотрудники Росгвардии, ФСИН, МЧС</b> со стажем — региональные программы</li>
+          <li><b>Молодые специалисты на селе</b> (учителя, врачи, агрономы) — после 5 лет работы</li>
+        </ul>
+      </div>
+
+      <div style={{ background: "white", border: "1px solid var(--border)", borderRadius: 12, padding: 20, marginBottom: 16 }}>
+        <h3 style={{ fontSize: 16, fontWeight: 700, marginTop: 0, marginBottom: 10, color: "#0d9488" }}>🏥 &laquo;Земские&raquo; программы для специалистов</h3>
+        <ul style={{ margin: 0, paddingLeft: 20, fontSize: 13, lineHeight: 1.7 }}>
+          <li><b>Земский учитель</b> — 1 млн ₽ (2 млн в ДФО) + работа в школе села. Сайт: <a href="https://земскийучитель.рф" target="_blank" style={{ color: "var(--primary)" }}>земскийучитель.рф</a></li>
+          <li><b>Земский доктор / фельдшер</b> — 1-2 млн ₽ + работа в село/малом городе</li>
+          <li><b>Агростартап</b> — грант 3-5 млн ₽ для КФХ + право льготного выкупа сельхозземли</li>
+          <li><b>Молодой фермер</b> — региональные гранты до 5 млн ₽</li>
+        </ul>
+      </div>
+
+      <div style={{ background: "white", border: "1px solid var(--border)", borderRadius: 12, padding: 20, marginBottom: 24 }}>
+        <h3 style={{ fontSize: 16, fontWeight: 700, marginTop: 0, marginBottom: 10, color: "#ea580c" }}>📍 Где проще всего получить бесплатно</h3>
+        <p style={{ fontSize: 13, color: "var(--text-2)", marginTop: 0, marginBottom: 10 }}>Регионы с активными программами и небольшой очередью:</p>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+          {[
+            "Архангельская — Арктический гектар",
+            "Республика Коми — Арктический",
+            "Костромская обл — многодетным",
+            "Орловская обл",
+            "Псковская обл",
+            "Калининградская обл — переселенцам",
+            "Курская обл",
+            "Владимирская обл",
+            "Все регионы ДФО — гектар",
+            "Магаданская — самая дешёвая земля + ДВ",
+          ].map((r, i) => (
+            <span key={i} style={{ background: "#dcfce7", color: "#166534", padding: "4px 10px", borderRadius: 6, fontSize: 12, fontWeight: 500 }}>{r}</span>
+          ))}
+        </div>
+      </div>
+
       <h2 style={{ fontSize: 20, fontWeight: 700, marginTop: 32, marginBottom: 12 }}>Универсальный чек-лист по любому лоту</h2>
       <div style={{ background: "white", border: "1px solid var(--border)", borderRadius: 12, padding: 20, marginBottom: 24 }}>
         <ol style={{ margin: 0, paddingLeft: 24, lineHeight: 1.8, fontSize: 14 }}>
