@@ -10,7 +10,17 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.lot import Lot, LotSource, LotStatus, LandPurpose, DealType, ResaleType
-from services.regional_data import AGRO_BUYOUT_PCT, KFH_HOUSE_ALLOWED
+from services.regional_data import AGRO_BUYOUT_PCT, KFH_HOUSE_ALLOWED, LAND_BUYOUT
+
+
+def _as_pct(v) -> float | None:
+    """Извлекает % из значения LAND_BUYOUT (число или строку с диапазоном)."""
+    if v is None:
+        return None
+    if isinstance(v, (int, float)):
+        return float(v)
+    # Строки с x10НС / формулами / диапазонами не сводим к одному %
+    return None
 
 
 # ── Бейджи ────────────────────────────────────────────────────────────────────
@@ -146,27 +156,50 @@ def compute_score_and_badges(lot: Lot, market_psqm: Optional[float]) -> tuple[in
         score += 15
         badges.append(BADGE_RENT_BUYOUT)
 
-    # ── 8. Региональный льготный выкуп сельхозки (max +20) ──
-    if lot.deal_type == DealType.LEASE and purpose == LandPurpose.AGRICULTURAL and lot.region_code:
+    # ── 8. Региональный льготный выкуп (max +25) ──
+    if lot.region_code:
         rc = lot.region_code.zfill(2)
-        info = AGRO_BUYOUT_PCT.get(rc) or {}
-        bp = info.get("pct")
-        if bp is not None:
-            if bp <= 5:
-                score += 20
-                badges.append(BADGE_CHEAP_BUYOUT)
-            elif bp <= 15:
-                score += 12
-                badges.append(BADGE_CHEAP_BUYOUT)
-            elif bp <= 25:
-                score += 5
+        buyout = LAND_BUYOUT.get(rc) or {}
 
-        # Можно ли строить КФХ-дом на сельхозке
-        if KFH_HOUSE_ALLOWED.get(rc) is True:
-            score += 8
-            badges.append(BADGE_KFH_HOUSE)
-        elif KFH_HOUSE_ALLOWED.get(rc) is False:
-            score -= 10  # без права постройки сельхозка теряет ценность
+        # 8a. Аренда сельхозки → выкуп через 3 года (отдельная таблица)
+        if lot.deal_type == DealType.LEASE and purpose == LandPurpose.AGRICULTURAL:
+            agro = AGRO_BUYOUT_PCT.get(rc) or {}
+            bp = agro.get("pct")
+            if bp is not None:
+                if bp <= 5:
+                    score += 20
+                    badges.append(BADGE_CHEAP_BUYOUT)
+                elif bp <= 15:
+                    score += 12
+                    badges.append(BADGE_CHEAP_BUYOUT)
+                elif bp <= 25:
+                    score += 5
+
+            # Можно ли строить КФХ-дом на сельхозке
+            if KFH_HOUSE_ALLOWED.get(rc) is True:
+                score += 8
+                badges.append(BADGE_KFH_HOUSE)
+            elif KFH_HOUSE_ALLOWED.get(rc) is False:
+                score -= 10
+
+        # 8b. Аренда ИЖС/ЛПХ → выкуп через постройку дома (ст. 39.20)
+        if lot.deal_type == DealType.LEASE and purpose in (LandPurpose.IZhS, LandPurpose.LPKh):
+            house_pct = _as_pct(buyout.get("house_3920"))
+            if house_pct is not None:
+                if house_pct <= 5:
+                    score += 25  # выгоднейший вариант: построил дом → выкуп почти даром
+                    badges.append(BADGE_CHEAP_BUYOUT)
+                elif house_pct <= 15:
+                    score += 15
+                    badges.append(BADGE_CHEAP_BUYOUT)
+                elif house_pct <= 30:
+                    score += 8
+
+        # 8c. Прямой выкуп с торгов через 39.18 (продажа в собственность)
+        if lot.deal_type == DealType.OWNERSHIP:
+            direct_pct = _as_pct(buyout.get("direct_3918"))
+            if direct_pct is not None and direct_pct <= 15:
+                score += 8
 
     # ── 9. Финальный bound + горячий бейдж ──
     score = max(0, min(100, score))
