@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import FilterSidebar from "@/components/FilterSidebar";
 import { FiltersState, filtersToQueryString, SORT_OPTIONS } from "@/lib/filters";
 import type { LotListItem, LotsResponse } from "@/lib/api";
+import { ScoreCircle, ScoreBadges } from "@/components/ScoreBadge";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "";
 const DEFAULT_FILTERS: FiltersState = { status: "active", sort_by: "score", sort_order: "desc", source: ["torgi_gov"] };
@@ -113,6 +114,16 @@ export default function CatalogPage() {
                     else setCompareIds([]);
                   }} />
                 </th>
+                {(["score"] as const).map(col => {
+                  const active = filters.sort_by === col;
+                  const asc = filters.sort_order === "asc";
+                  return (
+                    <th key={col} style={{ ...th(), cursor: "pointer", userSelect: "none", color: active ? "var(--primary)" : "var(--text-2)" }}
+                      onClick={() => setFilters(f => ({ ...f, sort_by: col, sort_order: active && asc ? "desc" : "asc", page: 1 }))}>
+                      🔥 Рейтинг {active ? (asc ? "↑" : "↓") : <span style={{ opacity: 0.3 }}>↕</span>}
+                    </th>
+                  );
+                })}
                 <th style={th("left")}>Участок</th>
                 <th style={th()}>Статус</th>
                 <th style={th()}>Сделка</th>
@@ -148,6 +159,10 @@ export default function CatalogPage() {
                         onChange={() => toggleCompare(lot.id)}
                         style={{ cursor: "pointer" }} />
                     </td>
+                    {/* 🔥 Рейтинг */}
+                    <td style={{ ...td(), padding: "8px 6px" }}>
+                      <ScoreCircle score={lot.score} size={36} />
+                    </td>
                     <td style={{ ...td("left"), maxWidth: 260 }}>
                       <div style={{ fontWeight: 500, color: "var(--primary)", marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {lot.title || `Лот #${lot.id}`}
@@ -155,6 +170,9 @@ export default function CatalogPage() {
                       {lot.cadastral_number && (
                         <div style={{ fontSize: 11, color: "var(--text-3)" }}>{lot.cadastral_number}</div>
                       )}
+                      <div style={{ marginTop: 4 }}>
+                        <ScoreBadges badges={lot.score_badges} max={3} compact />
+                      </div>
                     </td>
                     <td style={td()}>
                       <span className={`badge ${status.cls}`} style={{ fontSize: 11 }}>{status.label}</span>
