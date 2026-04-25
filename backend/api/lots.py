@@ -88,6 +88,10 @@ class LotsResponse(BaseModel):
 def build_filters(
     status: Optional[str] = None,
     region_codes: Optional[List[str]] = None,
+    # Скоринг
+    score_min: Optional[int] = None,
+    badges_min: Optional[int] = None,
+    discount_min: Optional[float] = None,
     # Цена
     price_min: Optional[float] = None,
     price_max: Optional[float] = None,
@@ -153,6 +157,16 @@ def build_filters(
         conditions.append(Lot.status == status)
     if region_codes:
         conditions.append(Lot.region_code.in_(region_codes))
+
+    # Скоринг
+    if score_min is not None:
+        conditions.append(Lot.score >= score_min)
+    if discount_min is not None:
+        conditions.append(Lot.discount_to_market_pct >= discount_min)
+    if badges_min is not None and badges_min > 0:
+        # Фильтр по минимальному количеству бейджей в JSON-массиве
+        from sqlalchemy import func as _f, cast, JSON
+        conditions.append(_f.json_array_length(cast(Lot.score_badges, JSON)) >= badges_min)
 
     # Цена
     if price_min is not None:
@@ -343,6 +357,10 @@ async def get_lots(
     status: Optional[str] = Query(None),
     # Регион
     region: Optional[List[str]] = Query(None, alias="region"),
+    # Скоринг
+    score_min: Optional[int] = Query(None, ge=0, le=100),
+    badges_min: Optional[int] = Query(None, ge=0, le=10),
+    discount_min: Optional[float] = Query(None),
     # Цена
     price_min: Optional[float] = Query(None, ge=0),
     price_max: Optional[float] = Query(None, ge=0),
@@ -409,6 +427,7 @@ async def get_lots(
 ):
     conditions = build_filters(
         status=status, region_codes=region,
+        score_min=score_min, badges_min=badges_min, discount_min=discount_min,
         price_min=price_min, price_max=price_max,
         cadastral_cost_min=cadastral_cost_min, cadastral_cost_max=cadastral_cost_max,
         pct_cadastral_min=pct_cadastral_min, pct_cadastral_max=pct_cadastral_max,
@@ -472,6 +491,9 @@ async def get_lots(
 async def get_lots_for_map(
     status: Optional[str] = Query("active"),
     region: Optional[List[str]] = Query(None, alias="region"),
+    score_min: Optional[int] = Query(None),
+    badges_min: Optional[int] = Query(None),
+    discount_min: Optional[float] = Query(None),
     price_min: Optional[float] = Query(None),
     price_max: Optional[float] = Query(None),
     cadastral_cost_min: Optional[float] = Query(None),
@@ -504,6 +526,7 @@ async def get_lots_for_map(
 ):
     conditions = build_filters(
         status=status, region_codes=region,
+        score_min=score_min, badges_min=badges_min, discount_min=discount_min,
         price_min=price_min, price_max=price_max,
         cadastral_cost_min=cadastral_cost_min, cadastral_cost_max=cadastral_cost_max,
         pct_cadastral_min=pct_cadastral_min, pct_cadastral_max=pct_cadastral_max,

@@ -181,6 +181,46 @@ export default function FilterSidebar({ filters, onChange, onReset }: Props) {
 
       <div style={{ overflowY: "auto", flex: 1, padding: "0 16px" }}>
 
+        {/* Рентабельность 🔥 */}
+        <Section title="🔥 Рентабельность" defaultOpen>
+          <div style={{ fontSize: 12, color: "var(--text-3)", marginBottom: 6 }}>Минимальный скор (0-100)</div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+            {[null, 40, 60, 70, 80].map(v => (
+              <button key={String(v)} className="btn btn-sm" style={{
+                background: filters.score_min === v ? "var(--primary)" : "var(--surface-2)",
+                color: filters.score_min === v ? "white" : "var(--text-2)",
+                fontSize: 12, padding: "4px 10px",
+              }} onClick={() => set("score_min", v ?? undefined)}>
+                {v == null ? "Все" : `≥${v}`}
+              </button>
+            ))}
+          </div>
+          <div style={{ fontSize: 12, color: "var(--text-3)", marginBottom: 6 }}>Минимум бейджей</div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+            {[null, 1, 2, 3, 4].map(v => (
+              <button key={String(v)} className="btn btn-sm" style={{
+                background: filters.badges_min === v ? "var(--primary)" : "var(--surface-2)",
+                color: filters.badges_min === v ? "white" : "var(--text-2)",
+                fontSize: 12, padding: "4px 10px",
+              }} onClick={() => set("badges_min", v ?? undefined)}>
+                {v == null ? "Все" : `≥${v}`}
+              </button>
+            ))}
+          </div>
+          <div style={{ fontSize: 12, color: "var(--text-3)", marginBottom: 6 }}>Дисконт к рынку, %</div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {[null, 10, 25, 40, 50].map(v => (
+              <button key={String(v)} className="btn btn-sm" style={{
+                background: filters.discount_min === v ? "var(--primary)" : "var(--surface-2)",
+                color: filters.discount_min === v ? "white" : "var(--text-2)",
+                fontSize: 12, padding: "4px 10px",
+              }} onClick={() => set("discount_min", v ?? undefined)}>
+                {v == null ? "Все" : `${v}%+`}
+              </button>
+            ))}
+          </div>
+        </Section>
+
         {/* Статус */}
         <Section title="Статус торгов" defaultOpen>
           <select className="select" value={filters.status || ""}

@@ -76,6 +76,10 @@ export const REGIONS: Record<string, string> = {
 export interface FiltersState {
   status?: string;
   region?: string[];
+  // Скоринг
+  score_min?: number;
+  badges_min?: number;
+  discount_min?: number;
   // Цена
   price_min?: number;
   price_max?: number;
@@ -133,6 +137,9 @@ export function filtersToQueryString(f: FiltersState & { per_page?: number }): s
   const params = new URLSearchParams();
   if (f.status) params.set("status", f.status);
   if (f.region?.length) f.region.forEach((r) => params.append("region", r));
+  if (f.score_min != null) params.set("score_min", String(f.score_min));
+  if (f.badges_min != null) params.set("badges_min", String(f.badges_min));
+  if (f.discount_min != null) params.set("discount_min", String(f.discount_min));
   // Цена
   if (f.price_min != null) params.set("price_min", String(f.price_min));
   if (f.price_max != null) params.set("price_max", String(f.price_max));
