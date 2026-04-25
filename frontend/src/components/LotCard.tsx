@@ -1,5 +1,6 @@
 "use client";
 import type { LotListItem } from "@/lib/api";
+import { ScoreCircle, ScoreBadges, DiscountTag } from "./ScoreBadge";
 
 const PURPOSE_LABEL: Record<string, string> = {
   izhs: "ИЖС", snt: "СНТ", lpkh: "ЛПХ", agricultural: "Сельхоз",
@@ -56,7 +57,13 @@ export default function LotCard({ lot, selected, compareIds = [], onSelect, onTo
 
   return (
     <div className={`lot-card ${selected ? "selected" : ""}`} onClick={() => onSelect(lot)}>
-      <div className="lot-card-title">{lot.title || "Земельный участок"}</div>
+      <div style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 6 }}>
+        <ScoreCircle score={lot.score} size={36} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="lot-card-title" style={{ marginBottom: 4 }}>{lot.title || "Земельный участок"}</div>
+          <ScoreBadges badges={lot.score_badges} max={3} compact />
+        </div>
+      </div>
 
       <div className="lot-card-meta">
         {lot.source === "avito" && (
@@ -74,8 +81,11 @@ export default function LotCard({ lot, selected, compareIds = [], onSelect, onTo
         {lot.auction_type === "rent" && <span className="badge badge-orange">Аренда</span>}
       </div>
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
-        <span className="lot-card-price">{formatPrice(lot.start_price)}</span>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6, gap: 8, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          <span className="lot-card-price">{formatPrice(lot.start_price)}</span>
+          <DiscountTag pct={lot.discount_to_market_pct} />
+        </div>
         <span style={{ fontSize: 12, color: "var(--text-3)" }}>{formatArea(lot.area_sqm)}</span>
       </div>
 

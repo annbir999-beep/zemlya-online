@@ -10,7 +10,7 @@ const MapView = dynamic(() => import("@/components/MapView"), { ssr: false });
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "";
 
-const DEFAULT_FILTERS: FiltersState = { status: "active", sort_by: "submission_end", sort_order: "asc", source: ["torgi_gov"] };
+const DEFAULT_FILTERS: FiltersState = { status: "active", sort_by: "score", sort_order: "desc", source: ["torgi_gov"] };
 
 export default function MapPage() {
   const [filters, setFilters] = useState<FiltersState>(DEFAULT_FILTERS);

@@ -186,6 +186,53 @@ def update_lot_statuses():
     _run(_update_statuses())
 
 
+@celery_app.task
+def update_lot_scores():
+    """Пересчёт скора рентабельности для всех активных лотов."""
+    _run(_update_scores())
+
+
+async def _update_scores():
+    from datetime import datetime, timezone
+    from sqlalchemy import select
+    from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+    from core.config import settings
+    from models.lot import Lot, LotSource, LotStatus
+    from services.scoring import compute_market_medians, compute_score_and_badges
+
+    engine = create_async_engine(settings.DATABASE_URL, echo=False, pool_pre_ping=True)
+    SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
+
+    async with SessionLocal() as db:
+        medians = await compute_market_medians(db)
+        print(f"[scoring] Медиан по (region, purpose): {len(medians)}")
+
+        # Скорим только торги.гов (на ЦИАН/Авито нет смысла — это сами эталоны)
+        q = select(Lot).where(
+            Lot.source == LotSource.TORGI_GOV,
+            Lot.status.in_([LotStatus.ACTIVE, LotStatus.UPCOMING]),
+        )
+        lots = (await db.execute(q)).scalars().all()
+        now = datetime.now(timezone.utc)
+
+        updated = 0
+        for lot in lots:
+            market_psqm = medians.get((lot.region_code, lot.land_purpose))
+            score, badges, discount = compute_score_and_badges(lot, market_psqm)
+            lot.score = score
+            lot.market_price_sqm = market_psqm
+            lot.discount_to_market_pct = discount
+            lot.score_badges = badges
+            lot.score_updated_at = now
+            db.add(lot)
+            updated += 1
+
+        await db.commit()
+        print(f"[scoring] Обновлено лотов: {updated}")
+
+    await engine.dispose()
+
+
 @celery_app.task(bind=True, max_retries=2, default_retry_delay=600)
 def enrich_torgi_details(self, batch_size: int = 300):
     """Подтягиваем дату проведения торгов из детального API torgi.gov."""

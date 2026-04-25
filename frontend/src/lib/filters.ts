@@ -31,6 +31,8 @@ export const SOURCES = [
 ];
 
 export const SORT_OPTIONS = [
+  { value: "score:desc", label: "🔥 По рентабельности" },
+  { value: "discount_to_market:desc", label: "💎 Дисконт к рынку" },
   { value: "submission_end:asc", label: "По сроку подачи заявок (ближайшие)" },
   { value: "price:asc", label: "Цена: по возрастанию" },
   { value: "price:desc", label: "Цена: по убыванию" },

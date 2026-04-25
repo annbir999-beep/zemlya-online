@@ -55,6 +55,11 @@ class LotListItem(BaseModel):
     lng: Optional[float]
     source: str
     lot_url: Optional[str]
+    # Скоринг
+    score: Optional[int] = None
+    market_price_sqm: Optional[float] = None
+    discount_to_market_pct: Optional[float] = None
+    score_badges: Optional[List[str]] = None
 
     class Config:
         from_attributes = True
@@ -321,6 +326,10 @@ def _lot_to_item(lot: Lot) -> LotListItem:
         lng=lng_val,
         source=lot.source.value,
         lot_url=lot.lot_url,
+        score=lot.score,
+        market_price_sqm=lot.market_price_sqm,
+        discount_to_market_pct=lot.discount_to_market_pct,
+        score_badges=lot.score_badges if isinstance(lot.score_badges, list) else None,
     )
 
 
@@ -426,6 +435,8 @@ async def get_lots(
         "pct_cadastral": Lot.pct_price_to_cadastral,
         "deposit_pct": Lot.deposit_pct,
         "submission_end": Lot.submission_end,
+        "score": Lot.score,
+        "discount_to_market": Lot.discount_to_market_pct,
     }
     if sort_by == "resale_priority":
         # Приоритет: yes=1, with_notice=2, with_approval=3, no=4, NULL=5
@@ -515,6 +526,7 @@ async def get_lots_for_map(
         Lot.category_kn, Lot.vri_kn, Lot.category_tg, Lot.vri_tg,
         Lot.submission_end, Lot.auction_start_date, Lot.auction_end_date, Lot.lot_url,
         Lot.region_name, Lot.notice_number,
+        Lot.score, Lot.discount_to_market_pct, Lot.score_badges,
     ).where(and_(*conditions, Lot.location.isnot(None))).limit(5000)
 
     rows = (await db.execute(q)).all()
@@ -550,6 +562,9 @@ async def get_lots_for_map(
                     "lot_url": row.lot_url,
                     "region_name": row.region_name,
                     "notice_number": row.notice_number,
+                    "score": row.score,
+                    "discount_to_market_pct": row.discount_to_market_pct,
+                    "score_badges": row.score_badges if isinstance(row.score_badges, list) else None,
                 })
             except Exception:
                 pass

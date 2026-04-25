@@ -158,6 +158,13 @@ class Lot(Base):
     ai_assessment = Column(JSON)
     ai_assessed_at = Column(DateTime(timezone=True))
 
+    # ── Рентабельность ──
+    score = Column(Integer, index=True)                   # Скор рентабельности 0-100
+    market_price_sqm = Column(Float)                       # Медианная рыночная цена за м² (ЦИАН+Авито)
+    discount_to_market_pct = Column(Float)                 # % дисконта к рынку: (1 - НЦ_за_м² / market_price_sqm) * 100
+    score_badges = Column(JSON)                            # Список бейджей: ["hot","split","commerce",...]
+    score_updated_at = Column(DateTime(timezone=True))
+
     # Технические
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
@@ -177,4 +184,5 @@ class Lot(Base):
         Index("idx_lots_pct_cadastral", "pct_price_to_cadastral"),
         Index("idx_lots_etp", "etp"),
         Index("idx_lots_submission_end", "submission_end"),
+        Index("idx_lots_score", "score"),
     )

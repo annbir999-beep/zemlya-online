@@ -27,6 +27,9 @@ interface MapPoint {
   lot_url?: string;
   region_name?: string;
   notice_number?: string;
+  score?: number;
+  discount_to_market_pct?: number;
+  score_badges?: string[];
 }
 
 // Цвет и эмодзи по категории назначения
@@ -141,10 +144,23 @@ export default function MapView({ points, selectedId }: Props) {
       // Заголовок попапа: цена или площадь
       const header = p.price ? fmt(p.price) : (p.area ? fmtArea(p.area) : "Участок");
 
+      // Скор-кружок и бейджи
+      const scoreColor = p.score == null ? "#94a3b8" : (p.score >= 80 ? "#dc2626" : p.score >= 60 ? "#ea580c" : p.score >= 40 ? "#ca8a04" : p.score >= 20 ? "#65a30d" : "#94a3b8");
+      const BADGE_LBL: Record<string, string> = { hot:"🔥", diamond:"💎", split:"📐", vri:"🌾", build:"🏗", commerce:"🏪", urgent:"⚡", rent:"🔁" };
+      const scoreBlock = p.score != null ? `<div style="display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;background:${scoreColor}22;color:${scoreColor};font-weight:800;font-size:13px;margin-right:8px">${p.score}</div>` : "";
+      const discountTag = p.discount_to_market_pct && p.discount_to_market_pct >= 5 ? `<span style="background:#dcfce7;color:#15803d;font-size:11px;font-weight:700;padding:2px 6px;border-radius:4px;margin-left:6px">−${Math.round(p.discount_to_market_pct)}% к рынку</span>` : "";
+      const badgesBlock = p.score_badges && p.score_badges.length ? `<div style="margin-bottom:6px;display:flex;gap:4px;flex-wrap:wrap">${p.score_badges.slice(0,4).map(b => BADGE_LBL[b] ? `<span style="background:#f1f5f9;font-size:14px;padding:1px 5px;border-radius:4px" title="${b}">${BADGE_LBL[b]}</span>` : "").join("")}</div>` : "";
+
       L.marker([p.lat, p.lng], { icon }).bindPopup(`
         <div style="min-width:240px;max-width:300px;font-family:system-ui,sans-serif">
-          <div style="font-weight:700;font-size:15px;margin-bottom:2px;color:#1e293b">${header}</div>
-          ${p.region_name ? `<div style="font-size:11px;color:#64748b;margin-bottom:6px">${p.region_name}</div>` : ""}
+          <div style="display:flex;align-items:center;margin-bottom:2px">
+            ${scoreBlock}
+            <div style="flex:1;min-width:0">
+              <div style="font-weight:700;font-size:15px;color:#1e293b">${header}${discountTag}</div>
+              ${p.region_name ? `<div style="font-size:11px;color:#64748b">${p.region_name}</div>` : ""}
+            </div>
+          </div>
+          ${badgesBlock}
           <table style="border-collapse:collapse;width:100%">
             ${row("Кадастровый №", p.cadastral_number)}
             ${row("Форма торгов", p.auction_form ? FORM[p.auction_form] || p.auction_form : null)}

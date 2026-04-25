@@ -58,6 +58,10 @@ export interface LotListItem {
   lng?: number;
   source: string;
   lot_url?: string;
+  score?: number;
+  market_price_sqm?: number;
+  discount_to_market_pct?: number;
+  score_badges?: string[];
 }
 
 export interface LotDetail extends LotListItem {
