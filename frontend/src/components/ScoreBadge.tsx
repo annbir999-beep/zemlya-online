@@ -11,6 +11,7 @@ const BADGE_LABELS: Record<string, { emoji: string; label: string; color: string
   rent:     { emoji: "🔁", label: "Аренда с выкупом", color: "#0284c7", bg: "#e0f2fe" },
   cheap_buyout: { emoji: "💰", label: "Дешёвый выкуп", color: "#0d9488", bg: "#ccfbf1" },
   kfh_house:    { emoji: "🏡", label: "КФХ-дом разрешён", color: "#16a34a", bg: "#dcfce7" },
+  garden:       { emoji: "🌱", label: "ВРИ Огород", color: "#15803d", bg: "#dcfce7" },
 };
 
 function scoreColor(score: number): string {

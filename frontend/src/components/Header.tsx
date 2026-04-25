@@ -20,6 +20,7 @@ export default function Header() {
   const nav = [
     { href: "/", label: "Карта" },
     { href: "/lots", label: "Каталог" },
+    { href: "/strategies", label: "Стратегии" },
     { href: "/pricing", label: "Тарифы" },
   ];
 

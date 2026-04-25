@@ -34,6 +34,7 @@ BADGE_RENT_BUYOUT = "rent"     # 🔁 Аренда с выкупом
 BADGE_HOT = "hot"              # 🔥 Скор 80+
 BADGE_CHEAP_BUYOUT = "cheap_buyout"   # 💰 Дешёвый региональный выкуп <=15%
 BADGE_KFH_HOUSE = "kfh_house"         # 🏡 Можно строить КФХ-дом на сельхозке
+BADGE_GARDEN = "garden"               # 🌱 ВРИ Огородничество — потенциал смены ВРИ через ПЗЗ
 
 
 async def compute_market_medians(db: AsyncSession) -> dict:
@@ -201,7 +202,13 @@ def compute_score_and_badges(lot: Lot, market_psqm: Optional[float]) -> tuple[in
             if direct_pct is not None and direct_pct <= 15:
                 score += 8
 
-    # ── 9. Финальный bound + горячий бейдж ──
+    # ── 9. ВРИ "Огородничество" (код 13.1) — потенциал смены ВРИ через ПЗЗ ──
+    vri_text = ((lot.vri_tg or "") + " " + (lot.vri_kn or "") + " " + (lot.land_purpose_raw or "")).lower()
+    if "огород" in vri_text or "13.1" in vri_text:
+        score += 8
+        badges.append(BADGE_GARDEN)
+
+    # ── 10. Финальный bound + горячий бейдж ──
     score = max(0, min(100, score))
     if score >= 80:
         badges.append(BADGE_HOT)
