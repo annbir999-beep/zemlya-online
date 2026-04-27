@@ -35,6 +35,9 @@ body {
 a { color: var(--primary); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
+/* Глобально — никакой горизонтальной прокрутки на странице */
+html, body { overflow-x: hidden; max-width: 100vw; }
+
 /* ── Layout ── */
 .app-layout {
   display: flex;

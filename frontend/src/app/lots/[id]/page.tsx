@@ -268,7 +268,7 @@ export default function LotDetailPage({ params }: { params: Promise<{ id: string
         <div style={{ display: "flex", gap: 12, alignItems: "flex-start", marginBottom: 20, flexWrap: "wrap" }}>
           <ScoreCircle score={lot.score} size={56} />
           <div style={{ flex: 1 }}>
-            <h1 style={{ fontSize: 20, fontWeight: 700, marginBottom: 8, lineHeight: 1.3 }}>
+            <h1 style={{ fontSize: 20, fontWeight: 700, marginBottom: 8, lineHeight: 1.3, wordBreak: "break-word", overflowWrap: "anywhere" }}>
               {lot.title || "Земельный участок"}
             </h1>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
