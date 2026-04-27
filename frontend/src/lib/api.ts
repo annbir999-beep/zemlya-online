@@ -63,6 +63,17 @@ export interface LotListItem {
   market_price_sqm?: number;
   discount_to_market_pct?: number;
   score_badges?: string[];
+  nearest_city_name?: string;
+  nearest_city_distance_km?: number;
+  nearest_city_population?: number;
+  communications?: {
+    electricity?: boolean;
+    gas?: boolean;
+    water?: boolean;
+    sewage?: boolean;
+    road?: "asphalt" | "gravel" | "none";
+    internet?: boolean;
+  };
 }
 
 export interface LotDetail extends LotListItem {

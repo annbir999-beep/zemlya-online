@@ -61,6 +61,11 @@ class LotListItem(BaseModel):
     market_price_sqm: Optional[float] = None
     discount_to_market_pct: Optional[float] = None
     score_badges: Optional[List[str]] = None
+    # Локация и инфра
+    nearest_city_name: Optional[str] = None
+    nearest_city_distance_km: Optional[float] = None
+    nearest_city_population: Optional[int] = None
+    communications: Optional[dict] = None
 
     class Config:
         from_attributes = True
@@ -346,6 +351,10 @@ def _lot_to_item(lot: Lot) -> LotListItem:
         market_price_sqm=lot.market_price_sqm,
         discount_to_market_pct=lot.discount_to_market_pct,
         score_badges=lot.score_badges if isinstance(lot.score_badges, list) else None,
+        nearest_city_name=lot.nearest_city_name,
+        nearest_city_distance_km=lot.nearest_city_distance_km,
+        nearest_city_population=lot.nearest_city_population,
+        communications=lot.communications if isinstance(lot.communications, dict) else None,
     )
 
 
@@ -717,6 +726,60 @@ async def get_market_comparison(lot_id: int, db: AsyncSession = Depends(get_db))
         )
         for r in rows
     ]
+
+
+@router.get("/{lot_id}/similar-history")
+async def get_similar_history(lot_id: int, db: AsyncSession = Depends(get_db)):
+    """Похожие завершённые лоты в том же регионе/назначении/площади (для оценки реальных цен)."""
+    result = await db.execute(select(Lot).where(Lot.id == lot_id))
+    lot = result.scalar_one_or_none()
+    if not lot:
+        raise HTTPException(status_code=404, detail="Лот не найден")
+
+    q = (
+        select(Lot)
+        .where(
+            Lot.id != lot_id,
+            Lot.source == LotSource.TORGI_GOV,
+            Lot.status == LotStatus.COMPLETED,
+            Lot.region_code == lot.region_code,
+            Lot.land_purpose == lot.land_purpose,
+            Lot.start_price.isnot(None),
+        )
+        .order_by(Lot.submission_end.desc())
+        .limit(20)
+    )
+    if lot.area_sqm:
+        q = q.where(
+            Lot.area_sqm >= lot.area_sqm * 0.5,
+            Lot.area_sqm <= lot.area_sqm * 2.0,
+        )
+
+    rows = (await db.execute(q)).scalars().all()
+    items = []
+    for r in rows[:10]:
+        items.append({
+            "id": r.id,
+            "title": r.title,
+            "start_price": r.start_price,
+            "final_price": r.final_price,
+            "area_sqm": r.area_sqm,
+            "address": r.address,
+            "submission_end": r.submission_end.isoformat() if r.submission_end else None,
+            "deal_type": r.deal_type.value if r.deal_type else None,
+            "lot_url": r.lot_url,
+        })
+    # Статистика
+    prices = [r.start_price for r in rows if r.start_price]
+    psqm = [r.start_price / r.area_sqm for r in rows if r.start_price and r.area_sqm and r.area_sqm > 0]
+    stats = {
+        "count": len(rows),
+        "median_price": sorted(prices)[len(prices)//2] if prices else None,
+        "median_price_per_sqm": sorted(psqm)[len(psqm)//2] if psqm else None,
+        "min_price": min(prices) if prices else None,
+        "max_price": max(prices) if prices else None,
+    }
+    return {"items": items, "stats": stats}
 
 
 @router.get("/region-data/{region_code}")

@@ -208,7 +208,25 @@ def compute_score_and_badges(lot: Lot, market_psqm: Optional[float]) -> tuple[in
         score += 8
         badges.append(BADGE_GARDEN)
 
-    # ── 10. Финальный bound + горячий бейдж ──
+    # ── 10. Близость к городу — ликвидность (max +12) ──
+    dist = lot.nearest_city_distance_km
+    pop = lot.nearest_city_population or 0
+    if dist is not None:
+        if dist <= 30 and pop >= 500_000:
+            score += 12  # пригород мегаполиса = золото
+        elif dist <= 50 and pop >= 200_000:
+            score += 8
+        elif dist <= 100 and pop >= 100_000:
+            score += 5
+        elif dist > 200:
+            score -= 3  # глушь — сложно с ликвидностью
+
+    # ── 11. Коммуникации (max +10) ──
+    from services.communications import communications_score_bonus
+    if lot.communications:
+        score += communications_score_bonus(lot.communications)
+
+    # ── 12. Финальный bound + горячий бейдж ──
     score = max(0, min(100, score))
     if score >= 80:
         badges.append(BADGE_HOT)

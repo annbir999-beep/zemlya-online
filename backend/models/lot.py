@@ -165,6 +165,12 @@ class Lot(Base):
     score_badges = Column(JSON)                            # Список бейджей: ["hot","split","commerce",...]
     score_updated_at = Column(DateTime(timezone=True))
 
+    # ── Локация и инфраструктура ──
+    nearest_city_name = Column(String(100))                # Ближайший город (Москва/Владивосток/...)
+    nearest_city_distance_km = Column(Float, index=True)   # Расстояние, км
+    nearest_city_population = Column(Integer)              # Население ближайшего города
+    communications = Column(JSON)                          # {electricity:T, gas:T, water:F, road:"asphalt", ...}
+
     # Технические
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))

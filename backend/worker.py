@@ -57,6 +57,11 @@ celery_app.conf.update(
             "task": "tasks.scrape_tasks.update_lot_scores",
             "schedule": crontab(minute=20, hour="*"),
         },
+        # Расчёт ближайшего города и парсинг коммуникаций — раз в 6 часов
+        "update-geo-comms": {
+            "task": "tasks.scrape_tasks.update_lot_geo_and_comms",
+            "schedule": crontab(minute=10, hour="*/6"),
+        },
         # Парсинг Авито — раз в сутки в 3:00 (топ-10 регионов, 3 страницы каждый)
         "scrape-avito": {
             "task": "tasks.scrape_tasks.scrape_avito",

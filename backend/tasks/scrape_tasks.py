@@ -192,6 +192,57 @@ def update_lot_scores():
     _run(_update_scores())
 
 
+@celery_app.task
+def update_lot_geo_and_comms():
+    """Расчёт ближайшего города и парсинг коммуникаций для всех лотов."""
+    _run(_update_geo_comms())
+
+
+async def _update_geo_comms():
+    from sqlalchemy import select
+    from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+    from core.config import settings
+    from models.lot import Lot, LotSource
+    from services.cities import find_nearest_city
+    from services.communications import parse_communications
+
+    engine = create_async_engine(settings.DATABASE_URL, echo=False, pool_pre_ping=True)
+    SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
+
+    async with SessionLocal() as db:
+        q = select(Lot).where(Lot.source == LotSource.TORGI_GOV)
+        lots = (await db.execute(q)).scalars().all()
+        from shapely import wkb
+        updated_geo = 0
+        updated_comms = 0
+        for lot in lots:
+            # Геолокация → ближайший город
+            if lot.location and not lot.nearest_city_name:
+                try:
+                    point = wkb.loads(bytes(lot.location.data))
+                    city = find_nearest_city(point.y, point.x, lot.region_code)
+                    if city:
+                        lot.nearest_city_name = city["name"]
+                        lot.nearest_city_distance_km = city["distance_km"]
+                        lot.nearest_city_population = city["population"]
+                        updated_geo += 1
+                except Exception:
+                    pass
+
+            # Коммуникации из описания
+            if not lot.communications:
+                comms = parse_communications(lot.description, lot.title, lot.vri_tg)
+                if comms:
+                    lot.communications = comms
+                    updated_comms += 1
+            db.add(lot)
+
+        await db.commit()
+        print(f"[geo-comms] Города: {updated_geo}, коммуникации: {updated_comms}")
+
+    await engine.dispose()
+
+
 async def _update_scores():
     from datetime import datetime, timezone
     from sqlalchemy import select

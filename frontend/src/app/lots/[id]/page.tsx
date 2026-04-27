@@ -6,6 +6,7 @@ import { getMe } from "@/lib/auth";
 import type { UserProfile } from "@/lib/api";
 import { RegionInfo, RegionData } from "@/components/RegionInfo";
 import { ScoreCircle, ScoreBadges, DiscountTag } from "@/components/ScoreBadge";
+import { LocationCard, CommsCard, SimilarHistoryCard } from "@/components/LocationComms";
 
 function MiniMap({ lat, lng, title }: { lat: number; lng: number; title?: string }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -379,6 +380,19 @@ export default function LotDetailPage({ params }: { params: Promise<{ id: string
                 </tbody>
               </table>
             </div>
+
+            {/* Локация и ликвидность */}
+            <LocationCard
+              city={lot.nearest_city_name}
+              distance={lot.nearest_city_distance_km}
+              population={lot.nearest_city_population}
+            />
+
+            {/* Коммуникации */}
+            <CommsCard comms={lot.communications} />
+
+            {/* История похожих лотов */}
+            <SimilarHistoryCard lotId={Number(id)} />
 
             {/* Региональные особенности (выкуп, КФХ-дом, перераспределение) */}
             <RegionInfo data={regionData} regionName={lot.region_name} cadastralCost={lot.cadastral_cost} />
