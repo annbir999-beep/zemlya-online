@@ -84,13 +84,15 @@ function fmtDate(iso?: string) {
 }
 
 function Row({ label, value, highlight }: { label: string; value: React.ReactNode; highlight?: boolean }) {
+  // Скрываем строку если значение пустое (null/undefined/пустая строка/"—")
+  if (value == null || value === "" || value === "—") return null;
   return (
     <tr style={{ background: highlight ? "var(--primary-light)" : "transparent" }}>
       <td style={{ padding: "9px 14px", fontSize: 13, color: "var(--text-2)", width: "40%", borderBottom: "1px solid var(--border)", fontWeight: 500 }}>
         {label}
       </td>
-      <td style={{ padding: "9px 14px", fontSize: 13, color: "var(--text)", borderBottom: "1px solid var(--border)" }}>
-        {value ?? "—"}
+      <td style={{ padding: "9px 14px", fontSize: 13, color: "var(--text)", borderBottom: "1px solid var(--border)", wordBreak: "break-word" }}>
+        {value}
       </td>
     </tr>
   );
@@ -315,9 +317,9 @@ export default function LotDetailPage({ params }: { params: Promise<{ id: string
           ))}
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: 20 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 340px", gap: 20 }}>
           {/* Left column */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>
 
             {/* AI Assessment */}
             <AiPanel lotId={Number(id)} user={user} />
@@ -327,7 +329,7 @@ export default function LotDetailPage({ params }: { params: Promise<{ id: string
               <div style={{ padding: "14px 16px", fontWeight: 700, fontSize: 15, borderBottom: "1px solid var(--border)" }}>
                 Данные торгов
               </div>
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
                 <tbody>
                   <Row label="Вид торгов" value={lot.auction_type === "sale" ? "Продажа" : lot.auction_type === "rent" ? "Аренда" : "Приватизация"} />
                   <Row label="Форма проведения" value={lot.auction_form ? AUCTION_FORM_LABEL[lot.auction_form] : null} />
@@ -350,7 +352,7 @@ export default function LotDetailPage({ params }: { params: Promise<{ id: string
               <div style={{ padding: "14px 16px", fontWeight: 700, fontSize: 15, borderBottom: "1px solid var(--border)" }}>
                 Характеристики участка <span style={{ color: "var(--text-3)", fontWeight: 400, fontSize: 13 }}>[TG] torgi.gov</span>
               </div>
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
                 <tbody>
                   <Row label="Кадастровый номер" value={
                     lot.cadastral_number
@@ -371,7 +373,7 @@ export default function LotDetailPage({ params }: { params: Promise<{ id: string
               <div style={{ padding: "14px 16px", fontWeight: 700, fontSize: 15, borderBottom: "1px solid var(--border)" }}>
                 Характеристики участка <span style={{ color: "var(--text-3)", fontWeight: 400, fontSize: 13 }}>[КН] Росреестр</span>
               </div>
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
                 <tbody>
                   <Row label="Категория [КН]" value={lot.category_kn} />
                   <Row label="ВРИ [КН]" value={lot.vri_kn} />
