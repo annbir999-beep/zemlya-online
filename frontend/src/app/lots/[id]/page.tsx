@@ -114,7 +114,8 @@ function AiPanel({ lotId, user }: { lotId: number; user: UserProfile | null }) {
       .catch(() => {});
   }, [lotId]);
 
-  const canRequest = user && ["expert", "landlord"].includes(user.subscription_plan);
+  // Открыто для всех залогиненных пользователей (на время beta)
+  const canRequest = !!user;
 
   const request = async () => {
     setLoading(true); setError("");
@@ -189,9 +190,9 @@ function AiPanel({ lotId, user }: { lotId: number; user: UserProfile | null }) {
           ) : (
             <>
               <p style={{ color: "var(--text-2)", fontSize: 14, marginBottom: 12 }}>
-                AI-оценка доступна на тарифах <b>Эксперт</b> и <b>Лендлорд</b>
+                Войдите в аккаунт, чтобы получить AI-оценку лота
               </p>
-              <a href="/pricing" className="btn btn-primary">Улучшить тариф →</a>
+              <a href="/login" className="btn btn-primary">Войти →</a>
             </>
           )}
         </div>

@@ -11,8 +11,8 @@ from services.ai_assessment import assess_lot
 
 router = APIRouter()
 
-# AI-оценка доступна только на тарифах Expert и Landlord
-AI_ALLOWED_PLANS = {SubscriptionPlan.EXPERT, SubscriptionPlan.LANDLORD}
+# AI-оценка во время beta открыта для всех залогиненных
+AI_ALLOWED_PLANS = {SubscriptionPlan.FREE, SubscriptionPlan.PERSONAL, SubscriptionPlan.EXPERT, SubscriptionPlan.LANDLORD}
 
 
 @router.post("/assess/{lot_id}")
@@ -24,7 +24,7 @@ async def request_assessment(
     if user.subscription_plan not in AI_ALLOWED_PLANS:
         raise HTTPException(
             status_code=403,
-            detail="AI-оценка доступна на тарифах Эксперт и Лендлорд"
+            detail="Войдите в аккаунт чтобы получить AI-оценку"
         )
 
     result = await db.execute(select(Lot).where(Lot.id == lot_id))

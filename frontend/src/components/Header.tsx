@@ -18,20 +18,39 @@ export default function Header() {
   }, []);
 
   const nav = [
-    { href: "/", label: "Карта" },
-    { href: "/lots", label: "Каталог" },
-    { href: "/strategies", label: "Стратегии" },
-    { href: "/pricing", label: "Тарифы" },
+    { href: "/", label: "Карта", icon: "🗺" },
+    { href: "/lots", label: "Лоты", icon: "🔥" },
+    { href: "/strategies", label: "Стратегии", icon: "💎" },
+    { href: "/pricing", label: "Тарифы", icon: "⚡" },
   ];
 
   return (
     <header className="header">
-      <Link href="/" className="header-logo">🌍 Земля.ОНЛАЙН</Link>
+      <Link href="/" className="header-logo" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
+        {/* Modern logo: gradient square with letter "З" + clean wordmark */}
+        <span style={{
+          width: 36, height: 36, borderRadius: 10,
+          background: "linear-gradient(135deg, #16a34a 0%, #0d9488 100%)",
+          display: "inline-flex", alignItems: "center", justifyContent: "center",
+          color: "white", fontWeight: 800, fontSize: 18,
+          boxShadow: "0 2px 8px rgba(13, 148, 136, 0.3)",
+        }}>
+          З
+        </span>
+        <span style={{ display: "flex", flexDirection: "column", lineHeight: 1 }}>
+          <span style={{ fontSize: 17, fontWeight: 800, letterSpacing: "-0.02em", color: "var(--text)" }}>
+            земля<span style={{ color: "#16a34a" }}>.online</span>
+          </span>
+          <span style={{ fontSize: 10, color: "var(--text-3)", marginTop: 2, letterSpacing: "0.05em", textTransform: "uppercase" }}>
+            аукционы земли РФ
+          </span>
+        </span>
+      </Link>
 
       <nav className="header-nav">
         {nav.map((n) => (
           <Link key={n.href} href={n.href} className={pathname === n.href ? "active" : ""}>
-            {n.label}
+            <span style={{ marginRight: 6 }}>{n.icon}</span>{n.label}
           </Link>
         ))}
       </nav>
