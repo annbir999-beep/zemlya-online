@@ -76,6 +76,15 @@ export interface LotListItem {
   };
 }
 
+export interface ContractTermsData {
+  assignment?: "forbidden" | "with_notice" | "with_consent" | "allowed";
+  sublease?: "forbidden" | "with_consent" | "allowed";
+  lease_term_years?: number;
+  penalty_pct?: number;
+  development_deadline_years?: number;
+  has_strict_termination?: boolean;
+}
+
 export interface LotDetail extends LotListItem {
   description?: string;
   deposit?: number;
@@ -110,6 +119,9 @@ export interface LotDetail extends LotListItem {
   rosreestr_data?: Record<string, unknown>;
   ai_assessment?: AiAssessment;
   raw_data?: Record<string, unknown>;
+  full_description?: string;
+  technical_conditions?: string;
+  contract_terms?: ContractTermsData;
 }
 
 export interface AiAssessment {

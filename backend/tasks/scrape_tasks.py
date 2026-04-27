@@ -198,6 +198,132 @@ def update_lot_geo_and_comms():
     _run(_update_geo_comms())
 
 
+@celery_app.task(bind=True, max_retries=1, default_retry_delay=600)
+def enrich_lot_pdfs(self, batch_size: int = 100):
+    """Скачивание PDF-документов лотов + извлечение текста + парсинг условий договора."""
+    try:
+        _run(_enrich_lot_pdfs(batch_size))
+    except Exception as exc:
+        raise self.retry(exc=exc)
+
+
+async def _enrich_lot_pdfs(batch_size: int):
+    import asyncio as _asyncio
+    from datetime import datetime, timezone
+    from sqlalchemy import select
+    from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+    from core.config import settings
+    from models.lot import Lot, LotSource, LotStatus
+    from services.scraper_torgi import TorgiGovScraper
+    from services.pdf_parser import select_best_attachments, download_pdf, extract_text_from_pdf, truncate_for_db
+    from services.contract_parser import parse_contract
+    from services.communications import parse_communications
+
+    engine = create_async_engine(settings.DATABASE_URL, echo=False, pool_pre_ping=True)
+    SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
+
+    async with SessionLocal() as db:
+        q = (
+            select(Lot)
+            .where(
+                Lot.source == LotSource.TORGI_GOV,
+                Lot.status.in_([LotStatus.ACTIVE, LotStatus.UPCOMING]),
+                Lot.pdf_parsed_at.is_(None),
+            )
+            .limit(batch_size)
+        )
+        lots = (await db.execute(q)).scalars().all()
+        if not lots:
+            print("[pdf] Нет лотов для парсинга")
+            return
+
+        scraper = TorgiGovScraper(db)
+        updated = 0
+        try:
+            for i, lot in enumerate(lots, 1):
+                torgi_id = lot.external_id.removeprefix("torgi_") if lot.external_id else None
+                if not torgi_id:
+                    continue
+                try:
+                    det = await scraper.fetch_lot_details(torgi_id)
+                    if not det:
+                        continue
+                    attachments = det.get("attachments") or []
+                    selected = select_best_attachments(attachments)
+                    if not selected:
+                        # Помечаем что обработали (нет PDF — не пытаться больше)
+                        lot.pdf_parsed_at = datetime.now(timezone.utc)
+                        db.add(lot)
+                        continue
+
+                    # Скачиваем и извлекаем текст по типам
+                    notice_text = ""
+                    tech_text = ""
+                    contract_text = ""
+
+                    if "notice" in selected:
+                        b = await download_pdf(scraper.client, selected["notice"].get("fileId"))
+                        notice_text = extract_text_from_pdf(b) if b else ""
+                    if "tech_conditions" in selected:
+                        b = await download_pdf(scraper.client, selected["tech_conditions"].get("fileId"))
+                        tech_text = extract_text_from_pdf(b) if b else ""
+                    if "contract" in selected:
+                        b = await download_pdf(scraper.client, selected["contract"].get("fileId"))
+                        contract_text = extract_text_from_pdf(b) if b else ""
+
+                    changed = False
+
+                    # Сохраняем извещение как полное описание
+                    full_desc_combined = (det.get("lot_description_full") or "") + "\n\n" + notice_text
+                    full_desc_combined = full_desc_combined.strip()
+                    if full_desc_combined and not lot.full_description:
+                        lot.full_description = truncate_for_db(full_desc_combined)
+                        changed = True
+                    if tech_text and not lot.technical_conditions:
+                        lot.technical_conditions = truncate_for_db(tech_text)
+                        changed = True
+                    if contract_text:
+                        terms = parse_contract(contract_text)
+                        if terms:
+                            lot.contract_terms = terms
+                            # Если в договоре нашли явные правила — обновляем поля лота
+                            if terms.get("assignment") == "forbidden":
+                                lot.assignment_allowed = False
+                            elif terms.get("assignment") in ("with_notice", "with_consent", "allowed"):
+                                lot.assignment_allowed = True
+                            if terms.get("sublease") == "forbidden":
+                                lot.sublease_allowed = False
+                            elif terms.get("sublease") in ("with_consent", "allowed"):
+                                lot.sublease_allowed = True
+                            changed = True
+
+                    # Парсим коммуникации из всех текстов вместе
+                    combined_for_comms = " ".join([notice_text, tech_text, lot.description or ""])
+                    comms = parse_communications(combined_for_comms, lot.title, lot.vri_tg)
+                    if comms:
+                        existing = lot.communications or {}
+                        merged = {**existing, **comms}
+                        lot.communications = merged
+                        changed = True
+
+                    lot.pdf_parsed_at = datetime.now(timezone.utc)
+                    db.add(lot)
+                    if changed:
+                        updated += 1
+                except Exception as e:
+                    print(f"[pdf] {torgi_id}: {type(e).__name__}: {str(e)[:80]}")
+                if i % 20 == 0:
+                    await db.commit()
+                    print(f"[pdf] {i}/{len(lots)} обработано, обогащено: {updated}")
+                await _asyncio.sleep(1.5)
+            await db.commit()
+            print(f"[pdf] Готово. Обогащено: {updated}/{len(lots)}")
+        finally:
+            await scraper.client.aclose()
+
+    await engine.dispose()
+
+
 async def _update_geo_comms():
     from sqlalchemy import select
     from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker

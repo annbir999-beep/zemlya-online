@@ -171,6 +171,12 @@ class Lot(Base):
     nearest_city_population = Column(Integer)              # Население ближайшего города
     communications = Column(JSON)                          # {electricity:T, gas:T, water:F, road:"asphalt", ...}
 
+    # ── Текст из PDF-документов лота (Извещение/ТУ/договор) ──
+    full_description = Column(Text)                        # Извещение — полный текст
+    technical_conditions = Column(Text)                    # ТУ — текст технических условий
+    contract_terms = Column(JSON)                          # {assignment, sublease, lease_term_years, ...}
+    pdf_parsed_at = Column(DateTime(timezone=True))        # Когда последний раз парсили PDF
+
     # Технические
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))

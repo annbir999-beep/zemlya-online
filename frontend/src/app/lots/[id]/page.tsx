@@ -7,6 +7,7 @@ import type { UserProfile } from "@/lib/api";
 import { RegionInfo, RegionData } from "@/components/RegionInfo";
 import { ScoreCircle, ScoreBadges, DiscountTag } from "@/components/ScoreBadge";
 import { LocationCard, CommsCard, SimilarHistoryCard } from "@/components/LocationComms";
+import { ContractTerms, FullDescription } from "@/components/ContractTerms";
 
 function MiniMap({ lat, lng, title }: { lat: number; lng: number; title?: string }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -397,8 +398,14 @@ export default function LotDetailPage({ params }: { params: Promise<{ id: string
             {/* Региональные особенности (выкуп, КФХ-дом, перераспределение) */}
             <RegionInfo data={regionData} regionName={lot.region_name} cadastralCost={lot.cadastral_cost} />
 
-            {/* Описание */}
-            {lot.description && (
+            {/* Условия договора (из PDF) */}
+            <ContractTerms data={lot.contract_terms} />
+
+            {/* Полное описание из извещения (PDF) */}
+            <FullDescription text={lot.full_description} />
+
+            {/* Краткое описание лота (из API) */}
+            {lot.description && !lot.full_description && (
               <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: 20 }}>
                 <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 10 }}>Описание лота</div>
                 <p style={{ fontSize: 13, color: "var(--text-2)", lineHeight: 1.7, margin: 0, whiteSpace: "pre-wrap" }}>

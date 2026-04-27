@@ -62,6 +62,11 @@ celery_app.conf.update(
             "task": "tasks.scrape_tasks.update_lot_geo_and_comms",
             "schedule": crontab(minute=10, hour="*/6"),
         },
+        # Парсинг PDF-документов лотов (медленно — раз в 4 часа, по 100 лотов)
+        "enrich-pdfs": {
+            "task": "tasks.scrape_tasks.enrich_lot_pdfs",
+            "schedule": crontab(minute=35, hour="*/4"),
+        },
         # Парсинг Авито — раз в сутки в 3:00 (топ-10 регионов, 3 страницы каждый)
         "scrape-avito": {
             "task": "tasks.scrape_tasks.scrape_avito",

@@ -79,6 +79,9 @@ class LotDetail(LotListItem):
     auction_start_date: Optional[str]
     rosreestr_data: Optional[dict]
     ai_assessment: Optional[dict]
+    full_description: Optional[str] = None
+    technical_conditions: Optional[str] = None
+    contract_terms: Optional[dict] = None
 
 
 class LotsResponse(BaseModel):
@@ -806,4 +809,7 @@ async def get_lot(lot_id: int, db: AsyncSession = Depends(get_db)):
         auction_start_date=lot.auction_start_date.isoformat() if lot.auction_start_date else None,
         rosreestr_data=lot.rosreestr_data,
         ai_assessment=lot.ai_assessment,
+        full_description=lot.full_description,
+        technical_conditions=lot.technical_conditions,
+        contract_terms=lot.contract_terms if isinstance(lot.contract_terms, dict) else None,
     )

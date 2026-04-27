@@ -114,6 +114,21 @@ def _format_lot_data(lot_dict: dict) -> str:
     if rosreestr:
         lines.append(f"Данные Росреестра: {json.dumps(rosreestr, ensure_ascii=False)[:500]}")
 
+    # Условия проекта договора (из PDF)
+    contract = lot_dict.get("contract_terms") or {}
+    if contract:
+        try:
+            from services.contract_parser import format_for_display
+            for line in format_for_display(contract):
+                lines.append(f"  • {line}")
+        except Exception:
+            lines.append(f"Условия договора: {json.dumps(contract, ensure_ascii=False)[:300]}")
+
+    # Полное описание из извещения (PDF) — даём первые 2000 символов
+    full_desc = lot_dict.get("full_description")
+    if full_desc:
+        lines.append(f"\nПолное описание (из извещения):\n{full_desc[:2000]}")
+
     return "\n".join(lines)
 
 

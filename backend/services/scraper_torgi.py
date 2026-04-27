@@ -516,6 +516,14 @@ class TorgiGovScraper:
                 v = data.get("estateAddress")
                 if v and isinstance(v, str):
                     result["address"] = v[:500]
+                # Прикреплённые документы (для PDF-парсера)
+                attachments = data.get("noticeAttachments") or []
+                if attachments:
+                    result["attachments"] = attachments
+                # Полное описание лота
+                desc = data.get("lotDescription")
+                if desc and isinstance(desc, str):
+                    result["lot_description_full"] = desc
                 return result if result else None
             except Exception:
                 continue
