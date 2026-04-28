@@ -142,8 +142,8 @@ async def assess_lot(lot_dict: dict) -> dict:
     prompt = ASSESSMENT_PROMPT.format(lot_data=lot_data_str)
 
     message = await client.messages.create(
-        model="claude-opus-4-6",
-        max_tokens=1024,
+        model="claude-sonnet-4-6",
+        max_tokens=3000,
         messages=[{"role": "user", "content": prompt}],
     )
 
@@ -156,6 +156,25 @@ async def assess_lot(lot_dict: dict) -> dict:
             raw = raw[4:]
         raw = raw.strip()
 
-    result = json.loads(raw)
+    # Если ответ обрезан — пробуем восстановить, обрезав до последней закрытой скобки
+    try:
+        result = json.loads(raw)
+    except json.JSONDecodeError:
+        # Обрезаем до последнего `"` перед `,` или `}` для попытки сохранить валидный фрагмент
+        last_brace = raw.rfind("}")
+        if last_brace > 0:
+            try:
+                result = json.loads(raw[: last_brace + 1])
+            except json.JSONDecodeError:
+                # Полностью некорректно — возвращаем минимум
+                result = {
+                    "score": None,
+                    "summary": "Не удалось получить полный ответ от AI. Попробуйте перезапросить.",
+                    "pros": [], "cons": [], "risks": [],
+                    "price_estimate": {"min": None, "max": None, "comment": ""},
+                    "_raw_truncated": raw[:500],
+                }
+        else:
+            raise
     result["assessed_at"] = datetime.now(timezone.utc).isoformat()
     return result
