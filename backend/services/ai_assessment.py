@@ -6,7 +6,11 @@ from typing import Optional
 from core.config import settings
 
 
-client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
+_base_url = getattr(settings, "ANTHROPIC_BASE_URL", None)
+client = anthropic.AsyncAnthropic(
+    api_key=settings.ANTHROPIC_API_KEY,
+    base_url=_base_url if _base_url else None,
+)
 
 ASSESSMENT_PROMPT = """Ты — эксперт по российскому рынку земельных участков и инвестициям в землю. Проанализируй конкретный лот с аукциона и предложи КОНКРЕТНУЮ стратегию заработка.
 

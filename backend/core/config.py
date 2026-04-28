@@ -20,6 +20,7 @@ class Settings(BaseSettings):
 
     # Claude API
     ANTHROPIC_API_KEY: str = ""
+    ANTHROPIC_BASE_URL: str = ""  # ProxyAPI/VseGPT base url для российских юзеров
 
     # Email
     SMTP_HOST: str = "smtp.yandex.ru"
