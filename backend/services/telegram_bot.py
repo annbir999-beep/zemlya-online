@@ -35,12 +35,11 @@ SITE_URL = "https://земля.online"
 def _tg_client(timeout: int = 10) -> httpx.AsyncClient:
     """HTTP-клиент к api.telegram.org.
 
-    Биндим local_address='0.0.0.0' чтобы httpx использовал IPv4 — внутри
-    docker-контейнера AAAA-резолв ведёт к Network unreachable, а Telegram
-    отдаёт работающий A-record.
+    Резолв api.telegram.org -> IPv4 захардкожен в docker-compose.yml через
+    extra_hosts, потому что у docker-сети нет IPv6-маршрутизации, а AAAA
+    резолв даёт ENETUNREACH.
     """
-    transport = httpx.AsyncHTTPTransport(local_address="0.0.0.0")
-    return httpx.AsyncClient(timeout=timeout, transport=transport)
+    return httpx.AsyncClient(timeout=timeout)
 
 
 def get_redis() -> redis_async.Redis:
