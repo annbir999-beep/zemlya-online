@@ -516,6 +516,62 @@ async def get_lots(
     )
 
 
+@router.get("/ai-picks")
+async def get_ai_picks(
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=50),
+    db: AsyncSession = Depends(get_db),
+):
+    """Витрина лотов с готовым ИИ-анализом (ночной батч).
+
+    Возвращает только ACTIVE лоты, у которых есть `ai_assessment` и
+    свежесть < 14 дней, отсортированные по score лота. Сам ИИ-вердикт
+    включён в каждый item — фронт может отрисовать карточку без
+    дополнительных запросов.
+    """
+    from datetime import datetime, timezone, timedelta
+    cutoff = datetime.now(timezone.utc) - timedelta(days=14)
+    conditions = [
+        Lot.status == LotStatus.ACTIVE,
+        Lot.ai_assessment.isnot(None),
+        Lot.ai_assessed_at >= cutoff,
+    ]
+    count_q = select(func.count()).select_from(Lot).where(and_(*conditions))
+    total = (await db.execute(count_q)).scalar() or 0
+
+    offset = (page - 1) * per_page
+    q = (
+        select(Lot)
+        .where(and_(*conditions))
+        .order_by(Lot.score.desc().nulls_last())
+        .offset(offset)
+        .limit(per_page)
+    )
+    lots = (await db.execute(q)).scalars().all()
+
+    items = []
+    for l in lots:
+        base = _lot_to_item(l).model_dump()
+        a = l.ai_assessment or {}
+        base["ai"] = {
+            "score": a.get("score"),
+            "best_strategy": a.get("best_strategy"),
+            "summary": a.get("summary"),
+            "recommended_use": a.get("recommended_use"),
+            "price_estimate": a.get("price_estimate"),
+            "pros": (a.get("pros") or [])[:3],
+            "assessed_at": l.ai_assessed_at.isoformat() if l.ai_assessed_at else None,
+        }
+        items.append(base)
+
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "pages": math.ceil(total / per_page) if total else 0,
+    }
+
+
 @router.get("/map")
 async def get_lots_for_map(
     status: Optional[str] = Query("active"),

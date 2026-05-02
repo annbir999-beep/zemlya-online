@@ -136,6 +136,46 @@ def _format_lot_data(lot_dict: dict) -> str:
     return "\n".join(lines)
 
 
+def lot_to_ai_dict(lot) -> dict:
+    """Собирает максимум полезных полей лота для промпта Claude.
+
+    Используется и в /api/ai/assess, и в ночном batch-job.
+    Поля совпадают с теми, что читает _format_lot_data выше.
+    """
+    return {
+        "title": lot.title,
+        "cadastral_number": lot.cadastral_number,
+        "start_price": lot.start_price,
+        "deposit": lot.deposit,
+        "cadastral_cost": lot.cadastral_cost,
+        "pct_price_to_cadastral": lot.pct_price_to_cadastral,
+        "area_sqm": lot.area_sqm,
+        "area_ha": lot.area_ha,
+        "land_purpose_raw": lot.land_purpose_raw,
+        "vri_tg": lot.vri_tg,
+        "category_tg": lot.category_tg,
+        "auction_type": lot.auction_type.value if lot.auction_type else None,
+        "deal_type": lot.deal_type,
+        "resale_type": lot.resale_type,
+        "region_name": lot.region_name,
+        "address": lot.address,
+        "submission_end": lot.submission_end.isoformat() if lot.submission_end else None,
+        "organizer_name": lot.organizer_name,
+        "description": lot.description,
+        "score": lot.score,
+        "discount_to_market_pct": lot.discount_to_market_pct,
+        "market_price_sqm": lot.market_price_sqm,
+        "nearest_city_name": lot.nearest_city_name,
+        "nearest_city_distance_km": lot.nearest_city_distance_km,
+        "nearest_city_population": lot.nearest_city_population,
+        "communications": lot.communications,
+        "score_badges": lot.score_badges,
+        "rosreestr_data": lot.rosreestr_data,
+        "full_description": lot.full_description,
+        "contract_terms": lot.contract_terms,
+    }
+
+
 async def assess_lot(lot_dict: dict) -> dict:
     """Отправляет данные участка в Claude и возвращает структурированную оценку."""
     lot_data_str = _format_lot_data(lot_dict)

@@ -20,6 +20,7 @@ export default function Header() {
   const nav = [
     { href: "/", label: "Карта", icon: "🗺" },
     { href: "/lots", label: "Лоты", icon: "🔥" },
+    { href: "/ai-picks", label: "ИИ-разборы", icon: "🤖" },
     { href: "/strategies", label: "Стратегии", icon: "💎" },
     { href: "/pricing", label: "Тарифы", icon: "⚡" },
   ];

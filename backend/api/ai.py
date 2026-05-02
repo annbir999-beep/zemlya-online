@@ -7,7 +7,7 @@ from db.database import get_db
 from models.lot import Lot
 from models.user import User, SubscriptionPlan
 from api.users import get_current_user
-from services.ai_assessment import assess_lot
+from services.ai_assessment import assess_lot, lot_to_ai_dict
 
 router = APIRouter()
 
@@ -38,23 +38,7 @@ async def request_assessment(
         if age_hours < 24:
             return {"lot_id": lot_id, "assessment": lot.ai_assessment, "cached": True}
 
-    lot_dict = {
-        "title": lot.title,
-        "cadastral_number": lot.cadastral_number,
-        "start_price": lot.start_price,
-        "area_sqm": lot.area_sqm,
-        "area_ha": lot.area_ha,
-        "land_purpose_raw": lot.land_purpose_raw,
-        "auction_type": lot.auction_type.value if lot.auction_type else None,
-        "region_name": lot.region_name,
-        "address": lot.address,
-        "auction_end_date": lot.auction_end_date.isoformat() if lot.auction_end_date else None,
-        "organizer_name": lot.organizer_name,
-        "description": lot.description,
-        "rosreestr_data": lot.rosreestr_data,
-    }
-
-    assessment = await assess_lot(lot_dict)
+    assessment = await assess_lot(lot_to_ai_dict(lot))
 
     lot.ai_assessment = assessment
     lot.ai_assessed_at = datetime.now(timezone.utc)
