@@ -233,21 +233,19 @@ class TorgiGovScraper:
     async def run(self, by_region: bool = True) -> int:
         """Запускает полный цикл парсинга.
 
-        by_region=True — разбивает запрос по регионам РФ (89 регионов), что
-        обходит ограничение API в 10000 строк и позволяет получить ВСЕ лоты.
+        by_region=True — разбивает запрос по регионам РФ через параметр dynSubjRF
+        (это внутренний ID API torgi.gov, значения 1..89 без ведущего нуля),
+        что обходит ограничение API в 10000 строк.
         by_region=False — старая логика одним общим запросом.
         """
         saved = 0
         try:
             if by_region:
-                # Все регионы РФ (subjectRFCode 1-95, исключая пропущенные)
-                region_codes = (
-                    list(range(1, 32)) + list(range(33, 53)) + list(range(54, 70))
-                    + list(range(71, 84)) + [86, 87, 89, 91, 92, 95]
-                )
-                for rc in region_codes:
-                    rc_str = f"{rc:02d}"
-                    cnt = await self._scrape_with_filter(subject_rf_code=rc_str)
+                # dynSubjRF принимает значения 1..89 (порядковый номер региона
+                # в справочнике API torgi.gov, не совпадает с ОКАТО subjectRFCode).
+                # Перебираем весь диапазон — пустые регионы вернут 0 лотов.
+                for rc in range(1, 90):
+                    cnt = await self._scrape_with_filter(subject_rf_code=str(rc))
                     saved += cnt
             else:
                 saved = await self._scrape_with_filter()
@@ -256,7 +254,10 @@ class TorgiGovScraper:
         return saved
 
     async def _scrape_with_filter(self, subject_rf_code: str = None) -> int:
-        """Парсит все страницы с указанным фильтром (или без)."""
+        """Парсит все страницы с указанным фильтром (или без).
+
+        subject_rf_code — значение для параметра dynSubjRF (1..89 без ведущего нуля).
+        """
         saved = 0
         page = 0
         size = 50
@@ -287,7 +288,7 @@ class TorgiGovScraper:
             page += 1
 
         if subject_rf_code and saved > 0:
-            print(f"[torgi] Регион {subject_rf_code}: {saved} лотов")
+            print(f"[torgi] dynSubjRF={subject_rf_code}: {saved} лотов")
         return saved
 
     async def _fetch_page(self, page: int, size: int, subject_rf_code: str = None) -> tuple:
@@ -302,7 +303,7 @@ class TorgiGovScraper:
             ("sort", "firstVersionPublicationDate,desc"),
         ]
         if subject_rf_code:
-            params.append(("subjectRFCode", subject_rf_code))
+            params.append(("dynSubjRF", subject_rf_code))
         try:
             resp = await self.client.get(f"{TORGI_BASE}/lotcards/search", params=params)
             resp.raise_for_status()
@@ -311,7 +312,7 @@ class TorgiGovScraper:
             total_pages = data.get("totalPages")
             # Логируем только первую страницу каждого региона/общего запроса
             if page == 0:
-                tag = f" регион={subject_rf_code}" if subject_rf_code else ""
+                tag = f" dynSubjRF={subject_rf_code}" if subject_rf_code else ""
                 print(f"[torgi]{tag} Лотов: {total}, страниц: {total_pages}")
             return data.get("content", []), total_pages
         except Exception as e:
