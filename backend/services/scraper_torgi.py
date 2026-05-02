@@ -230,18 +230,42 @@ class TorgiGovScraper:
             },
         )
 
-    async def run(self) -> int:
-        """Запускает полный цикл парсинга. Возвращает кол-во сохранённых/обновлённых лотов."""
+    async def run(self, by_region: bool = True) -> int:
+        """Запускает полный цикл парсинга.
+
+        by_region=True — разбивает запрос по регионам РФ (89 регионов), что
+        обходит ограничение API в 10000 строк и позволяет получить ВСЕ лоты.
+        by_region=False — старая логика одним общим запросом.
+        """
+        saved = 0
+        try:
+            if by_region:
+                # Все регионы РФ (subjectRFCode 1-95, исключая пропущенные)
+                region_codes = (
+                    list(range(1, 32)) + list(range(33, 53)) + list(range(54, 70))
+                    + list(range(71, 84)) + [86, 87, 89, 91, 92, 95]
+                )
+                for rc in region_codes:
+                    rc_str = f"{rc:02d}"
+                    cnt = await self._scrape_with_filter(subject_rf_code=rc_str)
+                    saved += cnt
+            else:
+                saved = await self._scrape_with_filter()
+        finally:
+            await self.client.aclose()
+        return saved
+
+    async def _scrape_with_filter(self, subject_rf_code: str = None) -> int:
+        """Парсит все страницы с указанным фильтром (или без)."""
         saved = 0
         page = 0
         size = 50
         total_pages = None
 
         while True:
-            lots_data, total_pages_resp = await self._fetch_page(page, size)
+            lots_data, total_pages_resp = await self._fetch_page(page, size, subject_rf_code)
             if total_pages is None and total_pages_resp is not None:
                 total_pages = total_pages_resp
-                print(f"[torgi] Всего страниц: {total_pages}")
 
             if not lots_data:
                 break
@@ -251,7 +275,7 @@ class TorgiGovScraper:
                     count = await self._upsert_lot(raw_lot)
                     saved += count
                 except Exception as e:
-                    print(f"[torgi] Ошибка обработки лота {raw_lot.get('id')}: {e}")
+                    print(f"[torgi] Ошибка лота {raw_lot.get('id')}: {e}")
 
             await asyncio.sleep(settings.TORGI_GOV_DELAY)
 
@@ -262,10 +286,11 @@ class TorgiGovScraper:
                 break
             page += 1
 
-        await self.client.aclose()
+        if subject_rf_code and saved > 0:
+            print(f"[torgi] Регион {subject_rf_code}: {saved} лотов")
         return saved
 
-    async def _fetch_page(self, page: int, size: int) -> tuple:
+    async def _fetch_page(self, page: int, size: int, subject_rf_code: str = None) -> tuple:
         # Новый API принимает lotStatus как Set — передаём списком
         params = [
             ("lotStatus", "PUBLISHED"),
@@ -276,14 +301,18 @@ class TorgiGovScraper:
             ("size", size),
             ("sort", "firstVersionPublicationDate,desc"),
         ]
+        if subject_rf_code:
+            params.append(("subjectRFCode", subject_rf_code))
         try:
             resp = await self.client.get(f"{TORGI_BASE}/lotcards/search", params=params)
-            print(f"[torgi] HTTP статус: {resp.status_code}, страница {page}")
             resp.raise_for_status()
             data = resp.json()
             total = data.get("totalElements", "?")
             total_pages = data.get("totalPages")
-            print(f"[torgi] Лотов: {total}, страниц: {total_pages}")
+            # Логируем только первую страницу каждого региона/общего запроса
+            if page == 0:
+                tag = f" регион={subject_rf_code}" if subject_rf_code else ""
+                print(f"[torgi]{tag} Лотов: {total}, страниц: {total_pages}")
             return data.get("content", []), total_pages
         except Exception as e:
             print(f"[torgi] HTTP ошибка: {type(e).__name__}: {e}")
