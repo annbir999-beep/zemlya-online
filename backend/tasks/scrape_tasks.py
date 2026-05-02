@@ -490,31 +490,26 @@ async def _enrich_torgi_details(batch_size: int):
 
 
 async def _update_statuses():
+    """Закрываем только лоты не виденные на torgi.gov больше 14 дней (исчезли из поиска).
+    Для активных лотов статус ставит сам скрапер из API torgi.gov на каждом прогоне."""
     from db.database import AsyncSessionLocal
     from sqlalchemy import update
-    from models.lot import Lot, LotStatus
-    from datetime import datetime, timezone
+    from models.lot import Lot, LotStatus, LotSource
+    from datetime import datetime, timezone, timedelta
 
     now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(days=14)
     async with AsyncSessionLocal() as db:
+        # Лот пропал из выдачи torgi.gov более 14 дней назад → закрыт
         r1 = await db.execute(
             update(Lot)
             .where(
-                Lot.status.in_([LotStatus.ACTIVE, LotStatus.UPCOMING]),
-                Lot.submission_end.isnot(None),
-                Lot.submission_end < now,
+                Lot.source == LotSource.TORGI_GOV,
+                Lot.status == LotStatus.ACTIVE,
+                Lot.updated_at < cutoff,
             )
             .values(status=LotStatus.COMPLETED)
         )
-        r2 = await db.execute(
-            update(Lot)
-            .where(
-                Lot.status == LotStatus.UPCOMING,
-                Lot.submission_start.isnot(None),
-                Lot.submission_start <= now,
-                (Lot.submission_end.is_(None)) | (Lot.submission_end >= now),
-            )
-            .values(status=LotStatus.ACTIVE)
-        )
+        r2_rowcount = 0  # не пытаемся переводить из UPCOMING — это делает API
         await db.commit()
-        print(f"[statuses] → COMPLETED: {r1.rowcount}, → ACTIVE: {r2.rowcount}")
+        print(f"[statuses] закрыто 'забытых' (>14д без обновления): {r1.rowcount}")

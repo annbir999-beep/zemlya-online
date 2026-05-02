@@ -443,16 +443,12 @@ class TorgiGovScraper:
         lot.submission_start = _parse_datetime(raw.get("biddStartTime") or raw.get("createDate"))
         lot.submission_end = _parse_datetime(raw.get("biddEndTime"))
 
+        # Статус — приоритет API torgi.gov (он знает реальное состояние).
+        # Дата submission_end используется только когда API статус неизвестен —
+        # на torgi лот может быть в стадии "Подведение итогов" с датой в прошлом,
+        # но всё ещё ACTIVE.
         api_status = _parse_status(raw.get("lotStatus", "PUBLISHED"))
-        now_utc = datetime.now(timezone.utc)
-        if api_status == LotStatus.CANCELLED:
-            lot.status = LotStatus.CANCELLED
-        elif lot.submission_end and lot.submission_end < now_utc:
-            lot.status = LotStatus.COMPLETED
-        elif lot.submission_start and lot.submission_start > now_utc:
-            lot.status = LotStatus.UPCOMING
-        else:
-            lot.status = api_status
+        lot.status = api_status
         lot.published_at = _parse_datetime(raw.get("firstVersionPublicationDate"))
         lot.raw_data = raw
 
