@@ -221,6 +221,34 @@ export default function FilterSidebar({ filters, onChange, onReset }: Props) {
           </div>
         </Section>
 
+        {/* Ликвидность 💧 */}
+        <Section title="💧 Ликвидность" defaultOpen>
+          <div style={{ fontSize: 12, color: "var(--text-3)", marginBottom: 6 }}>
+            По близости к крупному городу
+          </div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {([
+              { v: undefined, label: "Все" },
+              { v: "high", label: "Высокая" },
+              { v: "medium", label: "Средняя" },
+              { v: "low", label: "Низкая" },
+            ] as const).map(({ v, label }) => (
+              <button key={String(v)} className="btn btn-sm" style={{
+                background: filters.liquidity === v ? "var(--primary)" : "var(--surface-2)",
+                color: filters.liquidity === v ? "white" : "var(--text-2)",
+                fontSize: 12, padding: "4px 10px",
+              }} onClick={() => set("liquidity", v)}>
+                {label}
+              </button>
+            ))}
+          </div>
+          <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 6, lineHeight: 1.4 }}>
+            Высокая: ≤30 км до города 500k+&nbsp;·&nbsp;
+            Средняя: ≤100 км до города 100k+&nbsp;·&nbsp;
+            Низкая: дальше 100 км или у малого города
+          </div>
+        </Section>
+
         {/* Статус */}
         <Section title="Статус торгов" defaultOpen>
           <select className="select" value={filters.status || ""}

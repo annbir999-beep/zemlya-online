@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, func, case
+from sqlalchemy import select, and_, or_, func, case
 from geoalchemy2.functions import ST_DWithin, ST_MakePoint, ST_SetSRID
 from typing import Optional, List
 from pydantic import BaseModel
@@ -100,6 +100,8 @@ def build_filters(
     score_min: Optional[int] = None,
     badges_min: Optional[int] = None,
     discount_min: Optional[float] = None,
+    # Ликвидность (high/medium/low) — опирается на расстояние до города и его население
+    liquidity: Optional[str] = None,
     # Цена
     price_min: Optional[float] = None,
     price_max: Optional[float] = None,
@@ -175,6 +177,19 @@ def build_filters(
         # Фильтр по минимальному количеству бейджей в JSON-массиве
         from sqlalchemy import func as _f, cast, JSON
         conditions.append(_f.json_array_length(cast(Lot.score_badges, JSON)) >= badges_min)
+
+    # Ликвидность по близости к городу и его населению
+    if liquidity == "high":
+        conditions.append(Lot.nearest_city_distance_km <= 30)
+        conditions.append(Lot.nearest_city_population >= 500_000)
+    elif liquidity == "medium":
+        conditions.append(Lot.nearest_city_distance_km <= 100)
+        conditions.append(Lot.nearest_city_population >= 100_000)
+    elif liquidity == "low":
+        conditions.append(or_(
+            Lot.nearest_city_distance_km > 100,
+            Lot.nearest_city_population < 100_000,
+        ))
 
     # Цена
     if price_min is not None:
@@ -373,6 +388,7 @@ async def get_lots(
     score_min: Optional[int] = Query(None, ge=0, le=100),
     badges_min: Optional[int] = Query(None, ge=0, le=10),
     discount_min: Optional[float] = Query(None),
+    liquidity: Optional[str] = Query(None, pattern="^(high|medium|low)$"),
     # Цена
     price_min: Optional[float] = Query(None, ge=0),
     price_max: Optional[float] = Query(None, ge=0),
@@ -440,6 +456,7 @@ async def get_lots(
     conditions = build_filters(
         status=status, region_codes=region,
         score_min=score_min, badges_min=badges_min, discount_min=discount_min,
+        liquidity=liquidity,
         price_min=price_min, price_max=price_max,
         cadastral_cost_min=cadastral_cost_min, cadastral_cost_max=cadastral_cost_max,
         pct_cadastral_min=pct_cadastral_min, pct_cadastral_max=pct_cadastral_max,
@@ -506,6 +523,7 @@ async def get_lots_for_map(
     score_min: Optional[int] = Query(None),
     badges_min: Optional[int] = Query(None),
     discount_min: Optional[float] = Query(None),
+    liquidity: Optional[str] = Query(None, pattern="^(high|medium|low)$"),
     price_min: Optional[float] = Query(None),
     price_max: Optional[float] = Query(None),
     cadastral_cost_min: Optional[float] = Query(None),
@@ -539,6 +557,7 @@ async def get_lots_for_map(
     conditions = build_filters(
         status=status, region_codes=region,
         score_min=score_min, badges_min=badges_min, discount_min=discount_min,
+        liquidity=liquidity,
         price_min=price_min, price_max=price_max,
         cadastral_cost_min=cadastral_cost_min, cadastral_cost_max=cadastral_cost_max,
         pct_cadastral_min=pct_cadastral_min, pct_cadastral_max=pct_cadastral_max,

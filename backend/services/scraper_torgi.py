@@ -241,10 +241,11 @@ class TorgiGovScraper:
         saved = 0
         try:
             if by_region:
-                # dynSubjRF принимает значения 1..89 (порядковый номер региона
+                # dynSubjRF принимает значения 1..85 (порядковый номер региона
                 # в справочнике API torgi.gov, не совпадает с ОКАТО subjectRFCode).
-                # Перебираем весь диапазон — пустые регионы вернут 0 лотов.
-                for rc in range(1, 90):
+                # Значения от 86+ API игнорирует и возвращает все 10000 лотов
+                # — поэтому строго ограничиваем диапазон.
+                for rc in range(1, 86):
                     cnt = await self._scrape_with_filter(subject_rf_code=str(rc))
                     saved += cnt
             else:
