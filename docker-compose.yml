@@ -43,7 +43,7 @@ services:
     extra_hosts:
       # Принудительно резолвим api.telegram.org в IPv4 — у docker-сети нет
       # IPv6-маршрутизации, AAAA-резолв даёт ENETUNREACH/timeout
-      - "api.telegram.org:149.154.166.110"
+      - "api.telegram.org:149.154.167.220"
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
   celery_worker:
@@ -58,7 +58,7 @@ services:
     volumes:
       - ./backend:/app
     extra_hosts:
-      - "api.telegram.org:149.154.166.110"
+      - "api.telegram.org:149.154.167.220"
     command: celery -A worker.celery_app worker --loglevel=info --concurrency=4
 
   celery_beat:
