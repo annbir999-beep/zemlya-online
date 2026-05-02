@@ -215,7 +215,7 @@ async def _enrich_lot_pdfs(batch_size: int):
     from core.config import settings
     from models.lot import Lot, LotSource, LotStatus
     from services.scraper_torgi import TorgiGovScraper
-    from services.pdf_parser import select_best_attachments, download_pdf, extract_text_from_pdf, truncate_for_db
+    from services.pdf_parser import select_best_attachments, download_file, extract_text, truncate_for_db
     from services.contract_parser import parse_contract
     from services.communications import parse_communications
 
@@ -262,14 +262,17 @@ async def _enrich_lot_pdfs(batch_size: int):
                     contract_text = ""
 
                     if "notice" in selected:
-                        b = await download_pdf(scraper.client, selected["notice"].get("fileId"))
-                        notice_text = extract_text_from_pdf(b) if b else ""
+                        att = selected["notice"]
+                        b = await download_file(scraper.client, att.get("fileId"))
+                        notice_text = extract_text(b, att.get("fileName", "")) if b else ""
                     if "tech_conditions" in selected:
-                        b = await download_pdf(scraper.client, selected["tech_conditions"].get("fileId"))
-                        tech_text = extract_text_from_pdf(b) if b else ""
+                        att = selected["tech_conditions"]
+                        b = await download_file(scraper.client, att.get("fileId"))
+                        tech_text = extract_text(b, att.get("fileName", "")) if b else ""
                     if "contract" in selected:
-                        b = await download_pdf(scraper.client, selected["contract"].get("fileId"))
-                        contract_text = extract_text_from_pdf(b) if b else ""
+                        att = selected["contract"]
+                        b = await download_file(scraper.client, att.get("fileId"))
+                        contract_text = extract_text(b, att.get("fileName", "")) if b else ""
 
                     changed = False
 
