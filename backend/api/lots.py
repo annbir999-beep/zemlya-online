@@ -516,6 +516,191 @@ async def get_lots(
     )
 
 
+@router.get("/analytics")
+async def get_analytics(db: AsyncSession = Depends(get_db)):
+    """Сводная аналитика рынка для публичной страницы /analytics.
+
+    Кэшируется в Redis на 5 минут — расчёт тяжёлый (5+ агрегатов по
+    всей таблице lots), а данные обновляются медленно (раз в 30 мин по cron).
+    """
+    import json as _json
+    from datetime import datetime, timezone, timedelta
+    from services.telegram_bot import get_redis  # переиспользуем единый redis-клиент
+
+    cache_key = "analytics:v1"
+    redis = get_redis()
+    try:
+        cached = await redis.get(cache_key)
+        if cached:
+            return _json.loads(cached)
+    except Exception:
+        pass  # Redis недоступен — считаем заново
+
+    base = and_(Lot.status == LotStatus.ACTIVE, Lot.source == LotSource.TORGI_GOV)
+    now = datetime.now(timezone.utc)
+
+    # ── KPI ──
+    total_active = (await db.execute(select(func.count()).where(base))).scalar() or 0
+    new_24h = (
+        await db.execute(
+            select(func.count()).where(
+                and_(base, Lot.published_at >= now - timedelta(hours=24))
+            )
+        )
+    ).scalar() or 0
+    avg_price_sqm = (
+        await db.execute(select(func.avg(Lot.price_per_sqm)).where(base))
+    ).scalar()
+    avg_discount = (
+        await db.execute(
+            select(func.avg(Lot.discount_to_market_pct)).where(
+                and_(base, Lot.discount_to_market_pct.isnot(None))
+            )
+        )
+    ).scalar()
+    pdf_parsed = (
+        await db.execute(
+            select(func.count()).where(and_(base, Lot.pdf_parsed_at.isnot(None)))
+        )
+    ).scalar() or 0
+    ai_analyzed = (
+        await db.execute(
+            select(func.count()).where(and_(base, Lot.ai_assessment.isnot(None)))
+        )
+    ).scalar() or 0
+
+    # ── Топ-15 регионов ──
+    by_region_rows = (
+        await db.execute(
+            select(
+                Lot.region_code,
+                Lot.region_name,
+                func.count(Lot.id).label("cnt"),
+                func.avg(Lot.price_per_sqm).label("avg_psqm"),
+            )
+            .where(base)
+            .group_by(Lot.region_code, Lot.region_name)
+            .order_by(func.count(Lot.id).desc())
+            .limit(15)
+        )
+    ).all()
+    by_region = [
+        {
+            "code": r.region_code,
+            "name": r.region_name,
+            "count": r.cnt,
+            "avg_price_per_sqm": float(r.avg_psqm) if r.avg_psqm else None,
+        }
+        for r in by_region_rows
+    ]
+
+    # ── Назначение земли ──
+    by_purpose_rows = (
+        await db.execute(
+            select(Lot.land_purpose, func.count(Lot.id).label("cnt"))
+            .where(base)
+            .group_by(Lot.land_purpose)
+            .order_by(func.count(Lot.id).desc())
+        )
+    ).all()
+    purpose_label = {
+        "izhs": "ИЖС", "lpkh": "ЛПХ", "snt": "СНТ/Дача",
+        "agricultural": "Сельхоз", "commercial": "Коммерческое",
+        "industrial": "Промышленное", "forest": "Лесной фонд",
+        "water": "Водный фонд", "special": "Спец. назначения",
+        "other": "Иное",
+    }
+    by_purpose = [
+        {
+            "key": (r.land_purpose.value if r.land_purpose else "unknown"),
+            "label": purpose_label.get(r.land_purpose.value if r.land_purpose else "", "Не указано"),
+            "count": r.cnt,
+        }
+        for r in by_purpose_rows
+    ]
+
+    # ── Распределение по score ──
+    score_buckets = []
+    for low, high, label in [(90, 101, "90+"), (70, 90, "70-89"), (50, 70, "50-69"), (0, 50, "0-49")]:
+        cnt = (
+            await db.execute(
+                select(func.count()).where(
+                    and_(base, Lot.score >= low, Lot.score < high)
+                )
+            )
+        ).scalar() or 0
+        score_buckets.append({"label": label, "count": cnt})
+
+    # ── Появление новых лотов по дням за 30 дней ──
+    daily_rows = (
+        await db.execute(
+            select(
+                func.date(Lot.published_at).label("d"),
+                func.count(Lot.id).label("cnt"),
+            )
+            .where(
+                and_(
+                    Lot.source == LotSource.TORGI_GOV,
+                    Lot.published_at >= now - timedelta(days=30),
+                )
+            )
+            .group_by(func.date(Lot.published_at))
+            .order_by(func.date(Lot.published_at))
+        )
+    ).all()
+    daily_new = [
+        {"date": r.d.isoformat() if r.d else None, "count": r.cnt}
+        for r in daily_rows
+        if r.d
+    ]
+
+    # ── Топ-5 лотов по score ──
+    top_lots_rows = (
+        await db.execute(
+            select(Lot)
+            .where(and_(base, Lot.score.isnot(None)))
+            .order_by(Lot.score.desc().nulls_last())
+            .limit(5)
+        )
+    ).scalars().all()
+    top_lots = [
+        {
+            "id": l.id,
+            "title": (l.title or "")[:100],
+            "region_name": l.region_name,
+            "score": l.score,
+            "discount_to_market_pct": l.discount_to_market_pct,
+            "start_price": l.start_price,
+            "area_sqm": l.area_sqm,
+        }
+        for l in top_lots_rows
+    ]
+
+    payload = {
+        "summary": {
+            "total_active": total_active,
+            "new_24h": new_24h,
+            "avg_price_per_sqm": float(avg_price_sqm) if avg_price_sqm else None,
+            "avg_discount_pct": float(avg_discount) if avg_discount else None,
+            "pdf_parsed": pdf_parsed,
+            "ai_analyzed": ai_analyzed,
+        },
+        "by_region": by_region,
+        "by_purpose": by_purpose,
+        "by_score": score_buckets,
+        "daily_new": daily_new,
+        "top_lots": top_lots,
+        "generated_at": now.isoformat(),
+    }
+
+    try:
+        await redis.setex(cache_key, 300, _json.dumps(payload, default=str))
+    except Exception:
+        pass
+
+    return payload
+
+
 @router.get("/ai-picks")
 async def get_ai_picks(
     page: int = Query(1, ge=1),
