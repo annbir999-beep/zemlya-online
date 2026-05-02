@@ -32,19 +32,15 @@ LINK_CODE_LENGTH = 8  # символов в URL-safe base64
 SITE_URL = "https://земля.online"
 
 
-def _proxy_url() -> Optional[str]:
-    """Прокси для api.telegram.org (Telegram заблокирован в РФ).
-
-    Использует тот же прокси, что и скрапер torgi.gov (settings.PROXY_*).
-    """
-    if not getattr(settings, "PROXY_HOST", None):
-        return None
-    scheme = getattr(settings, "PROXY_SCHEME", None) or "http"
-    return f"{scheme}://{settings.PROXY_USER}:{settings.PROXY_PASS}@{settings.PROXY_HOST}"
-
-
 def _tg_client(timeout: int = 10) -> httpx.AsyncClient:
-    return httpx.AsyncClient(timeout=timeout, proxy=_proxy_url())
+    """HTTP-клиент к api.telegram.org.
+
+    Биндим local_address='0.0.0.0' чтобы httpx использовал IPv4 — внутри
+    docker-контейнера AAAA-резолв ведёт к Network unreachable, а Telegram
+    отдаёт работающий A-record.
+    """
+    transport = httpx.AsyncHTTPTransport(local_address="0.0.0.0")
+    return httpx.AsyncClient(timeout=timeout, transport=transport)
 
 
 def get_redis() -> redis_async.Redis:
