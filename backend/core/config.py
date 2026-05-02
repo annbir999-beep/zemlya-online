@@ -16,7 +16,12 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
 
     # CORS
-    ALLOWED_ORIGINS: List[str] = ["http://localhost:3000", "https://zemlya.online"]
+    ALLOWED_ORIGINS: List[str] = [
+        "http://localhost:3000",
+        "https://земля.online",
+        "https://xn--e1adnd0h.online",
+        "https://www.xn--e1adnd0h.online",
+    ]
 
     # Claude API
     ANTHROPIC_API_KEY: str = ""

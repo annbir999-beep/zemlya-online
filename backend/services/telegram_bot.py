@@ -29,7 +29,22 @@ _REDIS: Optional[redis_async.Redis] = None
 LINK_CODE_PREFIX = "tg_link:"
 LINK_CODE_TTL = 600  # 10 минут
 LINK_CODE_LENGTH = 8  # символов в URL-safe base64
-SITE_URL = "https://zemlya.online"
+SITE_URL = "https://земля.online"
+
+
+def _proxy_url() -> Optional[str]:
+    """Прокси для api.telegram.org (Telegram заблокирован в РФ).
+
+    Использует тот же прокси, что и скрапер torgi.gov (settings.PROXY_*).
+    """
+    if not getattr(settings, "PROXY_HOST", None):
+        return None
+    scheme = getattr(settings, "PROXY_SCHEME", None) or "http"
+    return f"{scheme}://{settings.PROXY_USER}:{settings.PROXY_PASS}@{settings.PROXY_HOST}"
+
+
+def _tg_client(timeout: int = 10) -> httpx.AsyncClient:
+    return httpx.AsyncClient(timeout=timeout, proxy=_proxy_url())
 
 
 def get_redis() -> redis_async.Redis:
@@ -72,7 +87,7 @@ async def send_message(
 ) -> None:
     if not settings.TELEGRAM_BOT_TOKEN:
         return
-    async with httpx.AsyncClient(timeout=10) as client:
+    async with _tg_client(timeout=10) as client:
         try:
             await client.post(
                 f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/sendMessage",
@@ -92,7 +107,7 @@ async def set_webhook(url: str, secret_token: Optional[str] = None) -> dict:
     payload = {"url": url, "drop_pending_updates": True}
     if secret_token:
         payload["secret_token"] = secret_token
-    async with httpx.AsyncClient(timeout=15) as client:
+    async with _tg_client(timeout=15) as client:
         r = await client.post(
             f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/setWebhook",
             json=payload,

@@ -6,7 +6,7 @@
 Требует переменных окружения:
   TELEGRAM_BOT_TOKEN     — токен бота от @BotFather
   TELEGRAM_WEBHOOK_SECRET (опц.) — секрет для проверки подписи
-  TELEGRAM_WEBHOOK_URL   — публичный URL: https://zemlya.online/api/telegram/webhook
+  TELEGRAM_WEBHOOK_URL   — публичный URL: https://xn--e1adnd0h.online/api/telegram/webhook
 
 Скрипт также печатает getMe (проверка токена и username бота).
 """
@@ -17,11 +17,12 @@ import sys
 import httpx
 
 from core.config import settings
+from services.telegram_bot import _tg_client
 
 
 WEBHOOK_URL = os.environ.get(
     "TELEGRAM_WEBHOOK_URL",
-    "https://zemlya.online/api/telegram/webhook",
+    "https://xn--e1adnd0h.online/api/telegram/webhook",  # punycode для земля.online
 )
 
 
@@ -31,7 +32,7 @@ async def main() -> int:
         return 1
 
     base = f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}"
-    async with httpx.AsyncClient(timeout=15) as c:
+    async with _tg_client(timeout=15) as c:
         # 1) Проверка токена
         me = await c.get(f"{base}/getMe")
         me_json = me.json()

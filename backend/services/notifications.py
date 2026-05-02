@@ -1,13 +1,13 @@
 import aiosmtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-import httpx
 from typing import List
 
 from core.config import settings
 from models.user import User
 from models.alert import Alert
 from models.lot import Lot
+from services.telegram_bot import _tg_client
 
 
 def _format_price(price: float) -> str:
@@ -73,7 +73,7 @@ def _build_email_html(user: User, alert: Alert, lots: List[Lot]) -> str:
     <hr style="border:none;border-top:1px solid #e0e0e0;margin:20px 0;">
     <p style="font-size:12px;color:#999;">
       Вы получаете это письмо, потому что настроили алерт на Земля.ПРО.<br>
-      <a href="https://zemlya.online/dashboard/alerts" style="color:#2563eb;">Управление алертами</a>
+      <a href="https://xn--e1adnd0h.online/dashboard/alerts" style="color:#2563eb;">Управление алертами</a>
     </p>
   </div>
 </body>
@@ -117,10 +117,10 @@ async def send_telegram_alert(user: User, alert: Alert, lots: List[Lot]):
     if len(lots) > 5:
         lines.append(f"\n_...и ещё {len(lots) - 5} лотов_")
 
-    lines.append(f"\n[Открыть все результаты](https://zemlya.online/lots?alert={alert.id})")
+    lines.append(f"\n[Открыть все результаты](https://xn--e1adnd0h.online/lots?alert={alert.id})")
 
     text = "\n".join(lines)
-    async with httpx.AsyncClient() as client:
+    async with _tg_client(timeout=10) as client:
         await client.post(
             f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/sendMessage",
             json={
