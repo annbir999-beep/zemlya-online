@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { api, UserProfile, Alert } from "@/lib/api";
 import { getMe, logout } from "@/lib/auth";
+import TelegramConnect from "@/components/TelegramConnect";
 
 const PLAN_LABEL: Record<string, string> = {
   free: "Бесплатный", personal: "Личный", expert: "Эксперт", landlord: "Лендлорд",
@@ -92,6 +93,7 @@ export default function DashboardPage() {
               <a href="/pricing" className="btn btn-primary btn-sm">Улучшить тариф</a>
             </div>
           </div>
+          <TelegramConnect />
         </div>
       )}
 

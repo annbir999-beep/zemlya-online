@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from db.database import engine, Base
-from api import lots, users, alerts, ai, payments, subscriptions
+from api import lots, users, alerts, ai, payments, subscriptions, telegram
 from core.config import settings
 
 
@@ -36,6 +36,7 @@ app.include_router(alerts.router, prefix="/api/alerts", tags=["alerts"])
 app.include_router(ai.router, prefix="/api/ai", tags=["ai"])
 app.include_router(payments.router, prefix="/api/payments", tags=["payments"])
 app.include_router(subscriptions.router, prefix="/api/subscriptions", tags=["subscriptions"])
+app.include_router(telegram.router, prefix="/api/telegram", tags=["telegram"])
 
 
 @app.get("/health")

@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
 
     # CORS
-    ALLOWED_ORIGINS: List[str] = ["http://localhost:3000", "https://yourdomain.ru"]
+    ALLOWED_ORIGINS: List[str] = ["http://localhost:3000", "https://zemlya.online"]
 
     # Claude API
     ANTHROPIC_API_KEY: str = ""
@@ -30,6 +30,8 @@ class Settings(BaseSettings):
 
     # Telegram
     TELEGRAM_BOT_TOKEN: str = ""
+    TELEGRAM_BOT_USERNAME: str = ""  # без @, например "ZemlyaOnlineBot"
+    TELEGRAM_WEBHOOK_SECRET: str = ""  # для проверки X-Telegram-Bot-Api-Secret-Token
 
     # ЮКасса
     YUKASSA_SHOP_ID: str = ""
