@@ -6,6 +6,7 @@ RUN apt-get update && apt-get install -y \
     gcc \
     libpq-dev \
     ca-certificates \
+    antiword \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

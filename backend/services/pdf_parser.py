@@ -141,25 +141,105 @@ def _extract_docx(content: bytes) -> str:
         return ""
 
 
+def _is_meaningful_text(text: str, min_ratio: float = 0.55) -> bool:
+    """
+    Проверяет что текст похож на читаемый русский/латинский, а не на бинарный
+    мусор после декодирования OLE/.doc.
+
+    Считаем долю символов из «читаемого» алфавита: кириллица, латиница, цифры,
+    стандартная пунктуация, пробел/перенос. Если она ниже порога — отбрасываем.
+    """
+    if not text or len(text) < 200:
+        return False
+    sample = text[:5000]
+    good = sum(
+        1 for ch in sample
+        if (
+            "а" <= ch.lower() <= "я"
+            or "a" <= ch.lower() <= "z"
+            or ch.isdigit()
+            or ch in " \n\r\t.,;:!?-—–«»\"'()/№%"
+            or ch == "ё"
+        )
+    )
+    return good / len(sample) >= min_ratio
+
+
+def _extract_doc_via_antiword(content: bytes) -> str:
+    """Извлечение текста из .doc через утилиту antiword (если установлена)."""
+    import subprocess
+    try:
+        r = subprocess.run(
+            ["antiword", "-m", "UTF-8", "-"],
+            input=content,
+            capture_output=True,
+            timeout=30,
+        )
+        if r.returncode == 0 and r.stdout:
+            return r.stdout.decode("utf-8", errors="ignore")
+    except (FileNotFoundError, subprocess.TimeoutExpired, Exception) as e:
+        if not isinstance(e, FileNotFoundError):
+            print(f"[pdf-parse] antiword error: {type(e).__name__}: {e}")
+    return ""
+
+
+def _extract_rtf(content: bytes) -> str:
+    """Грубое извлечение видимого текста из .rtf."""
+    try:
+        text = content.decode("cp1251", errors="ignore")
+        # Удаляем control words \xxx и группы заголовка
+        text = re.sub(r"\\[a-zA-Z]+-?\d* ?", " ", text)
+        text = re.sub(r"[{}]", " ", text)
+        # Hex escapes \'XX (cp1251)
+        def hex_to_char(m):
+            try:
+                return bytes([int(m.group(1), 16)]).decode("cp1251", errors="ignore")
+            except Exception:
+                return ""
+        text = re.sub(r"\\'([0-9a-fA-F]{2})", hex_to_char, text)
+        text = re.sub(r"\s+", " ", text).strip()
+        return text
+    except Exception as e:
+        print(f"[pdf-parse] RTF error: {type(e).__name__}: {e}")
+        return ""
+
+
 def _extract_doc_or_rtf(content: bytes) -> str:
     """
-    Старый формат .doc и .rtf — пробуем извлечь читаемый текст байтным сканом.
-    Это грубо, но даёт ~70% полезного текста при наличии русского контента.
+    Парсит старый .doc (OLE compound) и .rtf.
+
+    .rtf начинается с '{\\rtf' — для него простая разборка.
+    .doc — OLE compound с сигнатурой D0CF11E0. Для него зовём antiword,
+    fallback на байтный скан с валидацией.
     """
-    try:
-        # Пробуем Windows-1251 и UTF-8
-        for encoding in ("cp1251", "utf-8", "latin-1"):
-            try:
-                text = content.decode(encoding, errors="ignore")
-                # Берём только последовательности кириллицы и латиницы
-                words = re.findall(r"[А-Яа-яA-Za-z0-9.,%/\-«»()№\s]{4,}", text)
-                joined = " ".join(words)
-                if len(joined) > 500:  # значимый объём текста
-                    return joined
-            except Exception:
-                continue
-    except Exception as e:
-        print(f"[pdf-parse] DOC/RTF error: {type(e).__name__}: {e}")
+    if not content:
+        return ""
+
+    # RTF — простой текстовый формат с control words
+    if content[:5] in (b"{\\rtf", b"{\\rtf1"):
+        text = _extract_rtf(content)
+        return text if _is_meaningful_text(text) else ""
+
+    # OLE compound (.doc 97-2003) — D0 CF 11 E0 A1 B1 1A E1
+    is_ole = content[:8] == b"\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1"
+
+    if is_ole:
+        text = _extract_doc_via_antiword(content)
+        if _is_meaningful_text(text):
+            return text
+        # antiword не справился или не установлен — не сохраняем мусор
+        return ""
+
+    # Прочий бинарный мусор — пробуем декод и валидируем
+    for encoding in ("cp1251", "utf-8", "latin-1"):
+        try:
+            text = content.decode(encoding, errors="ignore")
+            words = re.findall(r"[А-Яа-яЁёA-Za-z0-9.,%/\-«»()№\s]{4,}", text)
+            joined = " ".join(words)
+            if _is_meaningful_text(joined):
+                return joined
+        except Exception:
+            continue
     return ""
 
 
@@ -167,6 +247,7 @@ def extract_text(content: bytes, file_name: str = "", max_pages: int = 30) -> st
     """
     Извлекает текст из документа любого поддерживаемого формата.
     Определяет формат по расширению + магическим байтам.
+    Возвращает "" если извлечь читаемый текст не удалось.
     """
     if not content or len(content) < 100:
         return ""
@@ -175,13 +256,15 @@ def extract_text(content: bytes, file_name: str = "", max_pages: int = 30) -> st
 
     # PDF — по расширению или магическим байтам
     if ext == ".pdf" or content[:4] == b"%PDF":
-        return _extract_pdf(content, max_pages)
+        text = _extract_pdf(content, max_pages)
+        return text if _is_meaningful_text(text) else ""
 
     # DOCX — это zip с word/document.xml внутри
     if ext == ".docx" or content[:4] == b"PK\x03\x04":
-        return _extract_docx(content)
+        text = _extract_docx(content)
+        return text if _is_meaningful_text(text) else ""
 
-    # DOC/RTF/прочее — пробуем грубое извлечение
+    # DOC/RTF/прочее — внутри уже валидируется
     return _extract_doc_or_rtf(content)
 
 
