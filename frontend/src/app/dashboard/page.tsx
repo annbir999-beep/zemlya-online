@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { api, UserProfile, Alert } from "@/lib/api";
 import { getMe, logout } from "@/lib/auth";
 import TelegramConnect from "@/components/TelegramConnect";
+import CreateAlertModal from "@/components/CreateAlertModal";
 
 const PLAN_LABEL: Record<string, string> = {
   free: "Бесплатный", personal: "Личный", expert: "Эксперт", landlord: "Лендлорд",
@@ -16,6 +17,12 @@ export default function DashboardPage() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [tab, setTab] = useState<"profile" | "alerts" | "history">("profile");
   const [savedLots, setSavedLots] = useState<{ id: number; title: string; start_price?: number; status: string }[]>([]);
+  const [showCreateAlert, setShowCreateAlert] = useState(false);
+
+  const reloadAlerts = () =>
+    api
+      .get<Alert[] | { items: Alert[] }>("/api/alerts")
+      .then((d) => setAlerts(Array.isArray(d) ? d : (d?.items ?? [])));
 
   useEffect(() => {
     getMe().then((u) => {
@@ -104,13 +111,15 @@ export default function DashboardPage() {
             <span style={{ fontSize: 13, color: "var(--text-2)" }}>
               Использовано {alerts.length} из {user.saved_filters_limit}
             </span>
-            <a href="/" className="btn btn-primary btn-sm">+ Создать фильтр</a>
+            <button className="btn btn-primary btn-sm" onClick={() => setShowCreateAlert(true)}>
+              + Создать фильтр
+            </button>
           </div>
 
           {alerts.length === 0 && (
             <div style={{ padding: 32, textAlign: "center", color: "var(--text-3)", background: "var(--surface)", borderRadius: 10, border: "1px solid var(--border)" }}>
               Нет сохранённых фильтров.<br />
-              Настройте поиск на карте и сохраните его — мы пришлём уведомление о новых участках.
+              Нажмите «+ Создать фильтр» — пришлём уведомление о новых участках по вашим критериям.
             </div>
           )}
 
@@ -163,6 +172,17 @@ export default function DashboardPage() {
             </div>
           ))}
         </div>
+      )}
+
+      {showCreateAlert && (
+        <CreateAlertModal
+          hasTelegram={!!user.telegram_id}
+          onClose={() => setShowCreateAlert(false)}
+          onCreated={async () => {
+            setShowCreateAlert(false);
+            await reloadAlerts();
+          }}
+        />
       )}
     </div>
   );
