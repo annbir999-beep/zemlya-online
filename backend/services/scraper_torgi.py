@@ -233,31 +233,34 @@ class TorgiGovScraper:
     async def run(self, by_region: bool = True) -> int:
         """Запускает полный цикл парсинга.
 
-        by_region=True — разбивает запрос по регионам РФ через параметр dynSubjRF
-        (это внутренний ID API torgi.gov, значения 1..89 без ведущего нуля),
-        что обходит ограничение API в 10000 строк.
-        by_region=False — старая логика одним общим запросом.
+        Парсит две категории:
+          catCode=301 — Аренда земельных участков (большой объём, бьём по регионам)
+          catCode=302 — Продажа земельных участков (~100 лотов, одним запросом)
+
+        by_region=True — для 301 разбиваем запрос по регионам РФ через dynSubjRF
+        (значения 1..85), чтобы обойти ограничение API в 10000 строк.
         """
         saved = 0
         try:
+            # 1) Продажа ЗУ — одним общим запросом (объём небольшой, < 10000)
+            saved += await self._scrape_with_filter(cat_code="302")
+
+            # 2) Аренда ЗУ — большой объём, бьём по регионам
             if by_region:
-                # dynSubjRF принимает значения 1..85 (порядковый номер региона
-                # в справочнике API torgi.gov, не совпадает с ОКАТО subjectRFCode).
-                # Значения от 86+ API игнорирует и возвращает все 10000 лотов
-                # — поэтому строго ограничиваем диапазон.
                 for rc in range(1, 86):
-                    cnt = await self._scrape_with_filter(subject_rf_code=str(rc))
+                    cnt = await self._scrape_with_filter(cat_code="301", subject_rf_code=str(rc))
                     saved += cnt
             else:
-                saved = await self._scrape_with_filter()
+                saved += await self._scrape_with_filter(cat_code="301")
         finally:
             await self.client.aclose()
         return saved
 
-    async def _scrape_with_filter(self, subject_rf_code: str = None) -> int:
+    async def _scrape_with_filter(self, cat_code: str = "301", subject_rf_code: str = None) -> int:
         """Парсит все страницы с указанным фильтром (или без).
 
-        subject_rf_code — значение для параметра dynSubjRF (1..89 без ведущего нуля).
+        cat_code — категория торгов (301 = аренда ЗУ, 302 = продажа ЗУ).
+        subject_rf_code — значение для параметра dynSubjRF (1..85).
         """
         saved = 0
         page = 0
@@ -265,7 +268,7 @@ class TorgiGovScraper:
         total_pages = None
 
         while True:
-            lots_data, total_pages_resp = await self._fetch_page(page, size, subject_rf_code)
+            lots_data, total_pages_resp = await self._fetch_page(page, size, cat_code, subject_rf_code)
             if total_pages is None and total_pages_resp is not None:
                 total_pages = total_pages_resp
 
@@ -288,16 +291,17 @@ class TorgiGovScraper:
                 break
             page += 1
 
-        if subject_rf_code and saved > 0:
-            print(f"[torgi] dynSubjRF={subject_rf_code}: {saved} лотов")
+        if saved > 0:
+            tag = f" dynSubjRF={subject_rf_code}" if subject_rf_code else ""
+            print(f"[torgi] catCode={cat_code}{tag}: {saved} лотов")
         return saved
 
-    async def _fetch_page(self, page: int, size: int, subject_rf_code: str = None) -> tuple:
+    async def _fetch_page(self, page: int, size: int, cat_code: str = "301", subject_rf_code: str = None) -> tuple:
         # Новый API принимает lotStatus как Set — передаём списком
         params = [
             ("lotStatus", "PUBLISHED"),
             ("lotStatus", "APPLICATIONS_SUBMISSION"),
-            ("catCode", "301"),
+            ("catCode", cat_code),
             ("byFirstVersion", "true"),
             ("page", page),
             ("size", size),
@@ -313,7 +317,9 @@ class TorgiGovScraper:
             total_pages = data.get("totalPages")
             # Логируем только первую страницу каждого региона/общего запроса
             if page == 0:
-                tag = f" dynSubjRF={subject_rf_code}" if subject_rf_code else ""
+                tag = f" cat={cat_code}"
+                if subject_rf_code:
+                    tag += f" dynSubjRF={subject_rf_code}"
                 print(f"[torgi]{tag} Лотов: {total}, страниц: {total_pages}")
             return data.get("content", []), total_pages
         except Exception as e:
