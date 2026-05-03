@@ -14,6 +14,7 @@ export default function Header() {
   const pathname = usePathname();
   const [user, setUser] = useState<UserProfile | null>(null);
   const compareIds = useCompareIds();
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
     getMe().then(setUser);
@@ -58,6 +59,66 @@ export default function Header() {
           </Link>
         ))}
       </nav>
+
+      {/* Burger — только на мобиле */}
+      <button
+        className="header-burger"
+        onClick={() => setMobileOpen((v) => !v)}
+        aria-label="Меню"
+        style={{
+          display: "none", border: "none", background: "transparent",
+          fontSize: 22, padding: "4px 10px", cursor: "pointer",
+          color: "var(--text-2)",
+        }}
+      >
+        {mobileOpen ? "✕" : "☰"}
+      </button>
+
+      {/* Мобильное меню — выпадает поверх */}
+      {mobileOpen && (
+        <div
+          className="header-mobile-menu"
+          onClick={() => setMobileOpen(false)}
+          style={{
+            position: "fixed", top: 56, left: 0, right: 0, bottom: 0,
+            background: "rgba(0,0,0,0.4)", zIndex: 999,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "var(--surface)", borderTop: "1px solid var(--border)",
+              padding: 16, display: "flex", flexDirection: "column", gap: 4,
+            }}
+          >
+            {nav.map((n) => (
+              <Link
+                key={n.href}
+                href={n.href}
+                onClick={() => setMobileOpen(false)}
+                style={{
+                  padding: "12px 14px", borderRadius: 8,
+                  textDecoration: "none",
+                  color: pathname === n.href ? "var(--primary)" : "var(--text-2)",
+                  fontWeight: pathname === n.href ? 600 : 400,
+                  background: pathname === n.href ? "var(--surface-2)" : "transparent",
+                }}
+              >
+                <span style={{ marginRight: 10 }}>{n.icon}</span>{n.label}
+              </Link>
+            ))}
+            {compareIds.length > 0 && (
+              <Link
+                href={`/compare?ids=${compareIds.join(",")}`}
+                onClick={() => setMobileOpen(false)}
+                style={{ padding: "12px 14px", borderRadius: 8, color: "var(--primary)", textDecoration: "none" }}
+              >
+                ⚖ Сравнение ({compareIds.length})
+              </Link>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="header-actions">
         {compareIds.length > 0 && (

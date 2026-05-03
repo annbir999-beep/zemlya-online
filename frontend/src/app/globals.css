@@ -367,6 +367,26 @@ html, body { overflow-x: hidden; max-width: 100vw; }
   .catalog-panel { width: 100%; }
 }
 
-@media (max-width: 600px) {
-  .header-nav { display: none; }
+@media (max-width: 900px) {
+  .mobile-filters-btn { display: inline-block !important; }
+}
+
+@media (max-width: 768px) {
+  .header-nav { display: none !important; }
+  .header-burger { display: inline-flex !important; }
+  .header-actions .btn { padding: 6px 10px; font-size: 13px; }
+  .header-actions .badge { display: none; }
+  /* Логотип-сабтайтл скрываем на узких экранах */
+  .header-logo > span:last-child > span:last-child { display: none; }
+}
+
+@media (max-width: 480px) {
+  /* Уменьшаем общий padding страниц на маленьких экранах */
+  body { font-size: 14px; }
+  /* Уменьшаем header */
+  .header { padding: 8px 12px !important; gap: 8px !important; }
+  /* Карточки лотов */
+  .lot-card { padding: 12px !important; }
+  /* Tabs в кабинете и страницах */
+  button.btn { font-size: 13px; }
 }

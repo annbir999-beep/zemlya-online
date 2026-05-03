@@ -19,6 +19,7 @@ export default function MapPage() {
   const [mapPoints, setMapPoints] = useState<{ id: number; lat: number; lng: number; price?: number; area?: number; purpose?: string; rubric_tg?: number; pct?: number }[]>([]);
   const [heatmapData, setHeatmapData] = useState<{ code: string; name: string; lat: number; lng: number; count: number; avg_discount_pct?: number | null; avg_score?: number | null; avg_price_per_sqm?: number | null }[]>([]);
   const [mapMode, setMapMode] = useState<"points" | "heatmap">("points");
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [compareIds, setCompareIds] = useState<number[]>([]);
   const [loading, setLoading] = useState(false);
   const [total, setTotal] = useState(0);
@@ -86,7 +87,56 @@ export default function MapPage() {
 
   return (
     <>
-      <FilterSidebar filters={filters} onChange={handleFiltersChange} onReset={handleReset} />
+      <FilterSidebar
+        filters={filters}
+        onChange={handleFiltersChange}
+        onReset={handleReset}
+      />
+
+      {/* Кнопка фильтров на мобильном — sidebar скрыт по media query */}
+      <button
+        className="mobile-filters-btn"
+        onClick={() => setMobileFiltersOpen(true)}
+        style={{
+          position: "fixed", bottom: 16, left: 16, zIndex: 999,
+          padding: "10px 18px", borderRadius: 999,
+          background: "var(--primary)", color: "white",
+          border: "none", boxShadow: "0 4px 12px rgba(0,0,0,.25)",
+          fontWeight: 600, fontSize: 14, cursor: "pointer",
+          display: "none",
+        }}
+      >
+        ⚙ Фильтры
+      </button>
+
+      {mobileFiltersOpen && (
+        <div
+          onClick={() => setMobileFiltersOpen(false)}
+          style={{
+            position: "fixed", inset: 0, background: "rgba(0,0,0,.5)",
+            zIndex: 1000,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              position: "absolute", left: 0, top: 0, bottom: 0,
+              width: "min(85%, 380px)", background: "var(--surface)",
+              boxShadow: "2px 0 16px rgba(0,0,0,.3)",
+            }}
+          >
+            <button
+              onClick={() => setMobileFiltersOpen(false)}
+              style={{
+                position: "absolute", top: 8, right: 8, zIndex: 2,
+                background: "transparent", border: "none", fontSize: 22,
+                cursor: "pointer", color: "var(--text-2)",
+              }}
+            >✕</button>
+            <FilterSidebar filters={filters} onChange={handleFiltersChange} onReset={handleReset} />
+          </div>
+        </div>
+      )}
 
       {/* Карта */}
       <div className="map-container">
