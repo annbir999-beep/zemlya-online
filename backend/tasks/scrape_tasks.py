@@ -335,6 +335,97 @@ async def _enrich_lot_pdfs(batch_size: int):
     await engine.dispose()
 
 
+@celery_app.task(bind=True, max_retries=1, default_retry_delay=600)
+def enrich_organizer_from_notice(self, batch_size: int = 200):
+    """Дёргает noticeSignedData (JSON-извещение) и складывает в Lot:
+    точное название организатора + структурированные контакты.
+    Идёт по лотам с пустым organizer_contacts ИЛИ пустым organizer_name.
+    """
+    try:
+        _run(_enrich_organizer_from_notice(batch_size))
+    except Exception as exc:
+        raise self.retry(exc=exc)
+
+
+async def _enrich_organizer_from_notice(batch_size: int):
+    import asyncio as _asyncio
+    from sqlalchemy import select, or_, and_
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+    from core.config import settings
+    from models.lot import Lot, LotStatus, LotSource
+    from services.scraper_torgi import TorgiGovScraper
+    from services.notice_json import parse_notice_json
+
+    engine = create_async_engine(settings.DATABASE_URL, pool_pre_ping=True, pool_size=5, max_overflow=0)
+    SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
+
+    async with SessionLocal() as db:
+        scraper = TorgiGovScraper(db)
+        try:
+            result = await db.execute(
+                select(Lot)
+                .where(
+                    and_(
+                        Lot.source == LotSource.TORGI_GOV,
+                        Lot.status == LotStatus.ACTIVE,
+                        or_(
+                            Lot.organizer_contacts.is_(None),
+                            Lot.organizer_name.is_(None),
+                            Lot.organizer_name == "",
+                        ),
+                    )
+                )
+                .order_by(Lot.score.desc().nulls_last())
+                .limit(batch_size)
+            )
+            lots = result.scalars().all()
+
+            updated = 0
+            for i, lot in enumerate(lots, 1):
+                # external_id = "torgi_<id>" — отрезаем префикс
+                eid = (lot.external_id or "").removeprefix("torgi_")
+                if not eid:
+                    continue
+                try:
+                    # Детальный запрос — оттуда возьмём fileId
+                    det = await scraper.client.get(
+                        f"https://torgi.gov.ru/new/api/public/lotcards/{eid}"
+                    )
+                    det.raise_for_status()
+                    nsd = (det.json().get("noticeSignedData") or {})
+                    fid = nsd.get("fileId")
+                    if not fid:
+                        continue
+                    fr = await scraper.client.get(
+                        f"https://torgi.gov.ru/new/file-store/v1/{fid}"
+                    )
+                    if fr.status_code != 200:
+                        continue
+                    parsed = parse_notice_json(fr.content)
+                    if not parsed:
+                        continue
+                    name = parsed.get("organizer_name")
+                    contacts = parsed.get("contacts") or {}
+                    if name and not lot.organizer_name:
+                        lot.organizer_name = name[:500]
+                    if contacts:
+                        # Полная замена: JSON надёжнее regex-эвристик из PDF
+                        lot.organizer_contacts = contacts
+                        updated += 1
+                except Exception as e:
+                    print(f"[notice-json] lot={lot.id} error: {type(e).__name__}: {e}")
+
+                if i % 25 == 0:
+                    await db.commit()
+                    print(f"[notice-json] {i}/{len(lots)} обработано, обогащено: {updated}")
+                await _asyncio.sleep(0.4)
+            await db.commit()
+            print(f"[notice-json] Готово. Обогащено: {updated}/{len(lots)}")
+        finally:
+            await scraper.client.aclose()
+    await engine.dispose()
+
+
 @celery_app.task
 def extract_contacts_from_existing(batch_size: int = 500):
     """Одноразовая задача — пройтись по лотам с full_description, но без

@@ -90,6 +90,12 @@ celery_app.conf.update(
             "schedule": crontab(minute=50, hour="*"),
             "args": (100,),
         },
+        # Контакты организатора из подписанного JSON-извещения (раз в час по 200 лотов)
+        "enrich-organizer-from-notice": {
+            "task": "tasks.scrape_tasks.enrich_organizer_from_notice",
+            "schedule": crontab(minute=25, hour="*"),
+            "args": (200,),
+        },
         # Ночной батч-анализ топ-100 лотов через Claude (после всех скрапов и скоринга)
         "ai-batch-analyze": {
             "task": "tasks.ai_batch_tasks.ai_batch_analyze",
