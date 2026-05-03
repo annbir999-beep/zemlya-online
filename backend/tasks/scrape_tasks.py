@@ -362,6 +362,10 @@ async def _enrich_organizer_from_notice(batch_size: int):
     async with SessionLocal() as db:
         scraper = TorgiGovScraper(db)
         try:
+            # JSON-извещение надёжнее regex-эвристик из PDF, поэтому переобогащаем
+            # ВСЕ ACTIVE-лоты, у которых ещё нет ИНН в organizer_contacts
+            # (регекс ИНН не вытаскивает в большинстве случаев — это маркер).
+            from sqlalchemy import text as _text
             result = await db.execute(
                 select(Lot)
                 .where(
@@ -370,6 +374,7 @@ async def _enrich_organizer_from_notice(batch_size: int):
                         Lot.status == LotStatus.ACTIVE,
                         or_(
                             Lot.organizer_contacts.is_(None),
+                            _text("(organizer_contacts->>'inn') IS NULL"),
                             Lot.organizer_name.is_(None),
                             Lot.organizer_name == "",
                         ),
