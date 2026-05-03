@@ -573,8 +573,17 @@ async def lot_pdf_report(lot_id: int, db: AsyncSession = Depends(get_db)):
 
     html = f"""<!DOCTYPE html><html><head><meta charset="utf-8">
 <style>
+@font-face {{
+  font-family: 'DejaVu';
+  src: url('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf');
+}}
+@font-face {{
+  font-family: 'DejaVu';
+  src: url('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf');
+  font-weight: bold;
+}}
 @page {{ size: A4; margin: 1.6cm; }}
-body {{ font-family: Helvetica, Arial, sans-serif; color: #1f2937; font-size: 11pt; line-height: 1.4; }}
+body {{ font-family: 'DejaVu', Arial, sans-serif; color: #1f2937; font-size: 11pt; line-height: 1.4; }}
 .header {{ border-bottom: 3px solid #16a34a; padding-bottom: 10px; margin-bottom: 18px; }}
 .brand {{ font-size: 18pt; font-weight: 700; color: #16a34a; }}
 .brand-sub {{ font-size: 9pt; color: #6b7280; letter-spacing: 0.05em; text-transform: uppercase; }}
