@@ -424,6 +424,28 @@ export default function LotDetailPage({ params }: { params: Promise<{ id: string
             {/* Калькулятор окупаемости — каркасный дом */}
             <RoiCalculator lotId={Number(id)} />
 
+            {/* Баннер снижения цены */}
+            {(() => {
+              const lp = lot as unknown as { last_price_drop_pct?: number; last_price_drop_at?: string };
+              if (!lp.last_price_drop_pct || lp.last_price_drop_pct < 5) return null;
+              const dropDate = lp.last_price_drop_at ? new Date(lp.last_price_drop_at) : null;
+              const daysAgo = dropDate ? Math.floor((Date.now() - dropDate.getTime()) / 86400000) : null;
+              return (
+                <div style={{
+                  background: "linear-gradient(135deg, #dc2626, #ea580c)",
+                  color: "white", borderRadius: 12, padding: 16,
+                }}>
+                  <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>
+                    📉 Цена снижена на {Math.round(lp.last_price_drop_pct)}%
+                  </div>
+                  <div style={{ fontSize: 13, opacity: 0.9 }}>
+                    {daysAgo === 0 ? "Сегодня" : daysAgo === 1 ? "Вчера" : `${daysAgo} дн. назад`}.
+                    Это повторные торги — шанс взять дешевле обычной начальной цены.
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* История похожих лотов */}
             <SimilarHistoryCard lotId={Number(id)} />
 

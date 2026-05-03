@@ -14,6 +14,7 @@ const BADGE_LABELS: Record<string, { emoji: string; label: string; color: string
   garden:       { emoji: "🌱", label: "ВРИ Огород", color: "#15803d", bg: "#dcfce7" },
   water:        { emoji: "🌊", label: "У воды", color: "#0284c7", bg: "#e0f2fe" },
   forest:       { emoji: "🌲", label: "У леса", color: "#047857", bg: "#d1fae5" },
+  price_drop:   { emoji: "📉", label: "Цена снижена", color: "#dc2626", bg: "#fee2e2" },
 };
 
 function scoreColor(score: number): string {

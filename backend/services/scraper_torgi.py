@@ -431,6 +431,23 @@ class TorgiGovScraper:
         if lot is None:
             lot = Lot(external_id=external_id, source=LotSource.TORGI_GOV)
 
+        # Детект изменения начальной цены (повторные торги с понижением)
+        from datetime import datetime, timezone
+        old_price = lot.start_price
+        if start_price and old_price and abs(start_price - old_price) > 1:
+            history = list(lot.price_history or [])
+            now_iso = datetime.now(timezone.utc).isoformat()
+            # Записываем новую цену; если history пуст — добавляем и старую
+            if not history:
+                history.append({"date": now_iso, "price": float(old_price)})
+            history.append({"date": now_iso, "price": float(start_price)})
+            lot.price_history = history[-20:]  # храним последние 20 точек
+            if start_price < old_price:
+                drop_pct = round((old_price - start_price) / old_price * 100, 1)
+                if drop_pct >= 5:  # значимое снижение
+                    lot.last_price_drop_at = datetime.now(timezone.utc)
+                    lot.last_price_drop_pct = drop_pct
+
         lot.title = (raw.get("lotName") or raw.get("subject", {}).get("name", ""))[:500]
         lot.description = raw.get("lotDescription", "")
         cadastral_raw = get_char(["CadastralNumber", "CADASTRAL_NUM", "ZU_CADASTRAL"])

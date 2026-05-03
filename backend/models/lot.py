@@ -178,6 +178,11 @@ class Lot(Base):
     # Контакты организатора (отдел земельных отношений) из извещения PDF.
     # {phones:[...], emails:[...], inn, kpp, ogrn, contact_person, address}
     organizer_contacts = Column(JSON)
+    # История изменения начальной цены: [{date: ISO, price: float}, ...]
+    # Новая запись добавляется только когда start_price реально меняется.
+    price_history = Column(JSON)
+    last_price_drop_at = Column(DateTime(timezone=True), index=True)
+    last_price_drop_pct = Column(Float)
 
     # ── Текст из PDF-документов лота (Извещение/ТУ/договор) ──
     full_description = Column(Text)                        # Извещение — полный текст

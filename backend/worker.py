@@ -15,7 +15,7 @@ celery_app = Celery(
     "sotka",
     broker=settings.REDIS_URL,
     backend=settings.REDIS_URL,
-    include=["tasks.scrape_tasks", "tasks.alert_tasks", "tasks.ai_batch_tasks", "tasks.digest_tasks"],
+    include=["tasks.scrape_tasks", "tasks.alert_tasks", "tasks.ai_batch_tasks", "tasks.digest_tasks", "tasks.price_drop_tasks"],
 )
 
 celery_app.conf.update(
@@ -105,6 +105,11 @@ celery_app.conf.update(
         "weekly-digest": {
             "task": "tasks.digest_tasks.send_weekly_digest",
             "schedule": crontab(minute=0, hour=10, day_of_week=0),
+        },
+        # Уведомление о снижении цены — каждые 30 мин (со сдвигом от check_alerts)
+        "notify-price-drops": {
+            "task": "tasks.price_drop_tasks.notify_price_drops",
+            "schedule": crontab(minute="5,35"),
         },
     },
 )

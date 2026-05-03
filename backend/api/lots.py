@@ -66,6 +66,9 @@ class LotListItem(BaseModel):
     nearest_city_distance_km: Optional[float] = None
     nearest_city_population: Optional[int] = None
     communications: Optional[dict] = None
+    # Снижение цены (повторные торги)
+    last_price_drop_pct: Optional[float] = None
+    last_price_drop_at: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -375,6 +378,8 @@ def _lot_to_item(lot: Lot) -> LotListItem:
         nearest_city_distance_km=lot.nearest_city_distance_km,
         nearest_city_population=lot.nearest_city_population,
         communications=lot.communications if isinstance(lot.communications, dict) else None,
+        last_price_drop_pct=lot.last_price_drop_pct,
+        last_price_drop_at=lot.last_price_drop_at.isoformat() if lot.last_price_drop_at else None,
     )
 
 
