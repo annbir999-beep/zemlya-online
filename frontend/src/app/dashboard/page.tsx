@@ -15,8 +15,9 @@ export default function DashboardPage() {
   const router = useRouter();
   const [user, setUser] = useState<UserProfile | null>(null);
   const [alerts, setAlerts] = useState<Alert[]>([]);
-  const [tab, setTab] = useState<"profile" | "alerts" | "history">("profile");
+  const [tab, setTab] = useState<"profile" | "alerts" | "history" | "views">("profile");
   const [savedLots, setSavedLots] = useState<{ id: number; title: string; start_price?: number; status: string }[]>([]);
+  const [views, setViews] = useState<{ id: number; title: string; region_name?: string; start_price?: number; area_sqm?: number; status?: string; score?: number; viewed_at?: string }[]>([]);
   const [showCreateAlert, setShowCreateAlert] = useState(false);
 
   const reloadAlerts = () =>
@@ -31,6 +32,7 @@ export default function DashboardPage() {
     });
     api.get<Alert[] | { items: Alert[] }>("/api/alerts").then((d) => setAlerts(Array.isArray(d) ? d : (d?.items ?? [])));
     api.get<typeof savedLots | { items: typeof savedLots }>("/api/users/saved-lots").then((d) => setSavedLots(Array.isArray(d) ? d : (d?.items ?? [])));
+    api.get<{ items: typeof views }>("/api/users/views").then((d) => setViews(d?.items ?? []));
   }, [router]);
 
   const toggleAlert = async (id: number) => {
@@ -55,7 +57,7 @@ export default function DashboardPage() {
 
       {/* Tabs */}
       <div style={{ display: "flex", gap: 4, borderBottom: "1px solid var(--border)", marginBottom: 24 }}>
-        {(["profile", "alerts", "history"] as const).map((t) => (
+        {(["profile", "alerts", "history", "views"] as const).map((t) => (
           <button
             key={t}
             className="btn btn-ghost"
@@ -67,7 +69,7 @@ export default function DashboardPage() {
             }}
             onClick={() => setTab(t)}
           >
-            {{ profile: "Профиль", alerts: `Фильтры (${alerts.length})`, history: "Избранное" }[t]}
+            {{ profile: "Профиль", alerts: `Фильтры (${alerts.length})`, history: `Избранное (${savedLots.length})`, views: `История (${views.length})` }[t]}
           </button>
         ))}
       </div>
@@ -170,6 +172,52 @@ export default function DashboardPage() {
               </div>
               <a href={`/lots/${lot.id}`} className="btn btn-secondary btn-sm">Открыть</a>
             </div>
+          ))}
+        </div>
+      )}
+
+      {/* Views history tab */}
+      {tab === "views" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {views.length === 0 && (
+            <div style={{ padding: 32, textAlign: "center", color: "var(--text-3)", background: "var(--surface)", borderRadius: 10, border: "1px solid var(--border)" }}>
+              Здесь появятся участки, которые вы просматриваете.
+            </div>
+          )}
+          {views.map((lot) => (
+            <a
+              key={lot.id}
+              href={`/lots/${lot.id}`}
+              style={{
+                background: "var(--surface)", border: "1px solid var(--border)",
+                borderRadius: 10, padding: 14, textDecoration: "none", color: "inherit",
+                display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap",
+              }}
+            >
+              {lot.score != null && (
+                <span className="badge" style={{
+                  background: "linear-gradient(135deg, var(--primary), #0d9488)",
+                  color: "white", fontWeight: 700,
+                }}>
+                  {lot.score}
+                </span>
+              )}
+              <div style={{ flex: 1, minWidth: 180 }}>
+                <div style={{ fontWeight: 500, fontSize: 14, marginBottom: 2 }}>
+                  {lot.title || `Лот #${lot.id}`}
+                </div>
+                <div style={{ fontSize: 12, color: "var(--text-3)" }}>
+                  {lot.region_name && <span>{lot.region_name}</span>}
+                  {lot.start_price && <span>  ·  {lot.start_price.toLocaleString("ru")} ₽</span>}
+                  {lot.area_sqm && <span>  ·  {lot.area_sqm.toLocaleString("ru")} м²</span>}
+                </div>
+              </div>
+              {lot.viewed_at && (
+                <span style={{ fontSize: 11, color: "var(--text-3)", flexShrink: 0 }}>
+                  {new Date(lot.viewed_at).toLocaleString("ru", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                </span>
+              )}
+            </a>
           ))}
         </div>
       )}

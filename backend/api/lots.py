@@ -516,6 +516,92 @@ async def get_lots(
     )
 
 
+@router.get("/export")
+async def export_lots_csv(
+    # Используем ту же фильтрацию что и /api/lots — пробрасываем те же параметры
+    status: Optional[str] = Query(None),
+    region: Optional[List[str]] = Query(None, alias="region"),
+    score_min: Optional[int] = Query(None),
+    discount_min: Optional[float] = Query(None),
+    liquidity: Optional[str] = Query(None, pattern="^(high|medium|low)$"),
+    price_min: Optional[float] = Query(None),
+    price_max: Optional[float] = Query(None),
+    area_min: Optional[float] = Query(None),
+    area_max: Optional[float] = Query(None),
+    purpose: Optional[List[str]] = Query(None, alias="purpose"),
+    auction_type: Optional[List[str]] = Query(None, alias="auction_type"),
+    source: Optional[List[str]] = Query(None, alias="source"),
+    db: AsyncSession = Depends(get_db),
+    limit: int = Query(2000, le=5000),
+):
+    """Экспорт списка лотов в CSV (UTF-8 BOM для Excel)."""
+    import csv
+    import io
+    from fastapi.responses import StreamingResponse
+
+    conditions = build_filters(
+        status=status, region_codes=region,
+        score_min=score_min, discount_min=discount_min, liquidity=liquidity,
+        price_min=price_min, price_max=price_max,
+        area_min=area_min, area_max=area_max,
+        land_purposes=purpose, auction_types=auction_type,
+        sources=source if source else ["torgi_gov"],
+    )
+    q = (
+        select(Lot)
+        .where(and_(*conditions))
+        .order_by(Lot.score.desc().nulls_last())
+        .limit(limit)
+    )
+    lots = (await db.execute(q)).scalars().all()
+
+    headers = [
+        "ID", "Название", "Регион", "Адрес", "Кадастровый номер",
+        "Назначение", "Тип торгов", "Площадь (м²)", "Цена (₽)",
+        "Кадастровая стоимость (₽)", "% НЦ/КС", "Дисконт к рынку (%)",
+        "Score", "Срок подачи", "Ссылка",
+    ]
+
+    purpose_label = {
+        "izhs": "ИЖС", "lpkh": "ЛПХ", "snt": "СНТ/Дача",
+        "agricultural": "Сельхоз", "commercial": "Коммерческое",
+        "industrial": "Промышленное", "forest": "Лесной фонд",
+        "water": "Водный фонд", "special": "Спец. назначения", "other": "Иное",
+    }
+    auction_label = {"sale": "Продажа", "rent": "Аренда", "priv": "Приватизация"}
+
+    buf = io.StringIO()
+    buf.write("﻿")  # BOM для Excel
+    w = csv.writer(buf, delimiter=";", quoting=csv.QUOTE_MINIMAL)
+    w.writerow(headers)
+    for l in lots:
+        w.writerow([
+            l.id,
+            (l.title or "")[:200],
+            l.region_name or "",
+            l.address or "",
+            l.cadastral_number or "",
+            purpose_label.get(l.land_purpose.value if l.land_purpose else "", ""),
+            auction_label.get(l.auction_type.value if l.auction_type else "", ""),
+            f"{l.area_sqm:.0f}" if l.area_sqm else "",
+            f"{l.start_price:.0f}" if l.start_price else "",
+            f"{l.cadastral_cost:.0f}" if l.cadastral_cost else "",
+            f"{l.pct_price_to_cadastral:.1f}" if l.pct_price_to_cadastral is not None else "",
+            f"{l.discount_to_market_pct:.1f}" if l.discount_to_market_pct is not None else "",
+            l.score if l.score is not None else "",
+            l.submission_end.strftime("%d.%m.%Y %H:%M") if l.submission_end else "",
+            l.lot_url or "",
+        ])
+
+    buf.seek(0)
+    filename = f"zemlya-online-lots-{len(lots)}.csv"
+    return StreamingResponse(
+        iter([buf.getvalue()]),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @router.get("/analytics")
 async def get_analytics(db: AsyncSession = Depends(get_db)):
     """Сводная аналитика рынка для публичной страницы /analytics.

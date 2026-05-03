@@ -101,6 +101,13 @@ export default function CatalogPage() {
               Сравнить {compareIds.length} →
             </a>
           )}
+          <a
+            href={`${process.env.NEXT_PUBLIC_API_URL ?? ""}/api/lots/export?${filtersToQueryString({ ...filters })}`}
+            className="btn btn-secondary btn-sm"
+            title="Скачать текущий список в CSV (открывается в Excel)"
+          >
+            📥 Excel
+          </a>
         </div>
 
         {/* Table */}

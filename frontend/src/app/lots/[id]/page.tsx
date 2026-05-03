@@ -241,6 +241,8 @@ export default function LotDetailPage({ params }: { params: Promise<{ id: string
     ]).then(([l, u]) => {
       setLot(l);
       setUser(u);
+      // Логируем просмотр для авторизованных (бэк сам дедуплицирует за 60 мин)
+      if (u) api.post(`/api/users/views/${id}`, {}).catch(() => {});
       api.get<MarketLot[]>(`/api/lots/${id}/market`).then(setMarket).catch(() => {});
       // Региональные особенности — выкуп / стройка КФХ / перераспределение
       const regionCode = (l as { region_code?: string }).region_code || "";

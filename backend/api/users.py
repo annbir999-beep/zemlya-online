@@ -213,3 +213,61 @@ async def unsave_lot(lot_id: int, user: User = Depends(get_current_user), db: As
         await db.delete(saved)
         await db.commit()
     return {"status": "removed"}
+
+
+@router.post("/views/{lot_id}")
+async def record_view(lot_id: int, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Записывает просмотр лота. Дедуп: не более одной записи за 60 минут."""
+    from models.user import LotView
+    from datetime import datetime, timezone, timedelta
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=60)
+    recent = await db.execute(
+        select(LotView)
+        .where(LotView.user_id == user.id, LotView.lot_id == lot_id, LotView.viewed_at >= cutoff)
+        .order_by(LotView.viewed_at.desc())
+        .limit(1)
+    )
+    if recent.scalar_one_or_none():
+        return {"status": "deduped"}
+    db.add(LotView(user_id=user.id, lot_id=lot_id))
+    await db.commit()
+    return {"status": "recorded"}
+
+
+@router.get("/views")
+async def get_view_history(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Последние 50 уникальных лотов, отсортированных по последнему просмотру."""
+    from models.user import LotView
+    from models.lot import Lot
+    from sqlalchemy import func as _func, desc
+
+    # Берём максимальный viewed_at для каждого lot_id, сортируем по нему
+    subq = (
+        select(LotView.lot_id, _func.max(LotView.viewed_at).label("last_view"))
+        .where(LotView.user_id == user.id)
+        .group_by(LotView.lot_id)
+        .order_by(desc("last_view"))
+        .limit(50)
+        .subquery()
+    )
+    q = (
+        select(Lot, subq.c.last_view)
+        .join(subq, Lot.id == subq.c.lot_id)
+        .order_by(desc(subq.c.last_view))
+    )
+    rows = (await db.execute(q)).all()
+    return {
+        "items": [
+            {
+                "id": l.id,
+                "title": l.title,
+                "start_price": l.start_price,
+                "area_sqm": l.area_sqm,
+                "region_name": l.region_name,
+                "status": l.status.value if l.status else None,
+                "score": l.score,
+                "viewed_at": last_view.isoformat() if last_view else None,
+            }
+            for l, last_view in rows
+        ]
+    }
