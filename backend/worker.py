@@ -83,6 +83,13 @@ celery_app.conf.update(
             "task": "tasks.scrape_tasks.scrape_domclick",
             "schedule": crontab(minute=0, hour=5),
         },
+        # Обогащение лотов природными/инфраструктурными объектами из OSM
+        # (по 100 лотов раз в час — Overpass лимит ~10k/день, успеваем все за пару дней)
+        "enrich-nearby-features": {
+            "task": "tasks.scrape_tasks.enrich_nearby_features",
+            "schedule": crontab(minute=50, hour="*"),
+            "args": (100,),
+        },
         # Ночной батч-анализ топ-100 лотов через Claude (после всех скрапов и скоринга)
         "ai-batch-analyze": {
             "task": "tasks.ai_batch_tasks.ai_batch_analyze",

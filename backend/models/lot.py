@@ -170,6 +170,11 @@ class Lot(Base):
     nearest_city_distance_km = Column(Float, index=True)   # Расстояние, км
     nearest_city_population = Column(Integer)              # Население ближайшего города
     communications = Column(JSON)                          # {electricity:T, gas:T, water:F, road:"asphalt", ...}
+    # Природные/инфраструктурные объекты рядом — из OSM Overpass API.
+    # Структура: {water:{name,kind,distance_m}, forest:{distance_m}, highway:{ref,kind,distance_m},
+    #             settlement:{name,kind,distance_m}, railway:{name,distance_m}}
+    nearby_features = Column(JSON)
+    nearby_features_at = Column(DateTime(timezone=True))    # Когда обогащали (для повторного прогона)
 
     # ── Текст из PDF-документов лота (Извещение/ТУ/договор) ──
     full_description = Column(Text)                        # Извещение — полный текст

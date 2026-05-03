@@ -226,6 +226,42 @@ def compute_score_and_badges(lot: Lot, market_psqm: Optional[float]) -> tuple[in
     if lot.communications:
         score += communications_score_bonus(lot.communications)
 
+    # ── 11.5. Природные/инфраструктурные объекты рядом (max +12) ──
+    if lot.nearby_features:
+        nf = lot.nearby_features
+        # Водоём (приоритет: озеро/пруд/река ≤500м = +5; ≤1500м = +3; ≤3000м = +1)
+        w = nf.get("water")
+        if w:
+            d = w.get("distance_m", 99999)
+            if d <= 500:
+                score += 5
+                badges.append("water")
+            elif d <= 1500:
+                score += 3
+                badges.append("water")
+            elif d <= 3000:
+                score += 1
+        # Лес (≤500м = +3; ≤1500м = +2; ≤3000м = +1)
+        f = nf.get("forest")
+        if f:
+            d = f.get("distance_m", 99999)
+            if d <= 500:
+                score += 3
+                badges.append("forest")
+            elif d <= 1500:
+                score += 2
+                badges.append("forest")
+            elif d <= 3000:
+                score += 1
+        # Магистраль рядом (≤2000м = +2)
+        h = nf.get("highway")
+        if h and h.get("distance_m", 99999) <= 2000:
+            score += 2
+        # Ж/д станция ≤3км — большой плюс для дачи (+2)
+        r = nf.get("railway")
+        if r and r.get("distance_m", 99999) <= 3000:
+            score += 2
+
     # ── 12. Финальный bound + горячий бейдж ──
     score = max(0, min(100, score))
     if score >= 80:

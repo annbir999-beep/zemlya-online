@@ -327,6 +327,70 @@ async def _enrich_lot_pdfs(batch_size: int):
     await engine.dispose()
 
 
+@celery_app.task(bind=True, max_retries=1, default_retry_delay=600)
+def enrich_nearby_features(self, batch_size: int = 100):
+    """Обогащает лоты данными из OSM Overpass API: водоёмы / лес / трассы / н.п. / ж/д."""
+    try:
+        _run(_enrich_nearby_features(batch_size))
+    except Exception as exc:
+        raise self.retry(exc=exc)
+
+
+async def _enrich_nearby_features(batch_size: int):
+    """Берёт лоты с координатами и без nearby_features (или старше 30 дней),
+    дёргает OSM Overpass и сохраняет признаки + расстояния.
+    """
+    import asyncio as _asyncio
+    from datetime import datetime, timezone, timedelta
+    from sqlalchemy import select, or_, and_
+    from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+    from core.config import settings
+    from models.lot import Lot, LotStatus
+    from services.osm_features import fetch_nearby_features
+
+    engine = create_async_engine(settings.DATABASE_URL, pool_pre_ping=True, pool_size=5, max_overflow=0)
+    SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+
+    async with SessionLocal() as db:
+        result = await db.execute(
+            select(Lot)
+            .where(
+                and_(
+                    Lot.status == LotStatus.ACTIVE,
+                    Lot.lat.isnot(None),
+                    Lot.lng.isnot(None),
+                    or_(Lot.nearby_features_at.is_(None), Lot.nearby_features_at < cutoff),
+                )
+            )
+            .order_by(Lot.score.desc().nulls_last())
+            .limit(batch_size)
+        )
+        lots = result.scalars().all()
+
+        updated = 0
+        for i, lot in enumerate(lots, 1):
+            try:
+                features = await fetch_nearby_features(lot.lat, lot.lng)
+                lot.nearby_features = features or {}
+                lot.nearby_features_at = datetime.now(timezone.utc)
+                if features:
+                    updated += 1
+                if i % 20 == 0:
+                    await db.commit()
+                    print(f"[nearby] {i}/{len(lots)} обработано, найдено: {updated}")
+            except Exception as e:
+                print(f"[nearby] lot={lot.id} error: {type(e).__name__}: {e}")
+            # Уважаем лимит Overpass — пауза между запросами
+            await _asyncio.sleep(2.5)
+
+        await db.commit()
+        print(f"[nearby] Готово. Обогащено: {updated}/{len(lots)}")
+
+    await engine.dispose()
+
+
 async def _update_geo_comms():
     from sqlalchemy import select
     from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker

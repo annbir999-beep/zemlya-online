@@ -8,6 +8,7 @@ import { RegionInfo, RegionData } from "@/components/RegionInfo";
 import { ScoreCircle, ScoreBadges, DiscountTag } from "@/components/ScoreBadge";
 import { LocationCard, CommsCard, SimilarHistoryCard } from "@/components/LocationComms";
 import { ContractTerms, FullDescription } from "@/components/ContractTerms";
+import NearbyFeaturesCard, { type NearbyFeatures } from "@/components/NearbyFeatures";
 import { compare } from "@/lib/compare";
 import { useCompareIds } from "@/lib/useCompare";
 
@@ -408,6 +409,9 @@ export default function LotDetailPage({ params }: { params: Promise<{ id: string
 
             {/* Коммуникации */}
             <CommsCard comms={lot.communications} />
+
+            {/* Что рядом — водоёмы, лес, трассы, ж/д (из OSM) */}
+            <NearbyFeaturesCard data={(lot as unknown as { nearby_features?: NearbyFeatures }).nearby_features} />
 
             {/* История похожих лотов */}
             <SimilarHistoryCard lotId={Number(id)} />
