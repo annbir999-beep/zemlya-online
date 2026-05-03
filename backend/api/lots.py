@@ -4,7 +4,7 @@ from sqlalchemy import select, and_, or_, func, case
 from geoalchemy2.functions import ST_DWithin, ST_MakePoint, ST_SetSRID
 from typing import Optional, List
 from pydantic import BaseModel
-from datetime import date
+from datetime import date, datetime, timezone
 import math
 
 from db.database import get_db
@@ -520,6 +520,155 @@ async def get_lots(
         total=total,
         page=page,
         pages=math.ceil(total / per_page) if total else 0,
+    )
+
+
+@router.get("/{lot_id}/report.pdf")
+async def lot_pdf_report(lot_id: int, db: AsyncSession = Depends(get_db)):
+    """PDF-отчёт по лоту: ключевые KPI + ИИ-вердикт + контакты + что рядом."""
+    from io import BytesIO
+    from fastapi.responses import StreamingResponse
+    from xhtml2pdf import pisa
+
+    result = await db.execute(select(Lot).where(Lot.id == lot_id))
+    lot = result.scalar_one_or_none()
+    if not lot:
+        raise HTTPException(status_code=404, detail="Лот не найден")
+
+    def fmt_p(v):
+        if not v: return "—"
+        if v >= 1_000_000: return f"{v/1_000_000:.2f} млн ₽"
+        if v >= 1_000: return f"{v/1_000:.0f} тыс. ₽"
+        return f"{int(v)} ₽"
+
+    def fmt_a(v):
+        if not v: return "—"
+        if v >= 10_000: return f"{v/10_000:.2f} га"
+        return f"{int(v):,} м²".replace(",", " ")
+
+    contacts = lot.organizer_contacts or {}
+    phones = "<br/>".join(contacts.get("phones", []) or []) or "—"
+    emails = "<br/>".join(contacts.get("emails", []) or []) or "—"
+    nearby = lot.nearby_features or {}
+    nearby_lines = []
+    if nearby.get("water"):
+        w = nearby["water"]
+        nearby_lines.append(f"🌊 {w.get('name', 'Водоём')} — {int(w.get('distance_m', 0))} м")
+    if nearby.get("forest"):
+        nearby_lines.append(f"🌲 Лес — {int(nearby['forest']['distance_m'])} м")
+    if nearby.get("settlement"):
+        s = nearby["settlement"]
+        nearby_lines.append(f"🏘 {s.get('name', 'Посёлок')} — {int(s.get('distance_m', 0))} м")
+    nearby_html = "<br/>".join(nearby_lines) or "—"
+
+    ai = lot.ai_assessment or {}
+    ai_summary = ai.get("summary", "") if isinstance(ai, dict) else ""
+    ai_strategy = ai.get("best_strategy", "") if isinstance(ai, dict) else ""
+    ai_score = ai.get("score") if isinstance(ai, dict) else None
+    pros = ai.get("pros", []) if isinstance(ai, dict) else []
+    cons = ai.get("cons", []) if isinstance(ai, dict) else []
+
+    SITE = "https://xn--e1adnd0h.online"
+    title = (lot.title or "Земельный участок")[:200]
+
+    html = f"""<!DOCTYPE html><html><head><meta charset="utf-8">
+<style>
+@page {{ size: A4; margin: 1.6cm; }}
+body {{ font-family: Helvetica, Arial, sans-serif; color: #1f2937; font-size: 11pt; line-height: 1.4; }}
+.header {{ border-bottom: 3px solid #16a34a; padding-bottom: 10px; margin-bottom: 18px; }}
+.brand {{ font-size: 18pt; font-weight: 700; color: #16a34a; }}
+.brand-sub {{ font-size: 9pt; color: #6b7280; letter-spacing: 0.05em; text-transform: uppercase; }}
+h1 {{ font-size: 14pt; margin: 0 0 6px; }}
+.meta {{ color: #6b7280; font-size: 10pt; margin-bottom: 16px; }}
+.kpi {{ background: #f3f4f6; border-radius: 6px; padding: 12px; margin-bottom: 14px; }}
+.kpi-row {{ display: table; width: 100%; }}
+.kpi-cell {{ display: table-cell; width: 50%; padding: 4px 8px; }}
+.kpi-cell b {{ font-size: 14pt; color: #16a34a; }}
+.kpi-cell .label {{ font-size: 9pt; color: #6b7280; }}
+.section {{ margin-top: 16px; }}
+.section h2 {{ font-size: 12pt; color: #1f2937; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; }}
+.section .row {{ margin: 4px 0; }}
+.section .label {{ color: #6b7280; display: inline-block; min-width: 130px; }}
+.score-box {{ display: inline-block; background: #dc2626; color: #fff; font-weight: 700;
+              padding: 4px 12px; border-radius: 20px; font-size: 12pt; }}
+.ai-box {{ background: #eff6ff; border-left: 4px solid #2563eb; padding: 10px 14px; border-radius: 4px; }}
+.pros li {{ color: #16a34a; }}
+.cons li {{ color: #dc2626; }}
+.footer {{ margin-top: 24px; padding-top: 10px; border-top: 1px solid #e5e7eb;
+           font-size: 9pt; color: #6b7280; text-align: center; }}
+</style></head><body>
+
+<div class="header">
+  <div class="brand">земля.online</div>
+  <div class="brand-sub">аукционы земли РФ — отчёт по лоту</div>
+</div>
+
+<h1>{title}</h1>
+<div class="meta">
+  Кадастровый номер: <b>{lot.cadastral_number or "—"}</b><br/>
+  {lot.region_name or ""}{(" · " + lot.address) if lot.address else ""}
+</div>
+
+<div class="kpi">
+  <div class="kpi-row">
+    <div class="kpi-cell"><div class="label">Стартовая цена</div><b>{fmt_p(lot.start_price)}</b></div>
+    <div class="kpi-cell"><div class="label">Площадь</div><b>{fmt_a(lot.area_sqm)}</b></div>
+  </div>
+  <div class="kpi-row">
+    <div class="kpi-cell"><div class="label">Кадастровая стоимость</div>{fmt_p(lot.cadastral_cost)}</div>
+    <div class="kpi-cell"><div class="label">% НЦ от КС</div>{lot.pct_price_to_cadastral:.1f}%{"" if lot.pct_price_to_cadastral else ""}</div>
+  </div>
+  <div class="kpi-row">
+    <div class="kpi-cell"><div class="label">Дисконт к рынку</div>{f"{int(lot.discount_to_market_pct)}%" if lot.discount_to_market_pct else "—"}</div>
+    <div class="kpi-cell"><div class="label">Скор</div><span class="score-box">{lot.score or 0}</span></div>
+  </div>
+</div>
+
+{f'<div class="section"><h2>🤖 ИИ-анализ</h2>' if ai_summary else ''}
+{f'<div class="ai-box"><b>Стратегия:</b> {ai_strategy}<br/><br/>{ai_summary}</div>' if ai_summary else ''}
+{f'<p><b>Плюсы:</b><ul class="pros">{"".join(f"<li>{p}</li>" for p in pros[:5])}</ul></p>' if pros else ''}
+{f'<p><b>Риски:</b><ul class="cons">{"".join(f"<li>{c}</li>" for c in cons[:5])}</ul></p>' if cons else ''}
+{f'</div>' if ai_summary else ''}
+
+<div class="section">
+  <h2>📋 Условия торгов</h2>
+  <div class="row"><span class="label">Тип:</span> {lot.auction_type.value if lot.auction_type else "—"}</div>
+  <div class="row"><span class="label">Срок подачи заявок:</span> {lot.submission_end.strftime("%d.%m.%Y %H:%M") if lot.submission_end else "—"}</div>
+  <div class="row"><span class="label">Задаток:</span> {fmt_p(lot.deposit)}</div>
+  <div class="row"><span class="label">Категория земель:</span> {lot.category_tg or "—"}</div>
+  <div class="row"><span class="label">ВРИ:</span> {(lot.vri_tg or "")[:200]}</div>
+</div>
+
+<div class="section">
+  <h2>🌳 Что рядом</h2>
+  <div class="row">{nearby_html}</div>
+</div>
+
+<div class="section">
+  <h2>🏛 Контакты администрации</h2>
+  <div class="row"><b>{lot.organizer_name or "—"}</b></div>
+  <div class="row"><span class="label">Телефон:</span> {phones}</div>
+  <div class="row"><span class="label">Email:</span> {emails}</div>
+  {f'<div class="row"><span class="label">Ответственный:</span> {contacts.get("contact_person", "")}</div>' if contacts.get("contact_person") else ""}
+  {f'<div class="row"><span class="label">ИНН:</span> {contacts.get("inn", "")}</div>' if contacts.get("inn") else ""}
+  {f'<div class="row"><span class="label">Адрес:</span> {contacts.get("address", "")}</div>' if contacts.get("address") else ""}
+</div>
+
+<div class="footer">
+  Открыть лот онлайн: {SITE}/lots/{lot.id}<br/>
+  Отчёт сгенерирован {datetime.now(timezone.utc).strftime("%d.%m.%Y")} — данные могут устареть, перепроверьте перед сделкой.
+</div>
+
+</body></html>"""
+
+    buf = BytesIO()
+    pisa.CreatePDF(html, dest=buf, encoding="utf-8")
+    buf.seek(0)
+    filename = f"lot-{lot_id}-zemlya-online.pdf"
+    return StreamingResponse(
+        buf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 

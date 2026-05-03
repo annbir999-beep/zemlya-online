@@ -304,6 +304,13 @@ export default function LotDetailPage({ params }: { params: Promise<{ id: string
             <ScoreBadges badges={lot.score_badges} max={6} />
           </div>
           <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+            <a
+              href={`${process.env.NEXT_PUBLIC_API_URL ?? ""}/api/lots/${id}/report.pdf`}
+              className="btn btn-sm btn-secondary"
+              title="Скачать отчёт по лоту в PDF"
+            >
+              📄 PDF
+            </a>
             <button className={`btn btn-sm ${saved ? "btn-primary" : "btn-secondary"}`} onClick={toggleSave}>
               {saved ? "★ В избранном" : "☆ В избранное"}
             </button>
