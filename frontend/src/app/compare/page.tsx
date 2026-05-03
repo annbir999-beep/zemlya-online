@@ -80,6 +80,27 @@ const RESALE_LABEL: Record<string, string> = {
 const DISCREPANCY_LABEL: Record<string, string> = {
   match: "Совпадает", minor: "< 10%", major: "> 10%", no_kn: "Нет данных",
 };
+const AUCTION_TYPE_LABEL: Record<string, string> = {
+  sale: "Продажа", rent: "Аренда", priv: "Приватизация",
+};
+const AUCTION_FORM_LABEL: Record<string, string> = {
+  auction: "Электронный аукцион",
+  tender: "Конкурс",
+  public: "Публичное предложение",
+  without: "Без торгов",
+};
+const DEAL_TYPE_LABEL: Record<string, string> = {
+  ownership: "В собственность",
+  lease: "В аренду",
+  free_use: "В безвозмездное пользование",
+  operational: "В оперативное управление",
+};
+const SOURCE_LABEL: Record<string, string> = {
+  torgi_gov: "torgi.gov.ru",
+  avito: "Авито",
+  cian: "ЦИАН",
+  domclick: "Домклик",
+};
 
 // ─── Row definition ───────────────────────────────────────────────────────────
 
@@ -98,7 +119,7 @@ const FIELDS: FieldDef[] = [
   { label: "Регион", get: l => l.region_name, fmt: v => v ? String(v) : "—", highlight: true },
   { label: "Адрес", get: l => l.address, fmt: v => v ? String(v) : "—" },
   { label: "Назначение", get: l => l.land_purpose ? (PURPOSE_LABEL[l.land_purpose] || l.land_purpose) : null, fmt: v => v ? String(v) : "—", highlight: true },
-  { label: "Источник данных", get: l => l.source, fmt: v => v ? String(v) : "—" },
+  { label: "Источник данных", get: l => l.source, fmt: v => v ? (SOURCE_LABEL[v as string] || String(v)) : "—" },
   // Цены
   { group: "Цена", label: "Начальная цена", get: l => l.start_price, fmt: v => fmtPrice(v as number), highlight: true },
   { label: "Кадастровая стоимость", get: l => l.cadastral_cost, fmt: v => fmtPrice(v as number), highlight: true },
@@ -115,9 +136,9 @@ const FIELDS: FieldDef[] = [
   { label: "Категория [КН]", get: l => l.category_kn, fmt: v => v ? String(v) : "—" },
   { label: "ВРИ [КН]", get: l => l.vri_kn, fmt: v => v ? String(v) : "—" },
   // Торги
-  { group: "Торги", label: "Вид торгов", get: l => l.auction_type, fmt: v => v ? String(v) : "—", highlight: true },
-  { label: "Форма проведения", get: l => l.auction_form, fmt: v => v ? String(v) : "—" },
-  { label: "Вид сделки", get: l => l.deal_type, fmt: v => v ? String(v) : "—", highlight: true },
+  { group: "Торги", label: "Вид торгов", get: l => l.auction_type, fmt: v => v ? (AUCTION_TYPE_LABEL[v as string] || String(v)) : "—", highlight: true },
+  { label: "Форма проведения", get: l => l.auction_form, fmt: v => v ? (AUCTION_FORM_LABEL[v as string] || String(v)) : "—" },
+  { label: "Вид сделки", get: l => l.deal_type, fmt: v => v ? (DEAL_TYPE_LABEL[v as string] || String(v)) : "—", highlight: true },
   { label: "Переуступка", get: l => l.resale_type, fmt: v => v ? (RESALE_LABEL[v as string] || String(v)) : "—", highlight: true },
   { label: "ЭТП", get: l => l.etp, fmt: v => v ? String(v) : "—" },
   { label: "Номер извещения", get: l => l.notice_number, fmt: v => v ? String(v) : "—" },
