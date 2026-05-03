@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import { compare } from "@/lib/compare";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "";
 
@@ -155,7 +156,23 @@ function CompareContent() {
   const [showDiffOnly, setShowDiffOnly] = useState(false);
 
   const rawIds = params.get("ids") || "";
-  const ids = rawIds.split(",").map(s => parseInt(s.trim())).filter(n => !isNaN(n)).slice(0, 5);
+  // Если ?ids= не передали — берём из localStorage (накопленный список сравнения).
+  // Если передали — синхронизируем localStorage с URL, чтобы шапка показывала правильный счётчик.
+  const ids = (() => {
+    if (rawIds) {
+      const fromUrl = rawIds.split(",").map(s => parseInt(s.trim())).filter(n => !isNaN(n)).slice(0, 5);
+      if (typeof window !== "undefined") {
+        const stored = compare.get();
+        if (fromUrl.length && fromUrl.join(",") !== stored.join(",")) {
+          window.localStorage.setItem("compare_ids", JSON.stringify(fromUrl));
+          window.dispatchEvent(new Event("compare-changed"));
+        }
+      }
+      return fromUrl;
+    }
+    if (typeof window !== "undefined") return compare.get();
+    return [];
+  })();
 
   useEffect(() => {
     if (!ids.length) { setLoading(false); return; }
@@ -176,6 +193,8 @@ function CompareContent() {
   const validLots = lots.filter((l): l is LotFull => l !== null);
 
   const removeLot = (idx: number) => {
+    const removedId = ids[idx];
+    if (removedId != null) compare.remove(removedId);
     const newIds = ids.filter((_, i) => i !== idx);
     if (newIds.length) {
       window.location.href = `/compare?ids=${newIds.join(",")}`;

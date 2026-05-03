@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { getMe, logout } from "@/lib/auth";
 import type { UserProfile } from "@/lib/api";
+import { useCompareIds } from "@/lib/useCompare";
 
 const PLAN_LABEL: Record<string, string> = {
   free: "Free", personal: "Личный", expert: "Эксперт", landlord: "Лендлорд",
@@ -12,6 +13,7 @@ const PLAN_LABEL: Record<string, string> = {
 export default function Header() {
   const pathname = usePathname();
   const [user, setUser] = useState<UserProfile | null>(null);
+  const compareIds = useCompareIds();
 
   useEffect(() => {
     getMe().then(setUser);
@@ -58,6 +60,15 @@ export default function Header() {
       </nav>
 
       <div className="header-actions">
+        {compareIds.length > 0 && (
+          <Link
+            href={`/compare?ids=${compareIds.join(",")}`}
+            className="btn btn-secondary btn-sm"
+            title="Сравнение участков"
+          >
+            ⚖ {compareIds.length}
+          </Link>
+        )}
         {user ? (
           <>
             <span className="badge badge-blue">{PLAN_LABEL[user.subscription_plan] || user.subscription_plan}</span>

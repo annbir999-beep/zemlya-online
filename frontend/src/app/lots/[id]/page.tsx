@@ -8,6 +8,8 @@ import { RegionInfo, RegionData } from "@/components/RegionInfo";
 import { ScoreCircle, ScoreBadges, DiscountTag } from "@/components/ScoreBadge";
 import { LocationCard, CommsCard, SimilarHistoryCard } from "@/components/LocationComms";
 import { ContractTerms, FullDescription } from "@/components/ContractTerms";
+import { compare } from "@/lib/compare";
+import { useCompareIds } from "@/lib/useCompare";
 
 function MiniMap({ lat, lng, title }: { lat: number; lng: number; title?: string }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -221,6 +223,16 @@ export default function LotDetailPage({ params }: { params: Promise<{ id: string
   const [saved, setSaved] = useState(false);
   const [market, setMarket] = useState<MarketLot[]>([]);
   const [regionData, setRegionData] = useState<RegionData | null>(null);
+  const compareIds = useCompareIds();
+  const inCompare = compareIds.includes(parseInt(id));
+
+  const toggleCompare = () => {
+    const lotId = parseInt(id);
+    const result = compare.toggle(lotId);
+    if (result === null) {
+      alert(`Можно сравнивать не более ${compare.MAX} участков. Уберите один и попробуйте снова.`);
+    }
+  };
 
   useEffect(() => {
     Promise.all([
@@ -475,9 +487,18 @@ export default function LotDetailPage({ params }: { params: Promise<{ id: string
               <button className={`btn ${saved ? "btn-secondary" : "btn-secondary"}`} style={{ width: "100%" }} onClick={toggleSave}>
                 {saved ? "★ Убрать из избранного" : "☆ Добавить в избранное"}
               </button>
-              <a href={`/compare?ids=${lot.id}`} className="btn btn-secondary" style={{ width: "100%" }}>
-                Добавить к сравнению
-              </a>
+              <button
+                className="btn btn-secondary"
+                style={{ width: "100%" }}
+                onClick={toggleCompare}
+              >
+                {inCompare ? "✓ В сравнении (убрать)" : `+ В сравнение${compareIds.length > 0 ? ` (${compareIds.length})` : ""}`}
+              </button>
+              {compareIds.length >= 2 && (
+                <a href="/compare" className="btn btn-primary btn-sm" style={{ width: "100%" }}>
+                  Открыть сравнение ({compareIds.length})
+                </a>
+              )}
             </div>
 
             {/* Price analysis */}

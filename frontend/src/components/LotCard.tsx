@@ -1,6 +1,8 @@
 "use client";
 import type { LotListItem } from "@/lib/api";
 import { ScoreCircle, ScoreBadges, DiscountTag } from "./ScoreBadge";
+import { compare } from "@/lib/compare";
+import { useCompareIds } from "@/lib/useCompare";
 
 const PURPOSE_LABEL: Record<string, string> = {
   izhs: "ИЖС", snt: "СНТ", lpkh: "ЛПХ", agricultural: "Сельхоз",
@@ -50,9 +52,16 @@ interface Props {
   onToggleCompare?: (id: number) => void;
 }
 
-export default function LotCard({ lot, selected, compareIds = [], onSelect, onToggleCompare }: Props) {
+export default function LotCard({ lot, selected, compareIds, onSelect, onToggleCompare }: Props) {
   const status = STATUS_CONFIG[lot.status] || { label: lot.status, cls: "badge-gray" };
-  const inCompare = compareIds.includes(lot.id);
+  // Если родитель не передал compareIds/onToggleCompare — используем localStorage напрямую
+  const fallbackIds = useCompareIds();
+  const effectiveIds = compareIds ?? fallbackIds;
+  const inCompare = effectiveIds.includes(lot.id);
+  const handleCompareToggle = onToggleCompare ?? ((id: number) => {
+    const r = compare.toggle(id);
+    if (r === null) alert(`Не более ${compare.MAX} участков в сравнении`);
+  });
   const dl = daysLeft(lot.submission_end);
 
   return (
@@ -145,15 +154,13 @@ export default function LotCard({ lot, selected, compareIds = [], onSelect, onTo
         >
           Оригинал ↗
         </a>
-        {onToggleCompare && (
-          <button
-            className={`btn btn-sm ${inCompare ? "btn-primary" : "btn-secondary"}`}
-            onClick={() => onToggleCompare(lot.id)}
-            title={inCompare ? "Убрать из сравнения" : "Добавить в сравнение"}
-          >
-            {inCompare ? "✓ Сравниваю" : "+ Сравнить"}
-          </button>
-        )}
+        <button
+          className={`btn btn-sm ${inCompare ? "btn-primary" : "btn-secondary"}`}
+          onClick={() => handleCompareToggle(lot.id)}
+          title={inCompare ? "Убрать из сравнения" : "Добавить в сравнение"}
+        >
+          {inCompare ? "✓ Сравниваю" : "+ Сравнить"}
+        </button>
       </div>
     </div>
   );
