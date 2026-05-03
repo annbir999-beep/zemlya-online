@@ -337,6 +337,7 @@ html, body { overflow-x: hidden; max-width: 100vw; }
   justify-content: center;
   gap: 4px;
   padding: 12px;
+  flex-wrap: wrap;  /* на узких экранах кнопки переносятся, не уходят за край */
 }
 .pagination button {
   width: 32px; height: 32px;
@@ -378,6 +379,16 @@ html, body { overflow-x: hidden; max-width: 100vw; }
   .header-actions .badge { display: none; }
   /* Логотип-сабтайтл скрываем на узких экранах */
   .header-logo > span:last-child > span:last-child { display: none; }
+}
+
+@media (max-width: 768px) {
+  /* На мобильном инверт-скролл внутри страницы /lots мешает добраться до пагинации.
+     Снимаем фиксированную высоту корневого контейнера, чтобы скроллила вся страница. */
+  .catalog-root, .map-root { overflow: visible !important; height: auto !important; }
+  .catalog-root > div, .map-root > div { overflow: visible !important; }
+  /* Пагинация внизу — не залипает, но видна после скролла списка */
+  .pagination { position: sticky; bottom: 0; z-index: 5; }
+  .pagination button { width: 36px; height: 36px; }
 }
 
 @media (max-width: 480px) {
