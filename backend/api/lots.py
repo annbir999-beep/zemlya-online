@@ -516,6 +516,69 @@ async def get_lots(
     )
 
 
+@router.get("/heatmap")
+async def get_heatmap(db: AsyncSession = Depends(get_db)):
+    """Тепловая карта по регионам РФ.
+
+    Для каждого субъекта возвращает количество активных лотов, средний
+    дисконт к рынку и средний score. Точка ставится в координатах
+    административного центра субъекта (REGION_CENTERS). Кэш 5 минут.
+    """
+    import json as _json
+    from services.telegram_bot import get_redis
+    from services.region_centers import REGION_CENTERS
+
+    cache_key = "heatmap:v1"
+    redis = get_redis()
+    try:
+        cached = await redis.get(cache_key)
+        if cached:
+            return _json.loads(cached)
+    except Exception:
+        pass
+
+    base = and_(Lot.status == LotStatus.ACTIVE, Lot.source == LotSource.TORGI_GOV)
+
+    rows = (
+        await db.execute(
+            select(
+                Lot.region_code,
+                Lot.region_name,
+                func.count(Lot.id).label("cnt"),
+                func.avg(Lot.discount_to_market_pct).label("avg_disc"),
+                func.avg(Lot.score).label("avg_score"),
+                func.avg(Lot.price_per_sqm).label("avg_psqm"),
+            )
+            .where(base)
+            .group_by(Lot.region_code, Lot.region_name)
+            .order_by(func.count(Lot.id).desc())
+        )
+    ).all()
+
+    items = []
+    for r in rows:
+        center = REGION_CENTERS.get(r.region_code or "")
+        if not center:
+            continue
+        items.append({
+            "code": r.region_code,
+            "name": r.region_name,
+            "lat": center[0],
+            "lng": center[1],
+            "count": r.cnt,
+            "avg_discount_pct": float(r.avg_disc) if r.avg_disc else None,
+            "avg_score": float(r.avg_score) if r.avg_score else None,
+            "avg_price_per_sqm": float(r.avg_psqm) if r.avg_psqm else None,
+        })
+
+    payload = {"items": items, "total_regions": len(items)}
+    try:
+        await redis.setex(cache_key, 300, _json.dumps(payload, default=str))
+    except Exception:
+        pass
+    return payload
+
+
 @router.get("/export")
 async def export_lots_csv(
     # Используем ту же фильтрацию что и /api/lots — пробрасываем те же параметры

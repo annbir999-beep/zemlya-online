@@ -48,10 +48,31 @@ function getPurposeStyle(purpose?: string): { color: string; emoji: string } {
   }
 }
 
+interface HeatmapPoint {
+  code: string;
+  name: string;
+  lat: number;
+  lng: number;
+  count: number;
+  avg_discount_pct?: number | null;
+  avg_score?: number | null;
+  avg_price_per_sqm?: number | null;
+}
+
 interface Props {
   points: MapPoint[];
   selectedId?: number;
   onLotClick?: (id: number) => void;
+  heatmap?: HeatmapPoint[];
+  mode?: "points" | "heatmap";
+}
+
+function heatColor(discountPct?: number | null): string {
+  if (discountPct == null) return "#94a3b8";
+  if (discountPct >= 50) return "#dc2626";
+  if (discountPct >= 25) return "#ea580c";
+  if (discountPct >= 10) return "#ca8a04";
+  return "#16a34a";
 }
 
 function loadCss(href: string, id: string) {
@@ -61,10 +82,11 @@ function loadCss(href: string, id: string) {
   document.head.appendChild(l);
 }
 
-export default function MapView({ points, selectedId }: Props) {
+export default function MapView({ points, selectedId, heatmap, mode = "points" }: Props) {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<unknown>(null);
   const layerRef = useRef<unknown>(null);
+  const heatLayerRef = useRef<unknown>(null);
 
   useEffect(() => {
     if (!mapRef.current) return;
@@ -90,8 +112,10 @@ export default function MapView({ points, selectedId }: Props) {
       }).addTo(map);
 
       const layer = L.layerGroup().addTo(map);
+      const heatLayer = L.layerGroup();
       mapInstanceRef.current = map;
       layerRef.current = { L, layer };
+      heatLayerRef.current = { L, layer: heatLayer };
     });
 
     return () => {
@@ -184,6 +208,61 @@ export default function MapView({ points, selectedId }: Props) {
     });
   }, [points, selectedId]);
 
+  // Heatmap layer — отрисовка кругов по регионам
+  useEffect(() => {
+    const ref = heatLayerRef.current as { L: unknown; layer: unknown } | null;
+    const map = mapInstanceRef.current as { addLayer: (l: unknown) => void; removeLayer: (l: unknown) => void } | null;
+    const pointsRef = layerRef.current as { layer: unknown } | null;
+    if (!ref || !map) return;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const L = ref.L as any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const heatLayer = ref.layer as any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const pointsLayer = pointsRef?.layer as any;
+
+    heatLayer.clearLayers();
+
+    if (mode === "heatmap" && heatmap) {
+      // Скрываем слой точек, показываем heatmap
+      if (pointsLayer) (map as { removeLayer: (l: unknown) => void }).removeLayer(pointsLayer);
+      (map as { addLayer: (l: unknown) => void }).addLayer(heatLayer);
+
+      const maxCount = Math.max(...heatmap.map((h) => h.count), 1);
+      heatmap.forEach((h) => {
+        const radius = Math.max(8, Math.sqrt(h.count / maxCount) * 60);  // 8..60 px
+        const color = heatColor(h.avg_discount_pct);
+        const fmtNum = (v?: number | null) => v == null ? "—" : Math.round(v).toLocaleString("ru");
+        L.circleMarker([h.lat, h.lng], {
+          radius,
+          color: "#fff",
+          weight: 1.5,
+          fillColor: color,
+          fillOpacity: 0.55,
+        })
+          .bindTooltip(`<b>${h.name || h.code}</b><br>${h.count} лотов`, { direction: "top", offset: [0, -radius] })
+          .bindPopup(`
+            <div style="min-width:200px;font-family:system-ui,sans-serif">
+              <div style="font-weight:700;font-size:14px;margin-bottom:6px">${h.name || h.code}</div>
+              <table style="border-collapse:collapse;width:100%;font-size:12px">
+                <tr><td style="color:#64748b;padding:2px 8px 2px 0">Активных лотов</td><td style="font-weight:600">${h.count}</td></tr>
+                <tr><td style="color:#64748b;padding:2px 8px 2px 0">Средний дисконт</td><td style="font-weight:600;color:${color}">${h.avg_discount_pct != null ? h.avg_discount_pct.toFixed(1) + "%" : "—"}</td></tr>
+                <tr><td style="color:#64748b;padding:2px 8px 2px 0">Средний score</td><td>${h.avg_score != null ? Math.round(h.avg_score) : "—"}</td></tr>
+                <tr><td style="color:#64748b;padding:2px 8px 2px 0">Цена за м²</td><td>${fmtNum(h.avg_price_per_sqm)} ₽</td></tr>
+              </table>
+              <a href="/lots?region=${h.code}" style="display:block;margin-top:8px;padding:5px 8px;background:#2563eb;color:#fff;border-radius:6px;font-size:12px;text-align:center;text-decoration:none">Открыть в каталоге →</a>
+            </div>
+          `, { maxWidth: 260 })
+          .addTo(heatLayer);
+      });
+    } else {
+      // Показываем точки, скрываем heatmap
+      (map as { removeLayer: (l: unknown) => void }).removeLayer(heatLayer);
+      if (pointsLayer) (map as { addLayer: (l: unknown) => void }).addLayer(pointsLayer);
+    }
+  }, [heatmap, mode]);
+
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
       <div ref={mapRef} style={{ width: "100%", height: "100%" }} />
@@ -194,7 +273,13 @@ export default function MapView({ points, selectedId }: Props) {
         padding: "8px 12px", boxShadow: "0 1px 6px rgba(0,0,0,.2)",
         fontSize: 11, lineHeight: 1.8, pointerEvents: "none",
       }}>
-        {[
+        {(mode === "heatmap" ? [
+          { emoji: "●", color: "#dc2626", label: "Дисконт ≥50%" },
+          { emoji: "●", color: "#ea580c", label: "Дисконт 25-50%" },
+          { emoji: "●", color: "#ca8a04", label: "Дисконт 10-25%" },
+          { emoji: "●", color: "#16a34a", label: "Дисконт <10%" },
+          { emoji: "●", color: "#94a3b8", label: "Нет данных" },
+        ] : [
           { emoji: "🏠", color: "#16a34a", label: "ИЖС" },
           { emoji: "🌿", color: "#f59e0b", label: "СНТ / Дача" },
           { emoji: "🌾", color: "#84cc16", label: "ЛПХ" },
@@ -204,7 +289,7 @@ export default function MapView({ points, selectedId }: Props) {
           { emoji: "🌲", color: "#047857", label: "Лесной фонд" },
           { emoji: "💧", color: "#0284c7", label: "Водный фонд" },
           { emoji: "📍", color: "#94a3b8", label: "Иное" },
-        ].map(item => (
+        ]).map(item => (
           <div key={item.label} style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <div style={{ width: 14, height: 14, borderRadius: "50%", background: item.color, border: "2px solid #fff", boxShadow: "0 1px 3px rgba(0,0,0,.2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8, flexShrink: 0 }}>
               {item.emoji}

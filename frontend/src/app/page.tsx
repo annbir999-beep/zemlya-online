@@ -17,6 +17,8 @@ export default function MapPage() {
   const [selectedLot, setSelectedLot] = useState<LotListItem | null>(null);
   const [sidebarLots, setSidebarLots] = useState<LotListItem[]>([]);
   const [mapPoints, setMapPoints] = useState<{ id: number; lat: number; lng: number; price?: number; area?: number; purpose?: string; rubric_tg?: number; pct?: number }[]>([]);
+  const [heatmapData, setHeatmapData] = useState<{ code: string; name: string; lat: number; lng: number; count: number; avg_discount_pct?: number | null; avg_score?: number | null; avg_price_per_sqm?: number | null }[]>([]);
+  const [mapMode, setMapMode] = useState<"points" | "heatmap">("points");
   const [compareIds, setCompareIds] = useState<number[]>([]);
   const [loading, setLoading] = useState(false);
   const [total, setTotal] = useState(0);
@@ -54,6 +56,15 @@ export default function MapPage() {
     loadMapPoints(filters);
   }, [filters, loadLots, loadMapPoints]);
 
+  // Загружаем heatmap-данные при включении режима (один раз, кэш в Redis)
+  useEffect(() => {
+    if (mapMode !== "heatmap" || heatmapData.length > 0) return;
+    fetch(`${API}/api/lots/heatmap`)
+      .then((r) => r.json())
+      .then((d) => setHeatmapData(d.items || []))
+      .catch(console.error);
+  }, [mapMode, heatmapData.length]);
+
   const handleFiltersChange = (f: FiltersState) => setFilters(f);
   const handleReset = () => setFilters(DEFAULT_FILTERS);
 
@@ -79,7 +90,37 @@ export default function MapPage() {
 
       {/* Карта */}
       <div className="map-container">
-        <MapView points={mapPoints} selectedId={selectedLot?.id} onLotClick={handleMapLotClick} />
+        <MapView
+          points={mapPoints}
+          selectedId={selectedLot?.id}
+          onLotClick={handleMapLotClick}
+          heatmap={heatmapData}
+          mode={mapMode}
+        />
+
+        {/* Переключатель режима карты */}
+        <div style={{
+          position: "absolute", top: 12, right: 12, zIndex: 1000,
+          display: "flex", background: "var(--surface)", borderRadius: 8,
+          boxShadow: "0 1px 4px rgba(0,0,0,.15)", overflow: "hidden",
+          border: "1px solid var(--border)",
+        }}>
+          {(["points", "heatmap"] as const).map((m) => (
+            <button
+              key={m}
+              onClick={() => setMapMode(m)}
+              style={{
+                padding: "6px 12px", fontSize: 12, fontWeight: 500,
+                background: mapMode === m ? "var(--primary)" : "transparent",
+                color: mapMode === m ? "white" : "var(--text-2)",
+                border: "none", cursor: "pointer",
+                transition: "background .15s",
+              }}
+            >
+              {m === "points" ? "📍 Точки" : "🔥 Плотность"}
+            </button>
+          ))}
+        </div>
 
         {/* Панель выбранного лота поверх карты */}
         {selectedLot && (
