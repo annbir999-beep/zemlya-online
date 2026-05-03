@@ -627,10 +627,13 @@ async def get_analytics(db: AsyncSession = Depends(get_db)):
 
     # ── KPI ──
     total_active = (await db.execute(select(func.count()).where(base))).scalar() or 0
+    # Когда у лота отсутствует published_at (поле не всегда заполнено в API torgi),
+    # fallback на created_at — момент появления лота в нашей БД.
+    discovered_at = func.coalesce(Lot.published_at, Lot.created_at)
     new_24h = (
         await db.execute(
             select(func.count()).where(
-                and_(base, Lot.published_at >= now - timedelta(hours=24))
+                and_(base, discovered_at >= now - timedelta(hours=24))
             )
         )
     ).scalar() or 0
@@ -721,17 +724,17 @@ async def get_analytics(db: AsyncSession = Depends(get_db)):
     daily_rows = (
         await db.execute(
             select(
-                func.date(Lot.published_at).label("d"),
+                func.date(discovered_at).label("d"),
                 func.count(Lot.id).label("cnt"),
             )
             .where(
                 and_(
                     Lot.source == LotSource.TORGI_GOV,
-                    Lot.published_at >= now - timedelta(days=30),
+                    discovered_at >= now - timedelta(days=30),
                 )
             )
-            .group_by(func.date(Lot.published_at))
-            .order_by(func.date(Lot.published_at))
+            .group_by(func.date(discovered_at))
+            .order_by(func.date(discovered_at))
         )
     ).all()
     daily_new = [
