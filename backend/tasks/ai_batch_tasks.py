@@ -19,6 +19,14 @@ AI_BATCH_DELAY = 1.5        # сек между запросами к Anthropic 
 AI_REFRESH_DAYS = 7         # не перезапрашивать свежее этого
 AI_MIN_SCORE = 50           # минимальный score чтобы попасть в батч
 
+# Минимальная площадь для участков под застройку (ИЖС/ЛПХ).
+# Меньше — нельзя ничего нормально построить, лот в топ не идёт.
+MIN_BUILD_AREA_SQM = 600
+
+# Максимальное расстояние до ближайшего города 100k+. Дальше —
+# участок неликвиден, не тратим API на бесперспективные лоты.
+MAX_CITY_DISTANCE_KM = 150
+
 
 @celery_app.task
 def ai_batch_analyze(limit: int = AI_BATCH_LIMIT):
@@ -28,23 +36,43 @@ def ai_batch_analyze(limit: int = AI_BATCH_LIMIT):
 
 async def _run(limit: int):
     from db.database import AsyncSessionLocal
-    from sqlalchemy import select, or_
-    from models.lot import Lot, LotStatus
+    from sqlalchemy import select, or_, and_
+    from models.lot import Lot, LotStatus, LandPurpose
     from services.ai_assessment import assess_lot, lot_to_ai_dict
 
     cutoff = datetime.now(timezone.utc) - timedelta(days=AI_REFRESH_DAYS)
 
     async with AsyncSessionLocal() as db:
-        result = await db.execute(
-            select(Lot)
-            .where(
-                Lot.status == LotStatus.ACTIVE,
-                Lot.full_description.isnot(None),
-                Lot.score >= AI_MIN_SCORE,
-                or_(Lot.ai_assessed_at.is_(None), Lot.ai_assessed_at < cutoff),
+        # Базовые условия
+        conditions = [
+            Lot.status == LotStatus.ACTIVE,
+            Lot.full_description.isnot(None),
+            Lot.score >= AI_MIN_SCORE,
+            or_(Lot.ai_assessed_at.is_(None), Lot.ai_assessed_at < cutoff),
+        ]
+
+        # Под ИЖС/ЛПХ нужна площадь хотя бы под нормальную застройку.
+        # Для остальных назначений (сельхоз, коммерция) ограничения нет.
+        build_purposes = [LandPurpose.IZhS, LandPurpose.LPKh]
+        conditions.append(
+            or_(
+                ~Lot.land_purpose.in_(build_purposes),
+                Lot.area_sqm.is_(None),
+                Lot.area_sqm >= MIN_BUILD_AREA_SQM,
             )
-            .order_by(Lot.score.desc())
-            .limit(limit)
+        )
+
+        # Удалённые от города участки не интересны — выкидываем.
+        # Если расстояние не известно (None) — оставляем (доверяем score).
+        conditions.append(
+            or_(
+                Lot.nearest_city_distance_km.is_(None),
+                Lot.nearest_city_distance_km <= MAX_CITY_DISTANCE_KM,
+            )
+        )
+
+        result = await db.execute(
+            select(Lot).where(and_(*conditions)).order_by(Lot.score.desc()).limit(limit)
         )
         lots = result.scalars().all()
 

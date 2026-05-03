@@ -11,8 +11,8 @@ class Settings(BaseSettings):
 
     # Security
     SECRET_KEY: str = "change_me"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-    REFRESH_TOKEN_EXPIRE_DAYS: int = 30
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 720  # 12 часов — комфортный сеанс в кабинете
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 60
     ALGORITHM: str = "HS256"
 
     # CORS
