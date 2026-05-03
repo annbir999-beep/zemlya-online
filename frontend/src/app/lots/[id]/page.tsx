@@ -10,6 +10,7 @@ import { LocationCard, CommsCard, SimilarHistoryCard } from "@/components/Locati
 import { ContractTerms, FullDescription } from "@/components/ContractTerms";
 import NearbyFeaturesCard, { type NearbyFeatures } from "@/components/NearbyFeatures";
 import OrganizerContactsCard, { type OrganizerContacts } from "@/components/OrganizerContacts";
+import RoiCalculator from "@/components/RoiCalculator";
 import { compare } from "@/lib/compare";
 import { useCompareIds } from "@/lib/useCompare";
 
@@ -419,6 +420,9 @@ export default function LotDetailPage({ params }: { params: Promise<{ id: string
               organizerName={lot.organizer_name}
               contacts={(lot as unknown as { organizer_contacts?: OrganizerContacts }).organizer_contacts}
             />
+
+            {/* Калькулятор окупаемости — каркасный дом */}
+            <RoiCalculator lotId={Number(id)} />
 
             {/* История похожих лотов */}
             <SimilarHistoryCard lotId={Number(id)} />

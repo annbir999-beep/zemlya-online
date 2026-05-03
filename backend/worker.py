@@ -15,7 +15,7 @@ celery_app = Celery(
     "sotka",
     broker=settings.REDIS_URL,
     backend=settings.REDIS_URL,
-    include=["tasks.scrape_tasks", "tasks.alert_tasks", "tasks.ai_batch_tasks"],
+    include=["tasks.scrape_tasks", "tasks.alert_tasks", "tasks.ai_batch_tasks", "tasks.digest_tasks"],
 )
 
 celery_app.conf.update(
@@ -100,6 +100,11 @@ celery_app.conf.update(
         "ai-batch-analyze": {
             "task": "tasks.ai_batch_tasks.ai_batch_analyze",
             "schedule": crontab(minute=30, hour=6),
+        },
+        # Еженедельный email-дайджест: воскресенье 10:00 МСК — топ-10 лотов недели
+        "weekly-digest": {
+            "task": "tasks.digest_tasks.send_weekly_digest",
+            "schedule": crontab(minute=0, hour=10, day_of_week=0),
         },
     },
 )

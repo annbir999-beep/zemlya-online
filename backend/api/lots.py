@@ -518,6 +518,52 @@ async def get_lots(
     )
 
 
+@router.get("/{lot_id}/roi")
+async def calculate_roi(
+    lot_id: int,
+    house_area_sqm: float = Query(120, ge=20, le=1000),
+    sell_price_per_sqm: float = Query(80000, ge=10000, le=500000),
+    finish_level: str = Query("mid", pattern="^(rough|mid|premium)$"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Калькулятор окупаемости для лота — каркасный дом фиксированной площади.
+
+    Оценивает: вложения = цена_лота + стоимость_постройки;
+    выручка_от_продажи = площадь_дома × цена_за_м²;
+    ROI = (выручка - вложения) / вложения × 100%.
+    """
+    from services.build_costs import get_build_cost
+
+    result = await db.execute(select(Lot).where(Lot.id == lot_id))
+    lot = result.scalar_one_or_none()
+    if not lot:
+        raise HTTPException(status_code=404, detail="Лот не найден")
+
+    build = get_build_cost(lot.region_code, house_area_sqm, finish_level)
+    land_price = lot.start_price or 0
+    investment = land_price + build["total_cost"]
+    revenue = house_area_sqm * sell_price_per_sqm
+    profit = revenue - investment
+    roi_pct = (profit / investment * 100) if investment > 0 else 0
+    payback_years = (investment / revenue) if revenue > 0 else None
+
+    return {
+        "lot_id": lot_id,
+        "inputs": {
+            "house_area_sqm": house_area_sqm,
+            "sell_price_per_sqm": sell_price_per_sqm,
+            "finish_level": finish_level,
+        },
+        "build": build,
+        "land_price": int(land_price),
+        "total_investment": int(investment),
+        "expected_revenue": int(revenue),
+        "expected_profit": int(profit),
+        "roi_pct": round(roi_pct, 1),
+        "payback_years": round(payback_years, 1) if payback_years else None,
+    }
+
+
 @router.get("/heatmap")
 async def get_heatmap(db: AsyncSession = Depends(get_db)):
     """Тепловая карта по регионам РФ.
