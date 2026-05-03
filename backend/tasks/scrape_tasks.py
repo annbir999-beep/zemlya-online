@@ -389,11 +389,14 @@ def enrich_nearby_features(self, batch_size: int = 100):
 async def _enrich_nearby_features(batch_size: int):
     """Берёт лоты с координатами и без nearby_features (или старше 30 дней),
     дёргает OSM Overpass и сохраняет признаки + расстояния.
+
+    Координаты лежат в Geography column `location` (PostGIS POINT) — берём
+    через ST_Y/ST_X (lat = Y, lng = X в SRID 4326).
     """
     import asyncio as _asyncio
     from datetime import datetime, timezone, timedelta
-    from sqlalchemy import select, or_, and_
-    from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+    from sqlalchemy import select, or_, and_, func
+    from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
     from core.config import settings
     from models.lot import Lot, LotStatus
     from services.osm_features import fetch_nearby_features
@@ -404,39 +407,51 @@ async def _enrich_nearby_features(batch_size: int):
     cutoff = datetime.now(timezone.utc) - timedelta(days=30)
 
     async with SessionLocal() as db:
+        # Берём id, lat, lng (через ST_Y/ST_X) — модель Lot не имеет атрибутов lat/lng
         result = await db.execute(
-            select(Lot)
+            select(
+                Lot.id,
+                func.ST_Y(Lot.location).label("lat"),
+                func.ST_X(Lot.location).label("lng"),
+            )
             .where(
                 and_(
                     Lot.status == LotStatus.ACTIVE,
-                    Lot.lat.isnot(None),
-                    Lot.lng.isnot(None),
+                    Lot.location.isnot(None),
                     or_(Lot.nearby_features_at.is_(None), Lot.nearby_features_at < cutoff),
                 )
             )
             .order_by(Lot.score.desc().nulls_last())
             .limit(batch_size)
         )
-        lots = result.scalars().all()
+        rows = result.all()
 
         updated = 0
-        for i, lot in enumerate(lots, 1):
+        for i, r in enumerate(rows, 1):
             try:
-                features = await fetch_nearby_features(lot.lat, lot.lng)
-                lot.nearby_features = features or {}
-                lot.nearby_features_at = datetime.now(timezone.utc)
+                features = await fetch_nearby_features(r.lat, r.lng)
+                # Обновляем через UPDATE — у нас нет полного объекта Lot
+                from sqlalchemy import update
+                await db.execute(
+                    update(Lot)
+                    .where(Lot.id == r.id)
+                    .values(
+                        nearby_features=features or {},
+                        nearby_features_at=datetime.now(timezone.utc),
+                    )
+                )
                 if features:
                     updated += 1
                 if i % 20 == 0:
                     await db.commit()
-                    print(f"[nearby] {i}/{len(lots)} обработано, найдено: {updated}")
+                    print(f"[nearby] {i}/{len(rows)} обработано, найдено: {updated}")
             except Exception as e:
-                print(f"[nearby] lot={lot.id} error: {type(e).__name__}: {e}")
+                print(f"[nearby] lot={r.id} error: {type(e).__name__}: {e}")
             # Уважаем лимит Overpass — пауза между запросами
             await _asyncio.sleep(2.5)
 
         await db.commit()
-        print(f"[nearby] Готово. Обогащено: {updated}/{len(lots)}")
+        print(f"[nearby] Готово. Обогащено: {updated}/{len(rows)}")
 
     await engine.dispose()
 
