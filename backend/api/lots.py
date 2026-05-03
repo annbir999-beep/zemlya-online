@@ -83,6 +83,7 @@ class LotDetail(LotListItem):
     technical_conditions: Optional[str] = None
     contract_terms: Optional[dict] = None
     nearby_features: Optional[dict] = None
+    organizer_contacts: Optional[dict] = None
 
 
 class LotsResponse(BaseModel):
@@ -1226,4 +1227,5 @@ async def get_lot(lot_id: int, db: AsyncSession = Depends(get_db)):
         technical_conditions=lot.technical_conditions,
         contract_terms=lot.contract_terms if isinstance(lot.contract_terms, dict) else None,
         nearby_features=lot.nearby_features if isinstance(lot.nearby_features, dict) else None,
+        organizer_contacts=lot.organizer_contacts if isinstance(lot.organizer_contacts, dict) else None,
     )

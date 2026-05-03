@@ -175,6 +175,9 @@ class Lot(Base):
     #             settlement:{name,kind,distance_m}, railway:{name,distance_m}}
     nearby_features = Column(JSON)
     nearby_features_at = Column(DateTime(timezone=True))    # Когда обогащали (для повторного прогона)
+    # Контакты организатора (отдел земельных отношений) из извещения PDF.
+    # {phones:[...], emails:[...], inn, kpp, ogrn, contact_person, address}
+    organizer_contacts = Column(JSON)
 
     # ── Текст из PDF-документов лота (Извещение/ТУ/договор) ──
     full_description = Column(Text)                        # Извещение — полный текст

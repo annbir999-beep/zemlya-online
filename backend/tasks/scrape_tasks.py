@@ -216,6 +216,7 @@ async def _enrich_lot_pdfs(batch_size: int):
     from models.lot import Lot, LotSource, LotStatus
     from services.scraper_torgi import TorgiGovScraper
     from services.pdf_parser import select_best_attachments, download_file, extract_text, truncate_for_db
+    from services.contact_extractor import extract_contacts
     from services.contract_parser import parse_contract
     from services.communications import parse_communications
 
@@ -282,6 +283,13 @@ async def _enrich_lot_pdfs(batch_size: int):
                     if full_desc_combined and not lot.full_description:
                         lot.full_description = truncate_for_db(full_desc_combined)
                         changed = True
+                    # Контакты организатора — извлекаем из любых текстовых частей
+                    contacts_source = "\n".join(filter(None, [notice_text, tech_text, contract_text]))
+                    if contacts_source:
+                        contacts = extract_contacts(contacts_source)
+                        if contacts and not lot.organizer_contacts:
+                            lot.organizer_contacts = contacts
+                            changed = True
                     if tech_text and not lot.technical_conditions:
                         lot.technical_conditions = truncate_for_db(tech_text)
                         changed = True
@@ -323,6 +331,48 @@ async def _enrich_lot_pdfs(batch_size: int):
             print(f"[pdf] Готово. Обогащено: {updated}/{len(lots)}")
         finally:
             await scraper.client.aclose()
+
+    await engine.dispose()
+
+
+@celery_app.task
+def extract_contacts_from_existing(batch_size: int = 500):
+    """Одноразовая задача — пройтись по лотам с full_description, но без
+    organizer_contacts, и извлечь контакты регексами. Запускать вручную."""
+    _run(_extract_contacts_existing(batch_size))
+
+
+async def _extract_contacts_existing(batch_size: int):
+    from sqlalchemy import select, and_
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+    from core.config import settings
+    from models.lot import Lot
+    from services.contact_extractor import extract_contacts
+
+    engine = create_async_engine(settings.DATABASE_URL, pool_pre_ping=True, pool_size=5, max_overflow=0)
+    SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
+
+    async with SessionLocal() as db:
+        result = await db.execute(
+            select(Lot)
+            .where(
+                and_(
+                    Lot.full_description.isnot(None),
+                    Lot.organizer_contacts.is_(None),
+                )
+            )
+            .limit(batch_size)
+        )
+        lots = result.scalars().all()
+        updated = 0
+        for lot in lots:
+            text_blob = "\n".join(filter(None, [lot.full_description, lot.technical_conditions]))
+            contacts = extract_contacts(text_blob)
+            if contacts:
+                lot.organizer_contacts = contacts
+                updated += 1
+        await db.commit()
+        print(f"[contacts] обработано {len(lots)}, найдены контакты у {updated}")
 
     await engine.dispose()
 
