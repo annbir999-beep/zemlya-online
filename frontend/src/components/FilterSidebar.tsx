@@ -104,6 +104,21 @@ export default function FilterSidebar({ filters, onChange, onReset }: Props) {
   const [auctionTypeList, setAuctionTypeList] = useState<{ value: string; label: string }[]>([]);
   const [vriQuery, setVriQuery] = useState("");
   const [vriSuggestions, setVriSuggestions] = useState<string[]>([]);
+  // Локальный текст поиска с debounce, чтобы не слать запрос на каждый символ
+  const [qInput, setQInput] = useState<string>((filters.q as string) || "");
+  useEffect(() => {
+    setQInput((filters.q as string) || "");
+  }, [filters.q]);
+  useEffect(() => {
+    const trimmed = qInput.trim();
+    const current = ((filters.q as string) || "");
+    if (trimmed === current) return;
+    const t = setTimeout(() => {
+      onChange({ ...filters, q: trimmed || undefined, page: 1 });
+    }, 350);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qInput]);
 
   useEffect(() => {
     fetch(`${API}/api/lots/rubrics/grouped`)
@@ -180,6 +195,21 @@ export default function FilterSidebar({ filters, onChange, onReset }: Props) {
       </div>
 
       <div style={{ overflowY: "auto", flex: 1, padding: "0 16px" }}>
+
+        {/* Текстовый поиск */}
+        <Section title="🔍 Поиск" defaultOpen>
+          <input
+            className="input"
+            placeholder="Город, район, посёлок, улица..."
+            value={qInput}
+            onChange={e => setQInput(e.target.value)}
+            style={{ width: "100%" }}
+          />
+          <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 4, lineHeight: 1.4 }}>
+            Поиск по адресу, региону и названию лота. Чтобы видеть прошлые
+            торги — выберите статус «Завершённые».
+          </div>
+        </Section>
 
         {/* Сортировка */}
         <Section title="Сортировка" defaultOpen>

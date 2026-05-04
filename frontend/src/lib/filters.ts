@@ -123,6 +123,7 @@ export interface FiltersState {
   // Поиск
   cadastral?: string;
   notice_number?: string;
+  q?: string;
   // Даты заявок
   submission_start_from?: string;
   submission_start_to?: string;
@@ -183,6 +184,7 @@ export function filtersToQueryString(f: FiltersState & { per_page?: number }): s
   if (f.source?.length) f.source.forEach((s) => params.append("source", s));
   if (f.cadastral) params.set("cadastral", f.cadastral);
   if (f.notice_number) params.set("notice_number", f.notice_number);
+  if (f.q) params.set("q", f.q);
   // Даты заявок
   if (f.submission_start_from) params.set("submission_start_from", f.submission_start_from);
   if (f.submission_start_to) params.set("submission_start_to", f.submission_start_to);

@@ -156,6 +156,8 @@ def build_filters(
     sources: Optional[List[str]] = None,
     cadastral: Optional[str] = None,
     notice_number: Optional[str] = None,
+    # Текстовый поиск по адресу/региону/району/названию
+    q: Optional[str] = None,
     # Даты подачи заявок
     submission_start_from: Optional[date] = None,
     submission_start_to: Optional[date] = None,
@@ -297,6 +299,20 @@ def build_filters(
     # Номер извещения
     if notice_number:
         conditions.append(Lot.notice_number.ilike(f"%{notice_number}%"))
+
+    # Полнотекстовый поиск по адресу/названию (ищем подстроку через ILIKE)
+    if q:
+        q_clean = q.strip()
+        if q_clean:
+            pattern = f"%{q_clean}%"
+            conditions.append(
+                or_(
+                    Lot.address.ilike(pattern),
+                    Lot.region_name.ilike(pattern),
+                    Lot.district.ilike(pattern),
+                    Lot.title.ilike(pattern),
+                )
+            )
 
     # Даты подачи заявок
     if submission_start_from:
@@ -447,6 +463,7 @@ async def get_lots(
     # Поиск
     cadastral: Optional[str] = Query(None),
     notice_number: Optional[str] = Query(None),
+    q: Optional[str] = Query(None, max_length=200),
     # Даты подачи заявок
     submission_start_from: Optional[date] = Query(None),
     submission_start_to: Optional[date] = Query(None),
@@ -483,7 +500,7 @@ async def get_lots(
         category_tg=category_tg, vri_tg=vri_tg, section_tg=section_tg,
         etp=etp, resale_types=resale_type,
         sublease_allowed=sublease_allowed, assignment_allowed=assignment_allowed,
-        sources=source if source else ["torgi_gov"], cadastral=cadastral, notice_number=notice_number,
+        sources=source if source else ["torgi_gov"], cadastral=cadastral, notice_number=notice_number, q=q,
         submission_start_from=submission_start_from, submission_start_to=submission_start_to,
         submission_end_from=submission_end_from, submission_end_to=submission_end_to,
         lat=lat, lng=lng, radius_km=radius_km,
