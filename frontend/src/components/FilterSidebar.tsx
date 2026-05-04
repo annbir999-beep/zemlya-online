@@ -9,11 +9,10 @@ const API = process.env.NEXT_PUBLIC_API_URL ?? "";
 interface Rubric { id: number; name: string; icon: string }
 interface RubricSection { id: string; name: string }
 
+// На torgi.gov для земли реально публикуется только AUCTION; tender/public/
+// without всегда дают 0 — скрыты, чтобы не путать пользователя.
 const AUCTION_FORMS = [
   { value: "auction", label: "Аукцион" },
-  { value: "tender", label: "Конкурс" },
-  { value: "public", label: "Публичное предложение" },
-  { value: "without", label: "Без торгов" },
 ];
 
 // На гос-аукционах земли встречаются только LEASE и OWNERSHIP — free_use/
