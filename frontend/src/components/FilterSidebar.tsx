@@ -16,11 +16,12 @@ const AUCTION_FORMS = [
   { value: "without", label: "Без торгов" },
 ];
 
+// На гос-аукционах земли встречаются только LEASE и OWNERSHIP — free_use/
+// operational практически не публикуются, поэтому в UI скрыты, чтобы не давать
+// 0 результатов. При появлении реальных лотов вернём пресеты.
 const DEAL_TYPES = [
   { value: "ownership", label: "В собственность" },
   { value: "lease", label: "В аренду" },
-  { value: "free_use", label: "Безвозмездное пользование" },
-  { value: "operational", label: "Оперативное управление" },
 ];
 
 const RESALE_TYPES = [
