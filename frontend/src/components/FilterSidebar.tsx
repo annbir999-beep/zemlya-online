@@ -181,6 +181,17 @@ export default function FilterSidebar({ filters, onChange, onReset }: Props) {
 
       <div style={{ overflowY: "auto", flex: 1, padding: "0 16px" }}>
 
+        {/* Сортировка */}
+        <Section title="Сортировка" defaultOpen>
+          <select className="select" value={sortValue}
+            onChange={e => {
+              const [by, order] = e.target.value.split(":");
+              onChange({ ...filters, sort_by: by, sort_order: order, page: 1 });
+            }}>
+            {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        </Section>
+
         {/* Рентабельность 🔥 */}
         <Section title="🔥 Рентабельность" defaultOpen>
           <div style={{ fontSize: 12, color: "var(--text-3)", marginBottom: 6 }}>Минимальный скор (0-100)</div>
@@ -563,17 +574,6 @@ export default function FilterSidebar({ filters, onChange, onReset }: Props) {
           <CheckGroup items={SOURCES}
             selected={(filters.source as string[]) || []}
             onToggle={v => toggleArr("source", v)} />
-        </Section>
-
-        {/* Сортировка */}
-        <Section title="Сортировка">
-          <select className="select" value={sortValue}
-            onChange={e => {
-              const [by, order] = e.target.value.split(":");
-              onChange({ ...filters, sort_by: by, sort_order: order, page: 1 });
-            }}>
-            {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
         </Section>
 
       </div>
