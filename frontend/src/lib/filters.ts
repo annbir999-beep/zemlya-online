@@ -33,6 +33,7 @@ export const SOURCES = [
 export const SORT_OPTIONS = [
   { value: "score:desc", label: "🔥 По рентабельности" },
   { value: "discount_to_market:desc", label: "💎 Дисконт к рынку" },
+  { value: "price_drop:desc", label: "📉 Снижение цены (повторные торги)" },
   { value: "submission_end:asc", label: "По сроку подачи заявок (ближайшие)" },
   { value: "price:asc", label: "Цена: по возрастанию" },
   { value: "price:desc", label: "Цена: по убыванию" },
@@ -80,6 +81,7 @@ export interface FiltersState {
   score_min?: number;
   badges_min?: number;
   discount_min?: number;
+  price_drop_min?: number;
   liquidity?: "high" | "medium" | "low";
   // Цена
   price_min?: number;
@@ -141,6 +143,7 @@ export function filtersToQueryString(f: FiltersState & { per_page?: number }): s
   if (f.score_min != null) params.set("score_min", String(f.score_min));
   if (f.badges_min != null) params.set("badges_min", String(f.badges_min));
   if (f.discount_min != null) params.set("discount_min", String(f.discount_min));
+  if (f.price_drop_min != null) params.set("price_drop_min", String(f.price_drop_min));
   if (f.liquidity) params.set("liquidity", f.liquidity);
   // Цена
   if (f.price_min != null) params.set("price_min", String(f.price_min));

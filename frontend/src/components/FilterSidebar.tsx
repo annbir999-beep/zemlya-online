@@ -219,7 +219,7 @@ export default function FilterSidebar({ filters, onChange, onReset }: Props) {
             ))}
           </div>
           <div style={{ fontSize: 12, color: "var(--text-3)", marginBottom: 6 }}>Дисконт к рынку, %</div>
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
             {[null, 10, 25, 40, 50].map(v => (
               <button key={String(v)} className="btn btn-sm" style={{
                 background: filters.discount_min === v ? "var(--primary)" : "var(--surface-2)",
@@ -229,6 +229,23 @@ export default function FilterSidebar({ filters, onChange, onReset }: Props) {
                 {v == null ? "Все" : `${v}%+`}
               </button>
             ))}
+          </div>
+          <div style={{ fontSize: 12, color: "var(--text-3)", marginBottom: 6 }}>
+            📉 Повторные торги со снижением
+          </div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {[null, 5, 10, 25, 50].map(v => (
+              <button key={String(v)} className="btn btn-sm" style={{
+                background: filters.price_drop_min === v ? "var(--primary)" : "var(--surface-2)",
+                color: filters.price_drop_min === v ? "white" : "var(--text-2)",
+                fontSize: 12, padding: "4px 10px",
+              }} onClick={() => set("price_drop_min", v ?? undefined)}>
+                {v == null ? "Все" : `−${v}%+`}
+              </button>
+            ))}
+          </div>
+          <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 4, fontStyle: "italic" }}>
+            Лоты, у которых начальная цена снизилась — частые повторные торги.
           </div>
         </Section>
 

@@ -105,6 +105,8 @@ def build_filters(
     score_min: Optional[int] = None,
     badges_min: Optional[int] = None,
     discount_min: Optional[float] = None,
+    # Минимальный % снижения цены (повторные торги)
+    price_drop_min: Optional[float] = None,
     # Ликвидность (high/medium/low) — опирается на расстояние до города и его население
     liquidity: Optional[str] = None,
     # Цена
@@ -178,6 +180,8 @@ def build_filters(
         conditions.append(Lot.score >= score_min)
     if discount_min is not None:
         conditions.append(Lot.discount_to_market_pct >= discount_min)
+    if price_drop_min is not None:
+        conditions.append(Lot.last_price_drop_pct >= price_drop_min)
     if badges_min is not None and badges_min > 0:
         # Фильтр по минимальному количеству бейджей в JSON-массиве
         from sqlalchemy import func as _f, cast, JSON
@@ -395,6 +399,7 @@ async def get_lots(
     score_min: Optional[int] = Query(None, ge=0, le=100),
     badges_min: Optional[int] = Query(None, ge=0, le=10),
     discount_min: Optional[float] = Query(None),
+    price_drop_min: Optional[float] = Query(None, ge=0, le=100),
     liquidity: Optional[str] = Query(None, pattern="^(high|medium|low)$"),
     # Цена
     price_min: Optional[float] = Query(None, ge=0),
@@ -463,6 +468,7 @@ async def get_lots(
     conditions = build_filters(
         status=status, region_codes=region,
         score_min=score_min, badges_min=badges_min, discount_min=discount_min,
+        price_drop_min=price_drop_min,
         liquidity=liquidity,
         price_min=price_min, price_max=price_max,
         cadastral_cost_min=cadastral_cost_min, cadastral_cost_max=cadastral_cost_max,
@@ -494,6 +500,7 @@ async def get_lots(
         "submission_end": Lot.submission_end,
         "score": Lot.score,
         "discount_to_market": Lot.discount_to_market_pct,
+        "price_drop": Lot.last_price_drop_pct,
     }
     if sort_by == "resale_priority":
         # Приоритет: yes=1, with_notice=2, with_approval=3, no=4, NULL=5
@@ -816,6 +823,7 @@ async def export_lots_csv(
     region: Optional[List[str]] = Query(None, alias="region"),
     score_min: Optional[int] = Query(None),
     discount_min: Optional[float] = Query(None),
+    price_drop_min: Optional[float] = Query(None, ge=0, le=100),
     liquidity: Optional[str] = Query(None, pattern="^(high|medium|low)$"),
     price_min: Optional[float] = Query(None),
     price_max: Optional[float] = Query(None),
@@ -1146,6 +1154,7 @@ async def get_lots_for_map(
     score_min: Optional[int] = Query(None),
     badges_min: Optional[int] = Query(None),
     discount_min: Optional[float] = Query(None),
+    price_drop_min: Optional[float] = Query(None, ge=0, le=100),
     liquidity: Optional[str] = Query(None, pattern="^(high|medium|low)$"),
     price_min: Optional[float] = Query(None),
     price_max: Optional[float] = Query(None),
@@ -1180,6 +1189,7 @@ async def get_lots_for_map(
     conditions = build_filters(
         status=status, region_codes=region,
         score_min=score_min, badges_min=badges_min, discount_min=discount_min,
+        price_drop_min=price_drop_min,
         liquidity=liquidity,
         price_min=price_min, price_max=price_max,
         cadastral_cost_min=cadastral_cost_min, cadastral_cost_max=cadastral_cost_max,

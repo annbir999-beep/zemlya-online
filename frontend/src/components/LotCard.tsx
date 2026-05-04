@@ -94,6 +94,15 @@ export default function LotCard({ lot, selected, compareIds, onSelect, onToggleC
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
           <span className="lot-card-price">{formatPrice(lot.start_price)}</span>
           <DiscountTag pct={lot.discount_to_market_pct} />
+          {lot.last_price_drop_pct != null && lot.last_price_drop_pct >= 5 && (
+            <span style={{
+              background: "linear-gradient(135deg,#dc2626,#ea580c)",
+              color: "white", fontSize: 11, fontWeight: 700,
+              padding: "2px 6px", borderRadius: 4,
+            }} title="Цена снижена на повторных торгах">
+              📉 −{Math.round(lot.last_price_drop_pct)}%
+            </span>
+          )}
         </div>
         <span style={{ fontSize: 12, color: "var(--text-3)" }}>{formatArea(lot.area_sqm)}</span>
       </div>
