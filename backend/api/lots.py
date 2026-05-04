@@ -571,6 +571,23 @@ async def lot_pdf_report(lot_id: int, db: AsyncSession = Depends(get_db)):
     SITE = "https://xn--e1adnd0h.online"
     title = (lot.title or "Земельный участок")[:200]
 
+    AUCTION_TYPE_RU = {"sale": "Продажа", "rent": "Аренда", "priv": "Приватизация"}
+    AUCTION_FORM_RU = {
+        "auction": "Электронный аукцион",
+        "tender": "Конкурс",
+        "public": "Публичное предложение",
+        "without": "Без торгов",
+    }
+    DEAL_TYPE_RU = {
+        "ownership": "В собственность",
+        "lease": "В аренду",
+        "free_use": "В безвозмездное пользование",
+        "operational": "В оперативное управление",
+    }
+    auction_type_ru = AUCTION_TYPE_RU.get(lot.auction_type.value, "—") if lot.auction_type else "—"
+    auction_form_ru = AUCTION_FORM_RU.get(lot.auction_form.value, "—") if lot.auction_form else "—"
+    deal_type_ru = DEAL_TYPE_RU.get(lot.deal_type.value, "—") if lot.deal_type else "—"
+
     html = f"""<!DOCTYPE html><html><head><meta charset="utf-8">
 <style>
 @font-face {{
@@ -641,7 +658,9 @@ h1 {{ font-size: 14pt; margin: 0 0 6px; }}
 
 <div class="section">
   <h2>📋 Условия торгов</h2>
-  <div class="row"><span class="label">Тип:</span> {lot.auction_type.value if lot.auction_type else "—"}</div>
+  <div class="row"><span class="label">Тип:</span> {auction_type_ru}</div>
+  <div class="row"><span class="label">Форма:</span> {auction_form_ru}</div>
+  <div class="row"><span class="label">Сделка:</span> {deal_type_ru}</div>
   <div class="row"><span class="label">Срок подачи заявок:</span> {lot.submission_end.strftime("%d.%m.%Y %H:%M") if lot.submission_end else "—"}</div>
   <div class="row"><span class="label">Задаток:</span> {fmt_p(lot.deposit)}</div>
   <div class="row"><span class="label">Категория земель:</span> {lot.category_tg or "—"}</div>

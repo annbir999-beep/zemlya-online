@@ -55,6 +55,9 @@ export default function MapPage() {
   useEffect(() => {
     loadLots(filters);
     loadMapPoints(filters);
+    // При переключении страницы — прокрутить список вверх, чтобы видны были первые карточки
+    const scroll = document.querySelector(".catalog-scroll");
+    if (scroll) scroll.scrollTop = 0;
   }, [filters, loadLots, loadMapPoints]);
 
   // Загружаем heatmap-данные при включении режима (один раз, кэш в Redis)
@@ -214,6 +217,34 @@ export default function MapPage() {
             </div>
           )}
         </div>
+        {/* Пагинация боковой колонки */}
+        {(() => {
+          const perPage = 30;
+          const pages = Math.ceil(total / perPage);
+          if (pages <= 1) return null;
+          const cur = filters.page || 1;
+          return (
+            <div style={{
+              display: "flex", alignItems: "center", justifyContent: "center",
+              gap: 6, padding: "10px 12px", borderTop: "1px solid var(--border)",
+              background: "var(--surface)",
+            }}>
+              <button
+                className="btn btn-ghost btn-sm"
+                disabled={cur <= 1}
+                onClick={() => setFilters((f) => ({ ...f, page: Math.max(1, (f.page || 1) - 1) }))}
+              >←</button>
+              <span style={{ fontSize: 12, color: "var(--text-3)", minWidth: 80, textAlign: "center" }}>
+                стр. {cur} / {pages}
+              </span>
+              <button
+                className="btn btn-ghost btn-sm"
+                disabled={cur >= pages}
+                onClick={() => setFilters((f) => ({ ...f, page: (f.page || 1) + 1 }))}
+              >→</button>
+            </div>
+          );
+        })()}
       </aside>
 
       {/* Панель сравнения */}
