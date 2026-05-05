@@ -210,18 +210,35 @@ async def create_payment(
         plan_label = {"pro": "Pro", "buro": "Бюро", "buro_plus": "Бюро+"}.get(data.plan, data.plan)
         descr = f"Подписка «{plan_label}» на {months} мес. — Земля.ОНЛАЙН"
 
-    payment = yookassa.Payment.create({
-        "amount": {"value": str(price), "currency": "RUB"},
-        "confirmation": {"type": "redirect", "return_url": data.return_url},
-        "capture": True,
-        "description": descr,
-        "metadata": {
-            "user_id": str(user.id),
-            "plan": data.plan,
-            "months": str(months),
-            "lot_id": str(data.lot_id or ""),
-        },
-    })
+    # Если ЮКасса не настроена — даём понятное сообщение, не падаем
+    if not settings.YUKASSA_SHOP_ID or not settings.YUKASSA_SECRET_KEY \
+            or "test" in settings.YUKASSA_SECRET_KEY.lower() \
+            or "your_" in settings.YUKASSA_SECRET_KEY.lower():
+        raise HTTPException(
+            status_code=503,
+            detail="Платёжная система настраивается. Напишите @ZemlyaOnlineBot или anna_zemlya в Telegram — оформим оплату по реквизитам ИП.",
+        )
+
+    try:
+        payment = yookassa.Payment.create({
+            "amount": {"value": str(price), "currency": "RUB"},
+            "confirmation": {"type": "redirect", "return_url": data.return_url},
+            "capture": True,
+            "description": descr,
+            "metadata": {
+                "user_id": str(user.id),
+                "plan": data.plan,
+                "months": str(months),
+                "lot_id": str(data.lot_id or ""),
+            },
+        })
+    except Exception as e:
+        # Любые ошибки ЮКассы (auth, rate limit, network) → дружелюбное сообщение
+        print(f"[payments] yookassa error: {type(e).__name__}: {e}")
+        raise HTTPException(
+            status_code=503,
+            detail="Платёжная система временно недоступна. Напишите @ZemlyaOnlineBot или anna_zemlya в Telegram — оформим оплату вручную.",
+        )
 
     # Сохраняем pending-платёж (для разовых тоже — фиксируем покупку)
     sub = Subscription(
