@@ -7,10 +7,13 @@ from db.database import Base
 
 
 class SubscriptionPlan(str, enum.Enum):
-    FREE = "free"
-    PERSONAL = "personal"     # Для себя
-    EXPERT = "expert"         # Эксперт
-    LANDLORD = "landlord"     # Лендлорд
+    """Тарифы по roadmap M1-M19. Старые value-строки сохранены для
+    backward-compatibility с существующими записями в БД."""
+    FREE = "free"               # Демо: 1 фильтр, AI 5/мес
+    PRO = "personal"            # Pro 2900 ₽/мес — частный инвестор. (was PERSONAL)
+    BURO = "expert"             # Бюро 29000 ₽/мес — риелторы/малые девелоперы (SMB).
+    BURO_PLUS = "landlord"      # Бюро+ 49000 ₽/мес — растущие SMB + ТОР-модуль.
+    ENTERPRISE = "enterprise"   # Enterprise от 120000 ₽/мес — по запросу.
 
 
 class User(Base):

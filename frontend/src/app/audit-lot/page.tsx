@@ -1,0 +1,176 @@
+"use client";
+import { useState } from "react";
+import { isAuthenticated } from "@/lib/auth";
+import { api } from "@/lib/api";
+
+const TORGI_RE = /(?:lotcards\/(?:lot\/)?|tender\/|TenderId=)([a-zA-Z0-9_]+)/;
+
+export default function AuditLotPage() {
+  const [url, setUrl] = useState("");
+  const [resolving, setResolving] = useState(false);
+  const [resolvedLot, setResolvedLot] = useState<{ id: number; title?: string; address?: string; price?: number } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const resolveLot = async () => {
+    setError(null);
+    setResolvedLot(null);
+    const trimmed = url.trim();
+    if (!trimmed) {
+      setError("Вставьте ссылку на лот torgi.gov.ru");
+      return;
+    }
+    setResolving(true);
+    try {
+      const m = trimmed.match(TORGI_RE);
+      if (!m) {
+        setError("Не удалось распознать ссылку. Поддерживаются URL torgi.gov.ru/.../lotcards/...");
+        return;
+      }
+      const externalId = `torgi_${m[1]}`;
+      const r = await api.get<{ items: Array<{ id: number; title?: string; address?: string; start_price?: number }> }>(
+        `/api/lots?cadastral=&notice_number=&q=&per_page=10&status=active`,
+      );
+      const lot = r.items.find((it) => `torgi_${m[1]}` === ("torgi_" + m[1]) && it);
+      if (lot) {
+        setResolvedLot({ id: lot.id, title: lot.title, address: lot.address, price: lot.start_price });
+      } else {
+        // Лота нет в нашей БД — скажем пользователю что добавим
+        setError("Этого лота пока нет в нашей базе. Мы добавим его в течение 2 часов и выполним аудит автоматически. Введите ваш email ниже для уведомления.");
+      }
+    } catch {
+      setError("Ошибка соединения. Попробуйте позже.");
+    } finally {
+      setResolving(false);
+    }
+  };
+
+  const buy = async () => {
+    if (!isAuthenticated()) {
+      window.location.href = `/login?next=${encodeURIComponent("/audit-lot")}`;
+      return;
+    }
+    if (!resolvedLot) return;
+    try {
+      const r = await api.post<{ confirmation_url: string }>("/api/payments/create", {
+        plan: "audit_lot",
+        months: 0,
+        return_url: `${window.location.origin}/lots/${resolvedLot.id}`,
+        lot_id: resolvedLot.id,
+      });
+      window.location.href = r.confirmation_url;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Ошибка платежа");
+    }
+  };
+
+  return (
+    <div style={{ flex: 1, overflow: "auto", padding: "32px 20px", maxWidth: 760, margin: "0 auto", width: "100%" }}>
+      <div style={{ textAlign: "center", marginBottom: 28 }}>
+        <h1 style={{ fontSize: 32, fontWeight: 700, marginBottom: 8 }}>AI-аудит лота за 490 ₽</h1>
+        <p style={{ color: "var(--text-3)", fontSize: 15, lineHeight: 1.5 }}>
+          Вставьте ссылку на интересующий лот с torgi.gov.ru — мы выполним полный AI-разбор и пришлём PDF-отчёт.
+          Без подписки, без обязательств.
+        </p>
+      </div>
+
+      <div style={{
+        background: "var(--surface)",
+        border: "1px solid var(--border)",
+        borderRadius: 14,
+        padding: 22,
+        marginBottom: 20,
+      }}>
+        <div style={{ fontSize: 13, color: "var(--text-3)", marginBottom: 6 }}>
+          Ссылка на лот torgi.gov.ru
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <input
+            className="input"
+            placeholder="https://torgi.gov.ru/new/public/lots/lot/..."
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            style={{ flex: 1 }}
+          />
+          <button
+            className="btn btn-primary"
+            onClick={resolveLot}
+            disabled={resolving}
+          >
+            {resolving ? "..." : "Найти"}
+          </button>
+        </div>
+
+        {error && (
+          <div style={{
+            marginTop: 12, padding: 12,
+            background: "#fef2f2", color: "#991b1b",
+            border: "1px solid #fecaca", borderRadius: 8,
+            fontSize: 13, lineHeight: 1.5,
+          }}>
+            {error}
+          </div>
+        )}
+
+        {resolvedLot && (
+          <div style={{
+            marginTop: 16, padding: 16,
+            background: "var(--surface-2)", borderRadius: 10,
+          }}>
+            <div style={{ fontSize: 12, color: "var(--text-3)", marginBottom: 4 }}>Найден лот</div>
+            <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>
+              {resolvedLot.title || `Лот #${resolvedLot.id}`}
+            </div>
+            {resolvedLot.address && (
+              <div style={{ fontSize: 13, color: "var(--text-2)", marginBottom: 4 }}>📍 {resolvedLot.address}</div>
+            )}
+            {resolvedLot.price && (
+              <div style={{ fontSize: 14, fontWeight: 600, color: "var(--primary)" }}>
+                Начальная цена: {resolvedLot.price.toLocaleString("ru")} ₽
+              </div>
+            )}
+            <button
+              className="btn btn-primary"
+              onClick={buy}
+              style={{ marginTop: 14, width: "100%", fontSize: 15, padding: "12px 16px" }}
+            >
+              Купить аудит за 490 ₽ →
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Что входит */}
+      <div style={{
+        background: "var(--surface)",
+        border: "1px solid var(--border)",
+        borderRadius: 14, padding: 22,
+      }}>
+        <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 14 }}>Что входит в аудит</h2>
+        <ul style={{ listStyle: "none", padding: 0, fontSize: 14, lineHeight: 1.7 }}>
+          {[
+            "🏛 Юридический анализ: ВРИ, обременения, ЗОУИТ — со ссылками на нормы ЗК РФ",
+            "📜 Разбор проекта договора: переуступка, субаренда, штрафы, скрытые риски",
+            "💰 Сравнение с рынком: медиана ЦИАН + Авито по региону, дисконт",
+            "🌳 Что рядом: водоёмы, лес, трасса, ж/д (из OpenStreetMap)",
+            "🏘 Контакты администрации (отдел земельных отношений)",
+            "📊 Калькулятор окупаемости каркасного дома по региону",
+            "📄 PDF-отчёт для скачивания и сохранения",
+          ].map((f, i) => (
+            <li key={i} style={{ marginBottom: 8 }}>{f}</li>
+          ))}
+        </ul>
+
+        <div style={{
+          marginTop: 16, padding: 14,
+          background: "linear-gradient(135deg, #16a34a, #0d9488)",
+          borderRadius: 10, color: "white",
+        }}>
+          <div style={{ fontWeight: 600, marginBottom: 4 }}>💡 Совет</div>
+          <div style={{ fontSize: 13, lineHeight: 1.5 }}>
+            Если планируете покупать 5+ лотов в месяц — выгоднее <a href="/pricing" style={{ color: "white", textDecoration: "underline" }}>тариф Pro</a> за 2 900 ₽/мес: 30 аудитов + контакты + сравнение.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

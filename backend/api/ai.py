@@ -12,7 +12,7 @@ from services.ai_assessment import assess_lot, lot_to_ai_dict
 router = APIRouter()
 
 # AI-оценка во время beta открыта для всех залогиненных
-AI_ALLOWED_PLANS = {SubscriptionPlan.FREE, SubscriptionPlan.PERSONAL, SubscriptionPlan.EXPERT, SubscriptionPlan.LANDLORD}
+AI_ALLOWED_PLANS = {SubscriptionPlan.FREE, SubscriptionPlan.PRO, SubscriptionPlan.BURO, SubscriptionPlan.BURO_PLUS, SubscriptionPlan.ENTERPRISE}
 
 
 @router.post("/assess/{lot_id}")

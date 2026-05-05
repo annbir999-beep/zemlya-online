@@ -23,9 +23,9 @@ export default function Header() {
   const nav = [
     { href: "/", label: "Карта", icon: "🗺" },
     { href: "/lots", label: "Лоты", icon: "🔥" },
+    { href: "/audit-lot", label: "AI-аудит", icon: "🔍" },
     { href: "/ai-picks", label: "ИИ-разборы", icon: "🤖" },
     { href: "/analytics", label: "Аналитика", icon: "📊" },
-    { href: "/strategies", label: "Стратегии", icon: "💎" },
     { href: "/pricing", label: "Тарифы", icon: "⚡" },
   ];
 

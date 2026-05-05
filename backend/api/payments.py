@@ -19,147 +19,172 @@ router = APIRouter()
 yookassa.Configuration.account_id = settings.YUKASSA_SHOP_ID
 yookassa.Configuration.secret_key = settings.YUKASSA_SECRET_KEY
 
-# Тарифы: (название, кол-во месяцев) -> цена в рублях
+# Тарифы по roadmap M1-M19: (плановый id, кол-во месяцев) -> цена в рублях.
+# Внутренние коды совпадают с enum-value в БД (personal/expert/landlord),
+# но публичные id в API — современные (pro/buro/buro_plus).
 PLAN_PRICES = {
-    ("personal", 1): 490,
-    ("personal", 3): 1290,
-    ("expert", 1): 990,
-    ("expert", 3): 2690,
-    ("expert", 12): 8990,
-    ("landlord", 1): 1990,
-    ("landlord", 3): 4990,
-    ("landlord", 12): 16990,
+    # Pro — частный инвестор (бывший Personal)
+    ("pro", 1): 2900,
+    ("pro", 3): 7800,           # ~10% скидка
+    ("pro", 12): 27800,         # ~20% скидка
+    # Бюро — SMB (бывший Expert)
+    ("buro", 1): 29000,
+    ("buro", 3): 78000,         # ~10% скидка
+    ("buro", 12): 290000,       # ~17% скидка
+    # Бюро+ — растущие SMB (бывший Landlord)
+    ("buro_plus", 1): 49000,
+    ("buro_plus", 3): 132000,   # ~10% скидка
+    ("buro_plus", 12): 470000,  # ~20% скидка
+    # Разовые продукты (без подписки)
+    ("audit_lot", 0): 490,      # AI-аудит одного лота — main M3 hook
+    ("predd", 0): 8000,         # preDD аудит договора аренды
 }
 
 PLAN_FILTERS = {
-    "personal": 5,
-    "expert": 15,
-    "landlord": 30,
+    "pro": 5,
+    "buro": 15,
+    "buro_plus": 30,
 }
 
+# Маппинг публичных id → enum в БД (значение enum value сохраняется legacy)
 PLAN_ENUM = {
-    "personal": SubscriptionPlan.PERSONAL,
-    "expert": SubscriptionPlan.EXPERT,
-    "landlord": SubscriptionPlan.LANDLORD,
+    "pro": SubscriptionPlan.PRO,
+    "buro": SubscriptionPlan.BURO,
+    "buro_plus": SubscriptionPlan.BURO_PLUS,
 }
 
 
 class CreatePaymentRequest(BaseModel):
-    plan: str          # personal | expert | landlord
-    months: int        # 1 | 3 | 12
-    return_url: Optional[str] = "https://yourdomain.ru/dashboard"
+    plan: str          # pro | buro | buro_plus | audit_lot | predd
+    months: int = 1    # 1 | 3 | 12 (для разовых = 0)
+    return_url: Optional[str] = "https://xn--e1adnd0h.online/dashboard"
+    lot_id: Optional[int] = None   # для разового AI-аудита: какой лот покупаем
 
 
 @router.get("/plans")
 async def get_plans():
-    """
-    Тарифы по данным new.s0tka.ru:
-    Demo (free) | Для себя (personal) | Эксперт (expert) | Лендлорд (landlord)
+    """Тарифы по roadmap M1-M19: B2B-фокус с физ-сегментом как воронкой.
+
+    Free / Pro / Бюро / Бюро+ — подписка. Enterprise — по запросу.
+    Разовые продукты: AI-аудит лота 490 ₽, preDD договора 8000 ₽.
     """
     return {
         "plans": [
             {
                 "id": "free",
                 "name": "Демо",
+                "tagline": "Знакомство с платформой",
                 "price": 0,
                 "months": None,
-                "filters_limit": 0,
-                "features_matrix": [
-                    {"name": "Карта и каталог", "value": True},
-                    {"name": "Координаты центра ЗУ", "value": True},
-                    {"name": "Соотношение НЦ / КС", "value": True},
-                    {"name": "Фильтр «Задаток»", "value": True},
-                    {"name": "Фильтр «Рубрики»", "value": True},
-                    {"name": "Сохранение фильтров", "value": "нет"},
-                    {"name": "Уведомления об участках", "value": False},
-                    {"name": "Переуступка «Можно»", "value": False},
-                    {"name": "AI-оценка участка", "value": False},
-                    {"name": "Добавление функционала", "value": "нет"},
-                ],
+                "filters_limit": 1,
+                "audience": "physical",
                 "features": [
-                    "Карта и каталог",
-                    "Координаты центра участка",
-                    "Соотношение НЦ/КС",
-                    "Фильтры: задаток, рубрики",
+                    "Карта и каталог 3 600+ активных лотов",
+                    "1 сохранённый фильтр",
+                    "5 AI-аудитов лотов в месяц",
+                    "Базовая аналитика рынка",
+                    "Telegram-бот: уведомления по 1 фильтру",
                 ],
             },
             {
-                "id": "personal",
-                "name": "Для себя",
-                "prices": {"1": 490, "3": 1290},
+                "id": "audit_lot",
+                "name": "Аудит лота",
+                "tagline": "Один глубокий разбор по ссылке",
+                "price": 490,
+                "months": 0,
+                "one_time": True,
+                "audience": "physical",
+                "features": [
+                    "Полный AI-разбор лота: ВРИ, обременения, ЗОУИТ",
+                    "Анализ договора аренды + проект договора",
+                    "Сравнение с рынком (медиана ЦИАН/Авито)",
+                    "Региональные особенности (выкуп, КФХ, ст. 39.18)",
+                    "PDF-отчёт для скачивания",
+                ],
+            },
+            {
+                "id": "pro",
+                "name": "Pro",
+                "tagline": "Для частного инвестора",
+                "prices": {"1": 2900, "3": 7800, "12": 27800},
                 "filters_limit": 5,
-                "features_matrix": [
-                    {"name": "Карта и каталог", "value": True},
-                    {"name": "Координаты центра ЗУ", "value": False},
-                    {"name": "Соотношение НЦ / КС", "value": False},
-                    {"name": "Фильтр «Задаток»", "value": False},
-                    {"name": "Фильтр «Рубрики»", "value": False},
-                    {"name": "Сохранение фильтров", "value": "5"},
-                    {"name": "Уведомления об участках", "value": False},
-                    {"name": "Переуступка «Можно»", "value": False},
-                    {"name": "AI-оценка участка", "value": False},
-                    {"name": "Добавление функционала", "value": "минимально"},
-                ],
+                "audience": "physical",
                 "features": [
-                    "До 5 сохранённых фильтров",
-                    "Базовая карта и каталог",
-                    "Срок: 1 или 3 месяца",
+                    "5 сохранённых фильтров",
+                    "30 AI-аудитов лотов в месяц",
+                    "Контакты администрации (отдел земельных отношений)",
+                    "Калькулятор окупаемости (ROI каркасника)",
+                    "PDF-отчёты по лотам",
+                    "Сравнение участков, история просмотров",
+                    "Экспорт в Excel/CSV",
+                    "Email + Telegram уведомления",
                 ],
             },
             {
-                "id": "expert",
-                "name": "Эксперт",
-                "prices": {"1": 990, "3": 2690, "12": 8990},
+                "id": "buro",
+                "name": "Бюро",
+                "tagline": "Для риелторов и малых девелоперов",
+                "prices": {"1": 29000, "3": 78000, "12": 290000},
                 "filters_limit": 15,
                 "popular": True,
-                "features_matrix": [
-                    {"name": "Карта и каталог", "value": True},
-                    {"name": "Координаты центра ЗУ", "value": True},
-                    {"name": "Соотношение НЦ / КС", "value": True},
-                    {"name": "Фильтр «Задаток»", "value": True},
-                    {"name": "Фильтр «Рубрики»", "value": True},
-                    {"name": "Сохранение фильтров", "value": "15"},
-                    {"name": "Уведомления об участках", "value": False},
-                    {"name": "Переуступка «Можно»", "value": True},
-                    {"name": "AI-оценка участка", "value": True},
-                    {"name": "Добавление функционала", "value": "периодически"},
-                ],
+                "audience": "smb",
                 "features": [
-                    "До 15 сохранённых фильтров",
-                    "Все расширенные фильтры (рубрики, задаток, НЦ/КС, даты заявок)",
-                    "Координаты центра участка",
-                    "Переуступка «Можно»",
-                    "AI-оценка участка (Claude)",
-                    "Срок: 1, 3 или 12 месяцев",
+                    "15 сохранённых фильтров",
+                    "AI-аудит без лимита",
+                    "preDD аудит договора аренды — 3 в месяц",
+                    "Все региональные модули",
+                    "Приоритетный Telegram-бот",
+                    "Алерты о снижении цены повторных торгов",
+                    "Витрина «🤖 ИИ-разборы» (готовые ночные вердикты)",
+                    "Расширенная аналитика по регионам",
+                    "Поддержка в рабочие часы",
                 ],
             },
             {
-                "id": "landlord",
-                "name": "Лендлорд",
-                "prices": {"1": 1990, "3": 4990, "12": 16990},
+                "id": "buro_plus",
+                "name": "Бюро+",
+                "tagline": "Для растущих SMB",
+                "prices": {"1": 49000, "3": 132000, "12": 470000},
                 "filters_limit": 30,
-                "features_matrix": [
-                    {"name": "Карта и каталог", "value": True},
-                    {"name": "Координаты центра ЗУ", "value": True},
-                    {"name": "Соотношение НЦ / КС", "value": True},
-                    {"name": "Фильтр «Задаток»", "value": True},
-                    {"name": "Фильтр «Рубрики»", "value": True},
-                    {"name": "Сохранение фильтров", "value": "30"},
-                    {"name": "Уведомления об участках", "value": True},
-                    {"name": "Переуступка «Можно» / «Уведомив» / «Согласовав»", "value": True},
-                    {"name": "AI-оценка участка", "value": True},
-                    {"name": "Добавление функционала", "value": "приоритетное"},
-                ],
+                "audience": "smb",
                 "features": [
-                    "До 30 сохранённых фильтров",
-                    "Всё из тарифа Эксперт",
-                    "Уведомления о новых участках",
-                    "Переуступка: все 3 уровня (Можно / Уведомив / Согласовав)",
-                    "Приоритетное добавление функционала",
-                    "Срок: 1, 3 или 12 месяцев",
+                    "Всё из тарифа Бюро",
+                    "30 сохранённых фильтров",
+                    "preDD аудит договоров — без лимита",
+                    "ТОР-модуль (12 ТОР + СПВ): аналитика и алерты",
+                    "Приоритетная поддержка",
+                    "Бета-функции до релиза",
+                    "Один обучающий созвон по платформе",
                 ],
             },
-        ]
+            {
+                "id": "enterprise",
+                "name": "Enterprise",
+                "tagline": "Девелоперы федерального уровня, юрфирмы, фонды",
+                "price_from": 120000,
+                "audience": "enterprise",
+                "contact_only": True,
+                "features": [
+                    "Персональный SLA: отклик 4ч, аптайм 99.5%",
+                    "REST API + ключ + rate limit 1000/час",
+                    "Customer Success менеджер",
+                    "preDD-модуль с RAG по pravo.gov.ru",
+                    "Compliance-пакет для DD: РКН, ФСТЭК К3",
+                    "Персональные дашборды и отчёты",
+                    "NDA + рамочный договор с приложениями",
+                    "Годовой контракт, аванс 50%",
+                    "Цена от 120 000 ₽/мес — обсуждается индивидуально",
+                ],
+            },
+        ],
+        "extras": [
+            {
+                "id": "predd",
+                "name": "Аудит договора (preDD)",
+                "price": 8000,
+                "description": "Аудит договора аренды или проекта договора: 11 проверок, OCR приложений, сводный отчёт",
+            },
+        ],
     }
 
 
@@ -169,28 +194,41 @@ async def create_payment(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    price = PLAN_PRICES.get((data.plan, data.months))
+    # Разовые продукты — months=0, period не применяется
+    is_one_time = data.plan in ("audit_lot", "predd")
+    months = 0 if is_one_time else data.months
+
+    price = PLAN_PRICES.get((data.plan, months))
     if not price:
         raise HTTPException(status_code=400, detail="Неверный тариф или период")
+
+    if is_one_time:
+        descr = "AI-аудит лота — Земля.ОНЛАЙН" if data.plan == "audit_lot" else "preDD аудит договора — Земля.ОНЛАЙН"
+        if data.plan == "audit_lot" and data.lot_id:
+            descr = f"AI-аудит лота #{data.lot_id} — Земля.ОНЛАЙН"
+    else:
+        plan_label = {"pro": "Pro", "buro": "Бюро", "buro_plus": "Бюро+"}.get(data.plan, data.plan)
+        descr = f"Подписка «{plan_label}» на {months} мес. — Земля.ОНЛАЙН"
 
     payment = yookassa.Payment.create({
         "amount": {"value": str(price), "currency": "RUB"},
         "confirmation": {"type": "redirect", "return_url": data.return_url},
         "capture": True,
-        "description": f"Подписка «{data.plan}» на {data.months} мес. — Земля.ПРО",
+        "description": descr,
         "metadata": {
             "user_id": str(user.id),
             "plan": data.plan,
-            "months": str(data.months),
+            "months": str(months),
+            "lot_id": str(data.lot_id or ""),
         },
     })
 
-    # Сохраняем pending-платёж
+    # Сохраняем pending-платёж (для разовых тоже — фиксируем покупку)
     sub = Subscription(
         user_id=user.id,
         plan=data.plan,
         amount=price,
-        months=data.months,
+        months=months,
         yukassa_payment_id=payment.id,
         status="pending",
     )
@@ -226,16 +264,73 @@ async def yukassa_webhook(request: Request, db: AsyncSession = Depends(get_db)):
     sub.status = "succeeded"
     sub.paid_at = datetime.now(timezone.utc)
 
-    # Обновляем пользователя
+    # Разовые продукты не меняют подписку юзера — оставляем как успешную покупку
+    if sub.plan in ("audit_lot", "predd"):
+        await db.commit()
+        return {"status": "ok", "type": "one_time"}
+
+    # Подписочный тариф — обновляем пользователя
     result = await db.execute(select(User).where(User.id == sub.user_id))
     user = result.scalar_one_or_none()
-    if user:
+    if user and sub.plan in PLAN_ENUM:
         now = datetime.now(timezone.utc)
-        # Если подписка ещё активна — продлеваем от текущей даты окончания
         base = user.subscription_expires_at if user.subscription_expires_at and user.subscription_expires_at > now else now
         user.subscription_plan = PLAN_ENUM[sub.plan]
         user.subscription_expires_at = base + timedelta(days=30 * sub.months)
-        user.saved_filters_limit = PLAN_FILTERS[sub.plan]
+        user.saved_filters_limit = PLAN_FILTERS.get(sub.plan, user.saved_filters_limit)
 
     await db.commit()
     return {"status": "ok"}
+
+
+# ── Enterprise contact form (без оплаты — просто заявка) ───────────────────────
+
+class EnterpriseRequest(BaseModel):
+    name: str
+    company: str
+    email: str
+    phone: Optional[str] = None
+    estimated_users: Optional[int] = None
+    comment: Optional[str] = None
+
+
+@router.post("/enterprise/request")
+async def submit_enterprise_request(
+    data: EnterpriseRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Заявка на Enterprise-тариф. Шлёт email на ящик владельца + сохраняет в БД.
+
+    На M3 это просто email-уведомление; в M13 здесь будет CRM с воронкой.
+    """
+    import aiosmtplib
+    from email.mime.text import MIMEText
+
+    body = (
+        f"Новая заявка Enterprise — Земля.ОНЛАЙН\n\n"
+        f"Имя: {data.name}\n"
+        f"Компания: {data.company}\n"
+        f"Email: {data.email}\n"
+        f"Телефон: {data.phone or '—'}\n"
+        f"Сотрудников: {data.estimated_users or '—'}\n\n"
+        f"Комментарий:\n{data.comment or '—'}\n"
+    )
+
+    if settings.SMTP_USER:
+        msg = MIMEText(body, "plain", "utf-8")
+        msg["Subject"] = f"💼 Enterprise-заявка от {data.company}"
+        msg["From"] = settings.SMTP_USER
+        msg["To"] = settings.SMTP_USER  # себе на ящик
+        try:
+            await aiosmtplib.send(
+                msg,
+                hostname=settings.SMTP_HOST,
+                port=settings.SMTP_PORT,
+                username=settings.SMTP_USER,
+                password=settings.SMTP_PASSWORD,
+                use_tls=True,
+            )
+        except Exception as e:
+            print(f"[enterprise-request] email error: {type(e).__name__}: {e}")
+
+    return {"ok": True, "message": "Заявка принята, свяжемся в течение 24 часов"}

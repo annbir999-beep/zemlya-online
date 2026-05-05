@@ -66,10 +66,11 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession
 
 
 PLAN_FILTER_LIMITS = {
-    SubscriptionPlan.FREE: 3,
-    SubscriptionPlan.PERSONAL: 5,
-    SubscriptionPlan.EXPERT: 15,
-    SubscriptionPlan.LANDLORD: 30,
+    SubscriptionPlan.FREE: 1,
+    SubscriptionPlan.PRO: 5,
+    SubscriptionPlan.BURO: 15,
+    SubscriptionPlan.BURO_PLUS: 30,
+    SubscriptionPlan.ENTERPRISE: 100,
 }
 
 
