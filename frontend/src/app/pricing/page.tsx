@@ -201,12 +201,25 @@ function PlanCard({
     );
   } else if (plan.prices) {
     const cur = period || "1";
-    const monthly = (plan.prices[cur] || 0) / Number(cur);
+    const total = plan.prices[cur] || 0;
+    const monthly = total / Number(cur);
+    const baseMonthly = (plan.prices["1"] || 0);
+    const saved = baseMonthly * Number(cur) - total;
     priceBlock = (
       <div>
-        <div style={{ fontSize: 28, fontWeight: 800 }}>{fmtPrice(plan.prices[cur] || 0)}</div>
-        <div style={{ fontSize: 12, color: "var(--text-3)" }}>
-          ≈ {fmtPrice(Math.round(monthly))} в месяц
+        <div style={{ fontSize: 28, fontWeight: 800 }}>
+          {fmtPrice(Math.round(monthly))}
+          <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text-3)", marginLeft: 6 }}>/мес</span>
+        </div>
+        <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 4 }}>
+          {cur === "1"
+            ? "ежемесячно"
+            : `${fmtPrice(total)} разово за ${PERIOD_LABELS[cur]}`}
+          {saved > 0 && (
+            <span style={{ color: colors.from, fontWeight: 600, marginLeft: 6 }}>
+              · экономия {fmtPrice(saved)}
+            </span>
+          )}
         </div>
       </div>
     );
