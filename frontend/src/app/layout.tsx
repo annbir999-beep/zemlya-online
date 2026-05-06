@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import Header from "@/components/Header";
+import Footer from "@/components/Footer";
 
 export const metadata: Metadata = {
   title: "Земля.ОНЛАЙН — агрегатор земельных аукционов",
@@ -15,6 +16,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <div className="app-layout">
           <Header />
           <main className="main-content">{children}</main>
+          <Footer />
         </div>
       </body>
     </html>

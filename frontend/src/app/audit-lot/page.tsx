@@ -13,6 +13,7 @@ export default function AuditLotPage() {
   const [resolving, setResolving] = useState(false);
   const [resolvedLot, setResolvedLot] = useState<{ id: number; title?: string; address?: string; price?: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [acceptedOferta, setAcceptedOferta] = useState(false);
 
   const resolveLot = async () => {
     setError(null);
@@ -56,6 +57,10 @@ export default function AuditLotPage() {
       return;
     }
     if (!resolvedLot) return;
+    if (!acceptedOferta) {
+      setError("Согласитесь с условиями оферты, чтобы продолжить");
+      return;
+    }
     try {
       const r = await api.post<{ confirmation_url: string }>("/api/payments/create", {
         plan: "audit_lot",
@@ -134,10 +139,23 @@ export default function AuditLotPage() {
                 Начальная цена: {resolvedLot.price.toLocaleString("ru")} ₽
               </div>
             )}
+            <label style={{ display: "flex", gap: 8, alignItems: "flex-start", marginTop: 14, fontSize: 12, color: "var(--text-2)", cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={acceptedOferta}
+                onChange={(e) => setAcceptedOferta(e.target.checked)}
+                style={{ marginTop: 3 }}
+              />
+              <span>
+                Согласен с <a href="/oferta" target="_blank" rel="noreferrer" style={{ color: "var(--primary)" }}>публичной офертой</a> и
+                {" "}<a href="/privacy" target="_blank" rel="noreferrer" style={{ color: "var(--primary)" }}>политикой конфиденциальности</a>
+              </span>
+            </label>
             <button
               className="btn btn-primary"
               onClick={buy}
-              style={{ marginTop: 14, width: "100%", fontSize: 15, padding: "12px 16px" }}
+              disabled={!acceptedOferta}
+              style={{ marginTop: 10, width: "100%", fontSize: 15, padding: "12px 16px", opacity: acceptedOferta ? 1 : 0.5 }}
             >
               Купить аудит за 490 ₽ →
             </button>
