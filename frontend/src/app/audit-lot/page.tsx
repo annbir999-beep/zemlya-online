@@ -3,7 +3,10 @@ import { useState } from "react";
 import { isAuthenticated } from "@/lib/auth";
 import { api } from "@/lib/api";
 
-const TORGI_RE = /(?:lotcards\/(?:lot\/)?|tender\/|TenderId=)([a-zA-Z0-9_]+)/;
+// torgi.gov.ru формат: /new/public/lots/lot/{ID}/(lotInfo:info)?fromRec=...
+// Также поддерживаем старый /lotcards/{ID}.
+// ID — цифры с возможным суффиксом _N (например 22000175410000000063_1).
+const TORGI_RE = /(?:lots\/lot\/|lotcards\/(?:lot\/)?)(\d+(?:_\d+)?)/;
 
 export default function AuditLotPage() {
   const [url, setUrl] = useState("");
@@ -23,22 +26,22 @@ export default function AuditLotPage() {
     try {
       const m = trimmed.match(TORGI_RE);
       if (!m) {
-        setError("Не удалось распознать ссылку. Поддерживаются URL torgi.gov.ru/.../lotcards/...");
+        setError("Не удалось распознать ссылку. Скопируйте URL вида torgi.gov.ru/new/public/lots/lot/{ID}/...");
         return;
       }
-      const externalId = `torgi_${m[1]}`;
-      const r = await api.get<{ items: Array<{ id: number; title?: string; address?: string; start_price?: number }> }>(
-        `/api/lots?cadastral=&notice_number=&q=&per_page=10&status=active`,
-      );
-      const lot = r.items.find((it) => `torgi_${m[1]}` === ("torgi_" + m[1]) && it);
-      if (lot) {
-        setResolvedLot({ id: lot.id, title: lot.title, address: lot.address, price: lot.start_price });
-      } else {
-        // Лота нет в нашей БД — скажем пользователю что добавим
-        setError("Этого лота пока нет в нашей базе. Мы добавим его в течение 2 часов и выполним аудит автоматически. Введите ваш email ниже для уведомления.");
+      try {
+        const r = await api.get<{ id: number; title?: string; address?: string; start_price?: number }>(
+          `/api/lots/by-external/torgi_${m[1]}`,
+        );
+        setResolvedLot({ id: r.id, title: r.title, address: r.address, price: r.start_price });
+      } catch (apiErr) {
+        const msg = apiErr instanceof Error ? apiErr.message : "";
+        if (msg.includes("не найден")) {
+          setError("Этого лота пока нет в нашей базе. Мы обновляем данные с torgi.gov каждые 2 часа — попробуйте чуть позже. Если лот срочный, напишите @ZemlyaOnlineBot.");
+        } else {
+          setError("Ошибка соединения. Попробуйте позже.");
+        }
       }
-    } catch {
-      setError("Ошибка соединения. Попробуйте позже.");
     } finally {
       setResolving(false);
     }

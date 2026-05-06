@@ -770,6 +770,30 @@ async def calculate_roi(
     }
 
 
+@router.get("/by-external/{external_id}")
+async def get_lot_by_external(external_id: str, db: AsyncSession = Depends(get_db)):
+    """Поиск лота по external_id (например 'torgi_22000175410000000063_1').
+    Используется на странице /audit-lot, чтобы пользователь мог найти лот
+    по ссылке с torgi.gov.
+    """
+    # Поддерживаем оба формата: с префиксом 'torgi_' и без
+    eid = external_id if external_id.startswith("torgi_") else f"torgi_{external_id}"
+    result = await db.execute(select(Lot).where(Lot.external_id == eid))
+    lot = result.scalar_one_or_none()
+    if not lot:
+        raise HTTPException(status_code=404, detail="Лот не найден в базе. Мы добавим его в течение 2 часов.")
+    return {
+        "id": lot.id,
+        "external_id": lot.external_id,
+        "title": lot.title,
+        "address": lot.address,
+        "start_price": lot.start_price,
+        "area_sqm": lot.area_sqm,
+        "region_name": lot.region_name,
+        "status": lot.status.value if lot.status else None,
+    }
+
+
 @router.get("/heatmap")
 async def get_heatmap(db: AsyncSession = Depends(get_db)):
     """Тепловая карта по регионам РФ.
