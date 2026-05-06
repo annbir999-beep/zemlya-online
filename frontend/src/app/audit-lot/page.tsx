@@ -30,14 +30,17 @@ export default function AuditLotPage() {
         return;
       }
       try {
+        // fetch=true — если лота нет в нашей БД, бэкенд скачает его с torgi.gov на лету
         const r = await api.get<{ id: number; title?: string; address?: string; start_price?: number }>(
-          `/api/lots/by-external/torgi_${m[1]}`,
+          `/api/lots/by-external/torgi_${m[1]}?fetch=true`,
         );
         setResolvedLot({ id: r.id, title: r.title, address: r.address, price: r.start_price });
       } catch (apiErr) {
         const msg = apiErr instanceof Error ? apiErr.message : "";
-        if (msg.includes("не найден")) {
-          setError("Этого лота пока нет в нашей базе. Мы обновляем данные с torgi.gov каждые 2 часа — попробуйте чуть позже. Если лот срочный, напишите @ZemlyaOnlineBot.");
+        if (msg.includes("torgi.gov") || msg.includes("на torgi")) {
+          setError("Лот не найден на torgi.gov. Проверьте ссылку — возможно лот удалён или ID неверный.");
+        } else if (msg.includes("не найден")) {
+          setError("Лот не найден. Если ссылка свежая, напишите @ZemlyaOnlineBot — добавим вручную.");
         } else {
           setError("Ошибка соединения. Попробуйте позже.");
         }

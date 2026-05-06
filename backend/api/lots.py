@@ -771,17 +771,52 @@ async def calculate_roi(
 
 
 @router.get("/by-external/{external_id}")
-async def get_lot_by_external(external_id: str, db: AsyncSession = Depends(get_db)):
+async def get_lot_by_external(
+    external_id: str,
+    fetch: bool = Query(False, description="Если true и лота нет в БД — скачать с torgi.gov на лету"),
+    db: AsyncSession = Depends(get_db),
+):
     """Поиск лота по external_id (например 'torgi_22000175410000000063_1').
-    Используется на странице /audit-lot, чтобы пользователь мог найти лот
-    по ссылке с torgi.gov.
+
+    Если ?fetch=true и лота нет в нашей БД — пробуем скачать с torgi.gov
+    напрямую через детальный API и сохранить. Это позволяет покупать AI-аудит
+    на любой лот torgi.gov, даже если он закрыт или ещё не попал в наш скрап.
     """
-    # Поддерживаем оба формата: с префиксом 'torgi_' и без
     eid = external_id if external_id.startswith("torgi_") else f"torgi_{external_id}"
     result = await db.execute(select(Lot).where(Lot.external_id == eid))
     lot = result.scalar_one_or_none()
+
+    if not lot and fetch:
+        # On-demand: тянем лот напрямую с torgi.gov
+        from services.scraper_torgi import TorgiGovScraper
+        torgi_id = eid.removeprefix("torgi_")
+        scraper = TorgiGovScraper(db)
+        try:
+            resp = await scraper.client.get(
+                f"https://torgi.gov.ru/new/api/public/lotcards/{torgi_id}"
+            )
+            if resp.status_code != 200:
+                raise HTTPException(status_code=404, detail="Лот не найден на torgi.gov")
+            raw = resp.json()
+            await scraper._upsert_lot(raw)
+            await db.commit()
+            # Перечитываем с актуальными скорами
+            result = await db.execute(select(Lot).where(Lot.external_id == eid))
+            lot = result.scalar_one_or_none()
+        except HTTPException:
+            raise
+        except Exception as e:
+            print(f"[by-external on-demand] {type(e).__name__}: {e}")
+            raise HTTPException(status_code=502, detail="Не удалось получить лот с torgi.gov. Попробуйте позже.")
+        finally:
+            await scraper.client.aclose()
+
     if not lot:
-        raise HTTPException(status_code=404, detail="Лот не найден в базе. Мы добавим его в течение 2 часов.")
+        raise HTTPException(
+            status_code=404,
+            detail="Лот не найден в базе. Мы обновляем данные с torgi.gov каждые 2 часа.",
+        )
+
     return {
         "id": lot.id,
         "external_id": lot.external_id,
