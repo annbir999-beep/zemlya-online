@@ -43,6 +43,10 @@ class User(Base):
     # При регистрации = 1 (один аудит в подарок). Списывается при первом /api/ai/assess.
     free_audits_left = Column(Integer, default=1)
 
+    # Откуда пришёл пользователь — заполняется при регистрации из ?utm_*
+    signup_source = Column(String(80))      # tg_channel_xyz, seo_blog, direct, ...
+    signup_campaign = Column(String(80))    # утм-campaign
+
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     last_login_at = Column(DateTime(timezone=True))
 

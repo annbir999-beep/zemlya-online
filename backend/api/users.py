@@ -19,6 +19,8 @@ class RegisterRequest(BaseModel):
     email: EmailStr
     password: str
     name: Optional[str] = None
+    utm_source: Optional[str] = None      # из ?utm_source — TG-канал, blog и т.д.
+    utm_campaign: Optional[str] = None
 
 
 class TokenResponse(BaseModel):
@@ -91,6 +93,8 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
         subscription_plan=SubscriptionPlan.FREE,
         saved_filters_limit=PLAN_FILTER_LIMITS[SubscriptionPlan.FREE],
         free_audits_left=1,  # один бесплатный AI-аудит при регистрации
+        signup_source=(data.utm_source or "direct")[:80],
+        signup_campaign=(data.utm_campaign or None) and data.utm_campaign[:80],
     )
     db.add(user)
     await db.commit()

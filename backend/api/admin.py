@@ -321,6 +321,122 @@ async def patch_promo(
     return {"id": promo.id, "is_active": promo.is_active}
 
 
+# ── Воронка ───────────────────────────────────────────────────────────────────
+
+@router.get("/funnel")
+async def admin_funnel(
+    days: int = Query(30, ge=7, le=180),
+    _: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Дашборд воронки: регистрации, платящие, источники, промокоды.
+
+    Конверсия считается так: посетитель → регистрация (есть в БД) →
+    первый успешный платёж (есть в БД). Visitor-метрики (просмотры
+    страниц) пока не пишем — сбор UV нужно делать через Я.Метрику или
+    Plausible, отдельно.
+    """
+    from models.alert import Subscription
+    from models.promo import PromoCode, PromoUsage
+
+    now = datetime.now(timezone.utc)
+    since = now - timedelta(days=days)
+
+    # Регистрации по дням
+    regs = (await db.execute(
+        select(func.date(User.created_at).label("d"), func.count(User.id))
+        .where(User.created_at >= since)
+        .group_by(func.date(User.created_at))
+        .order_by(func.date(User.created_at))
+    )).all()
+    daily_registrations = [{"date": r[0].isoformat() if r[0] else None, "count": r[1]} for r in regs]
+
+    # Платежи по дням (succeeded)
+    pays = (await db.execute(
+        select(
+            func.date(Subscription.paid_at).label("d"),
+            func.count(Subscription.id),
+            func.sum(Subscription.amount),
+        )
+        .where(and_(Subscription.status == "succeeded", Subscription.paid_at >= since))
+        .group_by(func.date(Subscription.paid_at))
+        .order_by(func.date(Subscription.paid_at))
+    )).all()
+    daily_payments = [
+        {"date": r[0].isoformat() if r[0] else None, "count": r[1], "revenue": int(r[2] or 0)}
+        for r in pays
+    ]
+
+    # Источники регистраций
+    sources = (await db.execute(
+        select(func.coalesce(User.signup_source, "direct"), func.count(User.id))
+        .where(User.created_at >= since)
+        .group_by(func.coalesce(User.signup_source, "direct"))
+        .order_by(func.count(User.id).desc())
+    )).all()
+    by_source = [{"source": r[0], "count": r[1]} for r in sources]
+
+    # Промокоды — топ
+    promo_top = (await db.execute(
+        select(
+            PromoCode.code,
+            PromoCode.used_count,
+            PromoCode.discount_pct,
+            PromoCode.discount_fixed,
+            func.coalesce(func.sum(PromoUsage.discount_applied), 0).label("total_discount"),
+        )
+        .outerjoin(PromoUsage, PromoUsage.promo_code_id == PromoCode.id)
+        .group_by(PromoCode.id)
+        .order_by(PromoCode.used_count.desc().nulls_last())
+        .limit(10)
+    )).all()
+    by_promo = [
+        {
+            "code": r[0],
+            "used_count": r[1] or 0,
+            "discount": (f"{r[2]}%" if r[2] else f"{r[3]}₽") if (r[2] or r[3]) else "—",
+            "total_discount": int(r[4] or 0),
+        }
+        for r in promo_top
+    ]
+
+    # Воронка-сводка за период
+    total_regs = sum(r["count"] for r in daily_registrations)
+    total_payers = (await db.execute(
+        select(func.count(func.distinct(Subscription.user_id)))
+        .join(User, User.id == Subscription.user_id)
+        .where(and_(Subscription.status == "succeeded", User.created_at >= since))
+    )).scalar() or 0
+    total_revenue = sum(r["revenue"] for r in daily_payments)
+
+    # Среднее время от регистрации до первой покупки (часы)
+    ttl_q = (await db.execute(
+        select(
+            func.avg(
+                func.extract("epoch", Subscription.paid_at - User.created_at) / 3600
+            )
+        )
+        .join(User, User.id == Subscription.user_id)
+        .where(and_(Subscription.status == "succeeded", User.created_at >= since))
+    )).scalar()
+    avg_ttp_hours = round(float(ttl_q), 1) if ttl_q else None
+
+    return {
+        "period_days": days,
+        "summary": {
+            "registrations": total_regs,
+            "payers": total_payers,
+            "conversion_pct": round(total_payers / total_regs * 100, 1) if total_regs else 0,
+            "revenue": total_revenue,
+            "avg_time_to_purchase_hours": avg_ttp_hours,
+        },
+        "daily_registrations": daily_registrations,
+        "daily_payments": daily_payments,
+        "by_source": by_source,
+        "by_promo": by_promo,
+    }
+
+
 # ── Подписки/платежи ───────────────────────────────────────────────────────────
 
 @router.get("/subscriptions")

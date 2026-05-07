@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import UtmCapture from "@/components/UtmCapture";
 
 export const metadata: Metadata = {
   title: "Земля.ОНЛАЙН — агрегатор земельных аукционов",
@@ -14,6 +15,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="ru">
       <body>
         <div className="app-layout">
+          <UtmCapture />
           <Header />
           <main className="main-content">{children}</main>
           <Footer />

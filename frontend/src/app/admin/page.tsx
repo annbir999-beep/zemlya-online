@@ -61,7 +61,7 @@ const fmtDate = (iso?: string | null) => iso ? new Date(iso).toLocaleString("ru"
 export default function AdminPage() {
   const router = useRouter();
   const [me, setMe] = useState<UserProfile | null>(null);
-  const [tab, setTab] = useState<"stats" | "users" | "promos" | "subs">("stats");
+  const [tab, setTab] = useState<"stats" | "funnel" | "users" | "promos" | "subs">("stats");
 
   useEffect(() => {
     getMe().then((u) => {
@@ -81,6 +81,7 @@ export default function AdminPage() {
       <div style={{ display: "flex", gap: 4, borderBottom: "1px solid var(--border)", marginBottom: 20 }}>
         {([
           ["stats", "Сводка"],
+          ["funnel", "🔍 Воронка"],
           ["users", "Пользователи"],
           ["promos", "Промокоды"],
           ["subs", "Платежи"],
@@ -102,6 +103,7 @@ export default function AdminPage() {
       </div>
 
       {tab === "stats" && <StatsTab />}
+      {tab === "funnel" && <FunnelTab />}
       {tab === "users" && <UsersTab />}
       {tab === "promos" && <PromosTab />}
       {tab === "subs" && <SubsTab />}
@@ -391,6 +393,144 @@ function SubsTab() {
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+// ── Funnel ────────────────────────────────────────────────────────────────────
+
+interface FunnelData {
+  period_days: number;
+  summary: {
+    registrations: number;
+    payers: number;
+    conversion_pct: number;
+    revenue: number;
+    avg_time_to_purchase_hours?: number | null;
+  };
+  daily_registrations: { date: string; count: number }[];
+  daily_payments: { date: string; count: number; revenue: number }[];
+  by_source: { source: string; count: number }[];
+  by_promo: { code: string; used_count: number; discount: string; total_discount: number }[];
+}
+
+function FunnelTab() {
+  const [data, setData] = useState<FunnelData | null>(null);
+  const [days, setDays] = useState(30);
+  useEffect(() => {
+    api.get<FunnelData>(`/api/admin/funnel?days=${days}`).then(setData);
+  }, [days]);
+
+  if (!data) return <div style={{ color: "var(--text-3)" }}>Загрузка...</div>;
+
+  const maxReg = Math.max(...data.daily_registrations.map((d) => d.count), 1);
+  const maxPay = Math.max(...data.daily_payments.map((d) => d.count), 1);
+  const maxSrc = Math.max(...data.by_source.map((s) => s.count), 1);
+
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
+        {[7, 30, 90, 180].map((d) => (
+          <button
+            key={d}
+            className="btn btn-sm"
+            style={{
+              background: days === d ? "var(--primary)" : "var(--surface-2)",
+              color: days === d ? "white" : "var(--text-2)",
+            }}
+            onClick={() => setDays(d)}
+          >
+            {d} дней
+          </button>
+        ))}
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10, marginBottom: 20 }}>
+        <Card label="Регистраций" value={fmt(data.summary.registrations)} />
+        <Card label="Заплатили" value={fmt(data.summary.payers)} note={`${data.summary.conversion_pct}% конверсия`} />
+        <Card label="Выручка периода" value={`${fmt(data.summary.revenue)} ₽`} accent />
+        <Card
+          label="Среднее время до 1-й покупки"
+          value={
+            data.summary.avg_time_to_purchase_hours
+              ? data.summary.avg_time_to_purchase_hours < 48
+                ? `${data.summary.avg_time_to_purchase_hours.toFixed(1)} ч`
+                : `${(data.summary.avg_time_to_purchase_hours / 24).toFixed(1)} дн`
+              : "—"
+          }
+        />
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: 14, marginBottom: 20 }}>
+        <FunnelPanel title="Регистрации по дням">
+          <div style={{ display: "flex", alignItems: "flex-end", height: 120, gap: 2 }}>
+            {data.daily_registrations.map((d) => (
+              <div key={d.date} title={`${new Date(d.date).toLocaleDateString("ru")}: ${d.count}`}
+                style={{ flex: 1, height: `${(d.count / maxReg) * 100}%`, background: "linear-gradient(180deg,#16a34a,#0d9488)", borderRadius: "3px 3px 0 0", minHeight: 2 }} />
+            ))}
+          </div>
+          <DateRange items={data.daily_registrations} />
+        </FunnelPanel>
+        <FunnelPanel title="Платящих по дням">
+          <div style={{ display: "flex", alignItems: "flex-end", height: 120, gap: 2 }}>
+            {data.daily_payments.map((d) => (
+              <div key={d.date} title={`${new Date(d.date).toLocaleDateString("ru")}: ${d.count} (${fmt(d.revenue)} ₽)`}
+                style={{ flex: 1, height: `${(d.count / maxPay) * 100}%`, background: "linear-gradient(180deg,#dc2626,#ea580c)", borderRadius: "3px 3px 0 0", minHeight: 2 }} />
+            ))}
+          </div>
+          <DateRange items={data.daily_payments} />
+        </FunnelPanel>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: 14 }}>
+        <FunnelPanel title="Источники регистраций (UTM)">
+          {data.by_source.length === 0 ? (
+            <div style={{ fontSize: 13, color: "var(--text-3)" }}>Нет данных за период</div>
+          ) : data.by_source.map((s) => (
+            <div key={s.source} style={{ marginBottom: 8 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 3 }}>
+                <span>{s.source}</span><b>{s.count}</b>
+              </div>
+              <div style={{ height: 6, background: "var(--surface-2)", borderRadius: 3 }}>
+                <div style={{ width: `${(s.count / maxSrc) * 100}%`, height: "100%", background: "#0ea5e9", borderRadius: 3 }} />
+              </div>
+            </div>
+          ))}
+          <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 10 }}>
+            Используйте UTM в ссылках: <code>?utm_source=tg_xyz&utm_campaign=may2026</code>
+          </div>
+        </FunnelPanel>
+
+        <FunnelPanel title="Промокоды (использования)">
+          {data.by_promo.length === 0 ? (
+            <div style={{ fontSize: 13, color: "var(--text-3)" }}>Нет данных</div>
+          ) : data.by_promo.map((p) => (
+            <div key={p.code} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px dashed var(--border)", fontSize: 13 }}>
+              <span><code>{p.code}</code> · {p.discount}</span>
+              <span><b>{p.used_count}</b> исп. / −{fmt(p.total_discount)} ₽</span>
+            </div>
+          ))}
+        </FunnelPanel>
+      </div>
+    </div>
+  );
+}
+
+function FunnelPanel({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: 16 }}>
+      <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>{title}</h3>
+      {children}
+    </div>
+  );
+}
+
+function DateRange({ items }: { items: { date: string }[] }) {
+  if (items.length === 0) return null;
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--text-3)", marginTop: 6 }}>
+      <span>{new Date(items[0].date).toLocaleDateString("ru", { day: "numeric", month: "short" })}</span>
+      <span>{new Date(items.at(-1)!.date).toLocaleDateString("ru", { day: "numeric", month: "short" })}</span>
     </div>
   );
 }
