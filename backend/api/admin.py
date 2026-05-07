@@ -329,6 +329,16 @@ async def admin_funnel(
     _: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
+    try:
+        return await _admin_funnel_impl(days, db)
+    except Exception as e:
+        print(f"[admin/funnel] FATAL: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {str(e)[:200]}")
+
+
+async def _admin_funnel_impl(days: int, db: AsyncSession):
     """Дашборд воронки: регистрации, платящие, источники, промокоды.
 
     Конверсия считается так: посетитель → регистрация (есть в БД) →
@@ -409,17 +419,28 @@ async def admin_funnel(
     )).scalar() or 0
     total_revenue = sum(r["revenue"] for r in daily_payments)
 
-    # Среднее время от регистрации до первой покупки (часы)
-    ttl_q = (await db.execute(
-        select(
-            func.avg(
-                func.extract("epoch", Subscription.paid_at - User.created_at) / 3600
-            )
-        )
-        .join(User, User.id == Subscription.user_id)
-        .where(and_(Subscription.status == "succeeded", User.created_at >= since))
-    )).scalar()
-    avg_ttp_hours = round(float(ttl_q), 1) if ttl_q else None
+    # Среднее время от регистрации до первой покупки (часы) — считаем в Python.
+    # SQLAlchemy `func.extract("epoch", ...)` на разнице timestamptz ведёт
+    # себя нестабильно, проще вытащить пары и посчитать дельты.
+    avg_ttp_hours = None
+    try:
+        rows_ttp = (await db.execute(
+            select(User.created_at, Subscription.paid_at)
+            .join(Subscription, Subscription.user_id == User.id)
+            .where(and_(
+                Subscription.status == "succeeded",
+                User.created_at >= since,
+                Subscription.paid_at.isnot(None),
+            ))
+        )).all()
+        deltas = [
+            (p - c).total_seconds() / 3600
+            for c, p in rows_ttp if c and p
+        ]
+        if deltas:
+            avg_ttp_hours = round(sum(deltas) / len(deltas), 1)
+    except Exception as e:
+        print(f"[admin/funnel] avg_ttp error: {type(e).__name__}: {e}")
 
     return {
         "period_days": days,
