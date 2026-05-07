@@ -1,7 +1,8 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { isAuthenticated } from "@/lib/auth";
-import { api } from "@/lib/api";
+import { api, UserProfile } from "@/lib/api";
+import { getMe } from "@/lib/auth";
 
 // torgi.gov.ru формат: /new/public/lots/lot/{ID}/(lotInfo:info)?fromRec=...
 // Также поддерживаем старый /lotcards/{ID}.
@@ -14,6 +15,9 @@ export default function AuditLotPage() {
   const [resolvedLot, setResolvedLot] = useState<{ id: number; title?: string; address?: string; price?: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [acceptedOferta, setAcceptedOferta] = useState(false);
+  const [user, setUser] = useState<UserProfile | null>(null);
+  useEffect(() => { getMe().then(setUser); }, []);
+  const hasFreeAudit = (user?.free_audits_left || 0) > 0;
 
   const resolveLot = async () => {
     setError(null);
@@ -84,6 +88,21 @@ export default function AuditLotPage() {
         </p>
       </div>
 
+      {hasFreeAudit && (
+        <div style={{
+          background: "linear-gradient(135deg,#16a34a,#0d9488)",
+          color: "white", padding: "14px 18px", borderRadius: 12,
+          marginBottom: 16, textAlign: "center",
+        }}>
+          <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 2 }}>
+            🎁 Ваш первый аудит — бесплатно
+          </div>
+          <div style={{ fontSize: 12, opacity: 0.9 }}>
+            На счету: {user?.free_audits_left} разовых аудитов. Расходуются только на ваши действия.
+          </div>
+        </div>
+      )}
+
       <div style={{
         background: "var(--surface)",
         border: "1px solid var(--border)",
@@ -151,14 +170,25 @@ export default function AuditLotPage() {
                 {" "}<a href="/privacy" target="_blank" rel="noreferrer" style={{ color: "var(--primary)" }}>политикой конфиденциальности</a>
               </span>
             </label>
-            <button
-              className="btn btn-primary"
-              onClick={buy}
-              disabled={!acceptedOferta}
-              style={{ marginTop: 10, width: "100%", fontSize: 15, padding: "12px 16px", opacity: acceptedOferta ? 1 : 0.5 }}
-            >
-              Купить аудит за 490 ₽ →
-            </button>
+            {hasFreeAudit ? (
+              <button
+                className="btn btn-primary"
+                onClick={() => window.location.href = `/lots/${resolvedLot?.id}`}
+                disabled={!acceptedOferta}
+                style={{ marginTop: 10, width: "100%", fontSize: 15, padding: "12px 16px", opacity: acceptedOferta ? 1 : 0.5, background: "linear-gradient(135deg,#16a34a,#0d9488)" }}
+              >
+                🎁 Получить аудит бесплатно →
+              </button>
+            ) : (
+              <button
+                className="btn btn-primary"
+                onClick={buy}
+                disabled={!acceptedOferta}
+                style={{ marginTop: 10, width: "100%", fontSize: 15, padding: "12px 16px", opacity: acceptedOferta ? 1 : 0.5 }}
+              >
+                Купить аудит за 490 ₽ →
+              </button>
+            )}
           </div>
         )}
       </div>

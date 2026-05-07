@@ -53,6 +53,23 @@ export default function PricingPage() {
   });
   const [loading, setLoading] = useState<string | null>(null);
   const [showEnterpriseForm, setShowEnterpriseForm] = useState(false);
+  const [promoCode, setPromoCode] = useState("");
+  const [promoStatus, setPromoStatus] = useState<{ ok: boolean; message: string } | null>(null);
+
+  const validatePromo = async () => {
+    setPromoStatus(null);
+    if (!promoCode.trim()) return;
+    try {
+      const r = await api.post<{ valid: boolean; discount_pct?: number; discount_fixed?: number; description?: string }>(
+        "/api/payments/promo/validate", { code: promoCode.trim() },
+      );
+      const sale = r.discount_pct ? `−${r.discount_pct}%` : r.discount_fixed ? `−${r.discount_fixed} ₽` : "";
+      setPromoStatus({ ok: true, message: `Применится скидка ${sale}${r.description ? ` (${r.description})` : ""}` });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Ошибка";
+      setPromoStatus({ ok: false, message: msg });
+    }
+  };
 
   useEffect(() => {
     api.get<PlansResponse>("/api/payments/plans").then((d) => {
@@ -74,6 +91,7 @@ export default function PricingPage() {
         months,
         return_url: `${window.location.origin}/dashboard`,
         lot_id: lotId,
+        promo_code: promoCode.trim() || undefined,
       });
       window.location.href = r.confirmation_url;
     } catch (e) {
@@ -86,12 +104,48 @@ export default function PricingPage() {
 
   return (
     <div style={{ flex: 1, overflow: "auto", padding: "32px 20px", maxWidth: 1280, margin: "0 auto", width: "100%" }}>
-      <div style={{ textAlign: "center", marginBottom: 32 }}>
+      <div style={{ textAlign: "center", marginBottom: 24 }}>
         <h1 style={{ fontSize: 32, fontWeight: 700, marginBottom: 8 }}>Тарифы</h1>
         <p style={{ color: "var(--text-3)", fontSize: 15, maxWidth: 640, margin: "0 auto", lineHeight: 1.5 }}>
           От разового AI-аудита за 490 ₽ до Enterprise с SLA. Подписка отменяется в один клик, разовые продукты — без обязательств.
         </p>
       </div>
+
+      {/* Промокод */}
+      <div style={{
+        background: "var(--surface)",
+        border: "1px solid var(--border)",
+        borderRadius: 10,
+        padding: "12px 16px",
+        marginBottom: 20,
+        maxWidth: 480,
+        margin: "0 auto 20px",
+        display: "flex",
+        gap: 8,
+        alignItems: "center",
+      }}>
+        <span style={{ fontSize: 13, color: "var(--text-3)", whiteSpace: "nowrap" }}>🎫 Промокод:</span>
+        <input
+          className="input"
+          placeholder="например, FIRST50"
+          value={promoCode}
+          onChange={(e) => { setPromoCode(e.target.value); setPromoStatus(null); }}
+          style={{ flex: 1, fontSize: 13 }}
+        />
+        <button className="btn btn-secondary btn-sm" onClick={validatePromo} disabled={!promoCode.trim()}>
+          Проверить
+        </button>
+      </div>
+      {promoStatus && (
+        <div style={{
+          maxWidth: 480, margin: "-10px auto 20px",
+          padding: "8px 14px", borderRadius: 8, fontSize: 13, textAlign: "center",
+          background: promoStatus.ok ? "#dcfce7" : "#fee2e2",
+          color: promoStatus.ok ? "#15803d" : "#991b1b",
+        }}>
+          {promoStatus.message}
+        </div>
+      )}
 
       {/* Главные подписочные планы */}
       <div style={{

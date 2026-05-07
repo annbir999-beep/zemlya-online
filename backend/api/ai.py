@@ -15,6 +15,9 @@ router = APIRouter()
 AI_ALLOWED_PLANS = {SubscriptionPlan.FREE, SubscriptionPlan.PRO, SubscriptionPlan.BURO, SubscriptionPlan.BURO_PLUS, SubscriptionPlan.ENTERPRISE}
 
 
+UNLIMITED_PLANS = {SubscriptionPlan.BURO, SubscriptionPlan.BURO_PLUS, SubscriptionPlan.ENTERPRISE}
+
+
 @router.post("/assess/{lot_id}")
 async def request_assessment(
     lot_id: int,
@@ -32,11 +35,24 @@ async def request_assessment(
     if not lot:
         raise HTTPException(status_code=404, detail="Лот не найден")
 
-    # Если оценка свежая (< 24ч) — возвращаем кэш
+    # Кэш — без списания. Бюро/Бюро+/Enterprise — без лимита и кэша.
+    is_cached = False
     if lot.ai_assessment and lot.ai_assessed_at:
         age_hours = (datetime.now(timezone.utc) - lot.ai_assessed_at).total_seconds() / 3600
         if age_hours < 24:
+            is_cached = True
             return {"lot_id": lot_id, "assessment": lot.ai_assessment, "cached": True}
+
+    # Лимиты: Free/Pro расходуют free_audits_left на аналитику; Бюро+ — без лимита.
+    if user.subscription_plan not in UNLIMITED_PLANS:
+        if (user.free_audits_left or 0) <= 0:
+            raise HTTPException(
+                status_code=402,
+                detail="Лимит бесплатных AI-аудитов исчерпан. Купите разовый аудит за 490 ₽ или подключите тариф Бюро.",
+            )
+        # Списываем — для рестрикций, чтобы не зацикливалось на одной активной транзакции
+        user.free_audits_left = (user.free_audits_left or 0) - 1
+        await db.commit()
 
     assessment = await assess_lot(lot_to_ai_dict(lot))
 

@@ -39,6 +39,7 @@ class UserProfile(BaseModel):
     notification_email: bool
     notification_telegram: bool
     is_verified: bool
+    free_audits_left: int = 0
 
     class Config:
         from_attributes = True
@@ -88,10 +89,19 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
         name=data.name,
         subscription_plan=SubscriptionPlan.FREE,
         saved_filters_limit=PLAN_FILTER_LIMITS[SubscriptionPlan.FREE],
+        free_audits_left=1,  # один бесплатный AI-аудит при регистрации
     )
     db.add(user)
     await db.commit()
     await db.refresh(user)
+
+    # Welcome email — асинхронно, не блокирует регистрацию
+    try:
+        from services.welcome_email import send_welcome_email
+        import asyncio as _asyncio
+        _asyncio.create_task(send_welcome_email(user))
+    except Exception as e:
+        print(f"[welcome] error: {type(e).__name__}: {e}")
 
     return TokenResponse(
         access_token=create_access_token(user.id),
@@ -143,6 +153,7 @@ async def get_me(user: User = Depends(get_current_user)):
         notification_email=user.notification_email,
         notification_telegram=user.notification_telegram,
         is_verified=user.is_verified,
+        free_audits_left=user.free_audits_left or 0,
     )
 
 
@@ -178,6 +189,7 @@ async def update_profile(
         notification_email=user.notification_email,
         notification_telegram=user.notification_telegram,
         is_verified=user.is_verified,
+        free_audits_left=user.free_audits_left or 0,
     )
 
 

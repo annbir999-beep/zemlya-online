@@ -3,6 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from db.database import engine, Base
+# Импортируем модели чтобы Base.metadata знал о них (для create_all при первом старте)
+from models import promo  # noqa: F401
 from api import lots, users, alerts, ai, payments, subscriptions, telegram
 from core.config import settings
 

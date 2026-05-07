@@ -38,6 +38,10 @@ class User(Base):
     notification_email = Column(Boolean, default=True)
     notification_telegram = Column(Boolean, default=False)
 
+    # Бесплатный первый AI-аудит — снимает барьер первой покупки.
+    # При регистрации = 1 (один аудит в подарок). Списывается при первом /api/ai/assess.
+    free_audits_left = Column(Integer, default=1)
+
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     last_login_at = Column(DateTime(timezone=True))
 

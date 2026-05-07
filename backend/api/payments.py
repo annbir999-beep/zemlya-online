@@ -59,6 +59,12 @@ class CreatePaymentRequest(BaseModel):
     months: int = 1    # 1 | 3 | 12 (для разовых = 0)
     return_url: Optional[str] = "https://xn--e1adnd0h.online/dashboard"
     lot_id: Optional[int] = None   # для разового AI-аудита: какой лот покупаем
+    promo_code: Optional[str] = None  # промокод (FIRST50, EARLY и т.п.)
+
+
+class PromoValidateRequest(BaseModel):
+    code: str
+    plan: Optional[str] = None  # план для проверки plan_filter промокода
 
 
 @router.get("/plans")
@@ -202,6 +208,41 @@ async def create_payment(
     if not price:
         raise HTTPException(status_code=400, detail="Неверный тариф или период")
 
+    # Применение промокода (опционально)
+    promo_obj = None
+    promo_discount = 0
+    if data.promo_code:
+        from models.promo import PromoCode
+        from sqlalchemy import func as _func
+        code_norm = data.promo_code.strip().upper()
+        promo_q = await db.execute(
+            select(PromoCode).where(_func.upper(PromoCode.code) == code_norm)
+        )
+        promo_obj = promo_q.scalar_one_or_none()
+        if not promo_obj or not promo_obj.is_active:
+            raise HTTPException(status_code=400, detail="Промокод не найден или отключён")
+        if promo_obj.valid_until and promo_obj.valid_until < datetime.now(timezone.utc):
+            raise HTTPException(status_code=400, detail="Промокод истёк")
+        if promo_obj.max_uses is not None and (promo_obj.used_count or 0) >= promo_obj.max_uses:
+            raise HTTPException(status_code=400, detail="Промокод закончился")
+        if promo_obj.plan_filter and promo_obj.plan_filter != data.plan:
+            raise HTTPException(status_code=400, detail=f"Промокод действует только для тарифа «{promo_obj.plan_filter}»")
+        if promo_obj.new_users_only:
+            from models.alert import Subscription as _Sub
+            paid_q = await db.execute(
+                select(_func.count()).select_from(_Sub).where(
+                    _Sub.user_id == user.id, _Sub.status == "succeeded"
+                )
+            )
+            if (paid_q.scalar() or 0) > 0:
+                raise HTTPException(status_code=400, detail="Промокод только для новых пользователей")
+
+        if promo_obj.discount_pct:
+            promo_discount = int(price * promo_obj.discount_pct / 100)
+        elif promo_obj.discount_fixed:
+            promo_discount = min(promo_obj.discount_fixed, price - 1)
+        price = max(1, price - promo_discount)  # минимум 1 ₽ — ЮКасса не принимает 0
+
     if is_one_time:
         descr = "AI-аудит лота — Земля.ОНЛАЙН" if data.plan == "audit_lot" else "preDD аудит договора — Земля.ОНЛАЙН"
         if data.plan == "audit_lot" and data.lot_id:
@@ -299,6 +340,19 @@ async def create_payment(
     )
     db.add(sub)
     await db.commit()
+    await db.refresh(sub)
+
+    # Зафиксировать использование промокода (даже если оплата пока pending)
+    if promo_obj:
+        from models.promo import PromoUsage
+        promo_obj.used_count = (promo_obj.used_count or 0) + 1
+        db.add(PromoUsage(
+            promo_code_id=promo_obj.id,
+            user_id=user.id,
+            subscription_id=sub.id,
+            discount_applied=promo_discount,
+        ))
+        await db.commit()
 
     return {
         "payment_id": invoice_id,
@@ -352,8 +406,12 @@ async def yukassa_webhook(request: Request, db: AsyncSession = Depends(get_db)):
     sub.status = "succeeded"
     sub.paid_at = datetime.now(timezone.utc)
 
-    # Разовые продукты не меняют подписку юзера — оставляем как успешную покупку
+    # Разовые продукты — даём пользователю 1 аудит/preDD
     if sub.plan in ("audit_lot", "predd"):
+        result_user = await db.execute(select(User).where(User.id == sub.user_id))
+        u = result_user.scalar_one_or_none()
+        if u:
+            u.free_audits_left = (u.free_audits_left or 0) + 1
         await db.commit()
         return {"status": "ok", "type": "one_time"}
 
@@ -369,6 +427,48 @@ async def yukassa_webhook(request: Request, db: AsyncSession = Depends(get_db)):
 
     await db.commit()
     return {"status": "ok"}
+
+
+# ── Промокоды: проверка перед оплатой ──────────────────────────────────────────
+
+@router.post("/promo/validate")
+async def validate_promo(
+    data: PromoValidateRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Проверяет промокод и возвращает применимую скидку без создания платежа."""
+    from models.promo import PromoCode
+    from sqlalchemy import func as _func
+
+    code_norm = (data.code or "").strip().upper()
+    if not code_norm:
+        raise HTTPException(status_code=400, detail="Введите промокод")
+
+    promo_q = await db.execute(
+        select(PromoCode).where(_func.upper(PromoCode.code) == code_norm)
+    )
+    promo = promo_q.scalar_one_or_none()
+    if not promo or not promo.is_active:
+        raise HTTPException(status_code=404, detail="Промокод не найден")
+    if promo.valid_until and promo.valid_until < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="Промокод истёк")
+    if promo.max_uses is not None and (promo.used_count or 0) >= promo.max_uses:
+        raise HTTPException(status_code=400, detail="Промокод закончился")
+    if promo.plan_filter and data.plan and promo.plan_filter != data.plan:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Промокод действует только для тарифа «{promo.plan_filter}»",
+        )
+
+    return {
+        "valid": True,
+        "code": promo.code,
+        "discount_pct": promo.discount_pct,
+        "discount_fixed": promo.discount_fixed,
+        "plan_filter": promo.plan_filter,
+        "description": promo.description,
+    }
 
 
 # ── Enterprise contact form (без оплаты — просто заявка) ───────────────────────
