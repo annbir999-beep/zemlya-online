@@ -1,5 +1,38 @@
 "use client";
 import { useEffect, useRef } from "react";
+import Cookies from "js-cookie";
+
+const API = process.env.NEXT_PUBLIC_API_URL ?? "";
+
+async function toggleFavorite(lotId: number, button: HTMLButtonElement) {
+  const token = Cookies.get("access_token");
+  if (!token) {
+    alert("Войдите в аккаунт, чтобы добавлять лоты в избранное");
+    return;
+  }
+  const wasFavorite = button.dataset.favored === "1";
+  // Оптимистично переключаем UI
+  button.textContent = wasFavorite ? "☆" : "★";
+  button.style.color = wasFavorite ? "#cbd5e1" : "#facc15";
+  button.dataset.favored = wasFavorite ? "0" : "1";
+
+  try {
+    const url = `${API}/api/users/saved-lots/${lotId}`;
+    const r = await fetch(url, {
+      method: wasFavorite ? "DELETE" : "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: wasFavorite ? undefined : "{}",
+    });
+    if (!r.ok) throw new Error(await r.text());
+  } catch (e) {
+    // Откатываем UI
+    button.textContent = wasFavorite ? "★" : "☆";
+    button.style.color = wasFavorite ? "#facc15" : "#cbd5e1";
+    button.dataset.favored = wasFavorite ? "1" : "0";
+    console.error(e);
+    alert("Не удалось обновить избранное");
+  }
+}
 
 interface MapPoint {
   id: number;
@@ -87,6 +120,44 @@ export default function MapView({ points, selectedId, heatmap, mode = "points" }
   const mapInstanceRef = useRef<unknown>(null);
   const layerRef = useRef<unknown>(null);
   const heatLayerRef = useRef<unknown>(null);
+  const favoriteIdsRef = useRef<Set<number>>(new Set());
+
+  // Загружаем избранные лоты пользователя при монтировании, чтобы звёздочки
+  // в попапах были в правильном состоянии (★ если уже в избранном).
+  useEffect(() => {
+    const token = Cookies.get("access_token");
+    if (!token) return;
+    fetch(`${API}/api/users/saved-lots`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => {
+        if (!d) return;
+        const items = d.items || d || [];
+        const ids = new Set<number>(items.map((it: { id: number }) => it.id));
+        favoriteIdsRef.current = ids;
+      })
+      .catch(() => {});
+  }, []);
+
+  // Делегированный обработчик клика по звёздочке в любом попапе карты
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      const btn = target.closest<HTMLButtonElement>("[data-fav-lot-id]");
+      if (!btn) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const id = Number(btn.dataset.favLotId);
+      if (!id) return;
+      void toggleFavorite(id, btn).then(() => {
+        if (btn.dataset.favored === "1") favoriteIdsRef.current.add(id);
+        else favoriteIdsRef.current.delete(id);
+      });
+    };
+    document.addEventListener("click", onClick, true);
+    return () => document.removeEventListener("click", onClick, true);
+  }, []);
 
   useEffect(() => {
     if (!mapRef.current) return;
@@ -175,15 +246,29 @@ export default function MapView({ points, selectedId, heatmap, mode = "points" }
       const discountTag = p.discount_to_market_pct && p.discount_to_market_pct >= 5 ? `<span style="background:#dcfce7;color:#15803d;font-size:11px;font-weight:700;padding:2px 6px;border-radius:4px;margin-left:6px">−${Math.round(p.discount_to_market_pct)}% к рынку</span>` : "";
       const badgesBlock = p.score_badges && p.score_badges.length ? `<div style="margin-bottom:6px;display:flex;gap:4px;flex-wrap:wrap">${p.score_badges.slice(0,4).map(b => BADGE_LBL[b] ? `<span style="background:#f1f5f9;font-size:14px;padding:1px 5px;border-radius:4px" title="${b}">${BADGE_LBL[b]}</span>` : "").join("")}</div>` : "";
 
+      // Бейдж «Подача заявок завершена» если submission_end в прошлом
+      const submissionExpired = p.submission_end && new Date(p.submission_end) < new Date();
+      const expiredBadge = submissionExpired
+        ? `<div style="background:#fef3c7;color:#92400e;font-size:11px;font-weight:700;padding:4px 8px;border-radius:4px;margin-bottom:6px;display:inline-block">⌛ Срок подачи истёк</div>`
+        : "";
+
+      // Состояние «в избранном» — для начальной отрисовки звёздочки
+      const isFav = favoriteIdsRef.current.has(p.id);
+      const favStar = isFav ? "★" : "☆";
+      const favColor = isFav ? "#facc15" : "#cbd5e1";
+      const favData = isFav ? "1" : "0";
+
       L.marker([p.lat, p.lng], { icon }).bindPopup(`
         <div style="min-width:240px;max-width:300px;font-family:system-ui,sans-serif">
-          <div style="display:flex;align-items:center;margin-bottom:2px">
+          <div style="display:flex;align-items:center;margin-bottom:2px;gap:6px">
             ${scoreBlock}
             <div style="flex:1;min-width:0">
               <div style="font-weight:700;font-size:15px;color:#1e293b">${header}${discountTag}</div>
               ${p.region_name ? `<div style="font-size:11px;color:#64748b">${p.region_name}</div>` : ""}
             </div>
+            <button data-fav-lot-id="${p.id}" data-favored="${favData}" title="В избранное" style="background:none;border:none;cursor:pointer;font-size:22px;line-height:1;padding:0;color:${favColor}" class="fav-toggle-btn">${favStar}</button>
           </div>
+          ${expiredBadge}
           ${badgesBlock}
           <table style="border-collapse:collapse;width:100%">
             ${row("Кадастровый №", p.cadastral_number)}
