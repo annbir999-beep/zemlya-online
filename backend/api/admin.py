@@ -377,14 +377,24 @@ async def _admin_funnel_impl(days: int, db: AsyncSession):
         for r in pays
     ]
 
-    # Источники регистраций
+    # Источники регистраций. Группируем по сырому полю — PostgreSQL ругается
+    # когда func.coalesce() появляется и в SELECT, и в GROUP BY: SQLAlchemy
+    # рендерит два разных выражения с одинаковым SQL-текстом, но Postgres
+    # считает их разными. Сводим NULL → 'direct' в Python.
     sources = (await db.execute(
-        select(func.coalesce(User.signup_source, "direct"), func.count(User.id))
+        select(User.signup_source, func.count(User.id))
         .where(User.created_at >= since)
-        .group_by(func.coalesce(User.signup_source, "direct"))
-        .order_by(func.count(User.id).desc())
+        .group_by(User.signup_source)
     )).all()
-    by_source = [{"source": r[0], "count": r[1]} for r in sources]
+    bucket: dict[str, int] = {}
+    for src, cnt in sources:
+        key = src or "direct"
+        bucket[key] = bucket.get(key, 0) + cnt
+    by_source = sorted(
+        [{"source": k, "count": v} for k, v in bucket.items()],
+        key=lambda x: x["count"],
+        reverse=True,
+    )
 
     # Промокоды — топ
     promo_top = (await db.execute(
