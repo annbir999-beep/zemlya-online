@@ -40,6 +40,7 @@ class UserProfile(BaseModel):
     notification_telegram: bool
     is_verified: bool
     free_audits_left: int = 0
+    is_admin: bool = False
 
     class Config:
         from_attributes = True
@@ -154,6 +155,7 @@ async def get_me(user: User = Depends(get_current_user)):
         notification_telegram=user.notification_telegram,
         is_verified=user.is_verified,
         free_audits_left=user.free_audits_left or 0,
+        is_admin=user.is_admin or False,
     )
 
 
@@ -190,6 +192,7 @@ async def update_profile(
         notification_telegram=user.notification_telegram,
         is_verified=user.is_verified,
         free_audits_left=user.free_audits_left or 0,
+        is_admin=user.is_admin or False,
     )
 
 

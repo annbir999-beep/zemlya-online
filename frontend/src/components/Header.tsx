@@ -134,6 +134,9 @@ export default function Header() {
         {user ? (
           <>
             <span className="badge badge-blue">{PLAN_LABEL[user.subscription_plan] || user.subscription_plan}</span>
+            {user.is_admin && (
+              <Link href="/admin" className="btn btn-secondary btn-sm" style={{ background: "#dc2626", color: "white" }}>👑 Админка</Link>
+            )}
             <Link href="/dashboard" className="btn btn-secondary btn-sm">Кабинет</Link>
             <button className="btn btn-ghost btn-sm" onClick={logout}>Выйти</button>
           </>

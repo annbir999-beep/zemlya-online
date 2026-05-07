@@ -155,6 +155,7 @@ export interface UserProfile {
   notification_telegram: boolean;
   is_verified: boolean;
   free_audits_left?: number;
+  is_admin?: boolean;
 }
 
 export interface Alert {

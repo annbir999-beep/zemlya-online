@@ -28,6 +28,7 @@ class User(Base):
 
     is_active = Column(Boolean, default=True)
     is_verified = Column(Boolean, default=False)
+    is_admin = Column(Boolean, default=False)
 
     subscription_plan = Column(Enum(SubscriptionPlan), default=SubscriptionPlan.FREE)
     subscription_expires_at = Column(DateTime(timezone=True))
