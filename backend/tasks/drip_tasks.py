@@ -5,7 +5,9 @@ from datetime import datetime, timezone, timedelta
 from worker import celery_app
 
 
-DRIP_DAYS = (3, 7, 14)
+DRIP_DAYS = (3, 7, 14, 30)
+# Шаги, при которых начисляется бонусный free-audit (письмо обещает подарок)
+GIFT_STEPS = {30: 1}
 MAX_PER_RUN = 200  # лимит писем за запуск, чтобы не упереться в SMTP-rate
 
 
@@ -62,6 +64,9 @@ async def _run():
                 if ok:
                     u.last_drip_step = day
                     u.last_drip_at = now
+                    # Если шаг обещал подарок — начисляем сразу
+                    if day in GIFT_STEPS:
+                        u.free_audits_left = (u.free_audits_left or 0) + GIFT_STEPS[day]
                     sent_total += 1
                 if sent_total >= MAX_PER_RUN:
                     break

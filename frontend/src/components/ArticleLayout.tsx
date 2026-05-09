@@ -111,6 +111,7 @@ function RelatedLinks() {
     { href: "/blog/dokumentaciya-lota-torgi-gov", title: "Как читать документацию лота torgi.gov.ru" },
     { href: "/blog/statya-39-18-zk-rf-praktika", title: "Ст. 39.18 ЗК РФ: получить землю без торгов" },
     { href: "/blog/oshibki-pri-vykupe-kfh", title: "5 ошибок при выкупе земель К(Ф)Х" },
+    { href: "/blog/regionalnye-koefficienty-vykupa-zemli", title: "Коэффициенты выкупа земли по регионам — таблица 2026" },
   ];
   return (
     <div style={{ display: "grid", gap: 6 }}>

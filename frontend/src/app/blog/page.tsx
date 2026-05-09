@@ -27,6 +27,13 @@ const ARTICLES = [
     minutes: 7,
     date: "2026-05-04",
   },
+  {
+    slug: "regionalnye-koefficienty-vykupa-zemli",
+    title: "Региональные коэффициенты выкупа земли — таблица 2026",
+    excerpt: "Полная таблица коэффициентов льготного выкупа по регионам РФ. Где можно выкупить участок за 3% от кадастра, а где за 50%.",
+    minutes: 6,
+    date: "2026-05-09",
+  },
 ];
 
 export default function BlogIndex() {
