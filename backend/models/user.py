@@ -51,6 +51,10 @@ class User(Base):
     referral_code = Column(String(12), unique=True, index=True)
     referred_by = Column(Integer, ForeignKey("users.id"))
 
+    # Drip-кампания: какой шаг welcome-серии уже отправлен (0/3/7/14)
+    last_drip_step = Column(Integer, default=0)
+    last_drip_at = Column(DateTime(timezone=True))
+
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     last_login_at = Column(DateTime(timezone=True))
 
