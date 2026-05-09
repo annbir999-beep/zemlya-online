@@ -69,6 +69,8 @@ class LotListItem(BaseModel):
     # Снижение цены (повторные торги)
     last_price_drop_pct: Optional[float] = None
     last_price_drop_at: Optional[str] = None
+    # ТОР/СЭЗ — заполняется из services.tor_zones по region_code
+    tor_zone: Optional[dict] = None
 
     class Config:
         from_attributes = True
@@ -400,7 +402,18 @@ def _lot_to_item(lot: Lot) -> LotListItem:
         communications=lot.communications if isinstance(lot.communications, dict) else None,
         last_price_drop_pct=lot.last_price_drop_pct,
         last_price_drop_at=lot.last_price_drop_at.isoformat() if lot.last_price_drop_at else None,
+        tor_zone=_get_tor_zone(lot.region_code),
     )
+
+
+def _get_tor_zone(region_code):
+    """Подсветка ТОР/СЭЗ для региона. Импортируем лениво — список меняется
+    отдельно от кода API."""
+    try:
+        from services.tor_zones import get_tor_info
+        return get_tor_info(region_code)
+    except Exception:
+        return None
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────

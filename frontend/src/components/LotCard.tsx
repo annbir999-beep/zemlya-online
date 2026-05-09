@@ -94,6 +94,15 @@ export default function LotCard({ lot, selected, compareIds, onSelect, onToggleC
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
           <span className="lot-card-price">{formatPrice(lot.start_price)}</span>
           <DiscountTag pct={lot.discount_to_market_pct} />
+          {lot.tor_zone && (
+            <span style={{
+              background: "linear-gradient(135deg,#7c3aed,#9333ea)",
+              color: "white", fontSize: 10, fontWeight: 700,
+              padding: "2px 6px", borderRadius: 4, letterSpacing: 0.3,
+            }} title={lot.tor_zone.description}>
+              🏭 {lot.tor_zone.label}
+            </span>
+          )}
           {lot.last_price_drop_pct != null && lot.last_price_drop_pct >= 5 && (
             <span style={{
               background: "linear-gradient(135deg,#dc2626,#ea580c)",

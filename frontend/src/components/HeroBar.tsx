@@ -44,9 +44,9 @@ export default function HeroBar() {
       position: "relative",
     }}>
       <span style={{ fontWeight: 600, lineHeight: 1.4 }}>
-        🌍 Земля — твёрдый актив, который остаётся детям.
+        💎 Сформируйте земельный портфель.
         <span style={{ opacity: 0.9, fontWeight: 400, marginLeft: 8 }}>
-          AI выберет правильный участок без ошибок.
+          Дисконты до 80%, AI-аудит каждого лота, региональная аналитика.
         </span>
       </span>
       <Link

@@ -459,6 +459,34 @@ export default function LotDetailPage({ params }: { params: Promise<{ id: string
             {/* Региональные особенности (выкуп, КФХ-дом, перераспределение) */}
             <RegionInfo data={regionData} regionName={lot.region_name} cadastralCost={lot.cadastral_cost} />
 
+            {/* ТОР/СЭЗ — налоговые льготы для резидентов */}
+            {lot.tor_zone && (
+              <div style={{
+                background: "var(--surface)", border: "1px solid var(--border)",
+                borderRadius: 12, padding: 16,
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                  <span style={{
+                    background: "linear-gradient(135deg,#7c3aed,#9333ea)",
+                    color: "white", fontSize: 11, fontWeight: 700,
+                    padding: "3px 8px", borderRadius: 4, letterSpacing: 0.5,
+                  }}>
+                    🏭 {lot.tor_zone.label}
+                  </span>
+                  <span style={{ fontWeight: 600, fontSize: 14 }}>
+                    Зона налоговых льгот
+                  </span>
+                </div>
+                <p style={{ fontSize: 13, color: "var(--text-2)", lineHeight: 1.55, margin: 0 }}>
+                  {lot.tor_zone.description}
+                </p>
+                <p style={{ fontSize: 11, color: "var(--text-3)", marginTop: 8, lineHeight: 1.4 }}>
+                  💡 Регистрация резидентом ТОР подаётся через Минвостокразвития (для ДФО)
+                  или местную администрацию. Срок проверки заявки — до 30 дней.
+                </p>
+              </div>
+            )}
+
             {/* Условия договора (из PDF) */}
             <ContractTerms data={lot.contract_terms} />
 

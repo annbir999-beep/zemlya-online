@@ -74,6 +74,7 @@ export interface LotListItem {
     road?: "asphalt" | "gravel" | "none";
     internet?: boolean;
   };
+  tor_zone?: TorZone | null;
 }
 
 export interface ContractTermsData {
@@ -156,6 +157,12 @@ export interface UserProfile {
   is_verified: boolean;
   free_audits_left?: number;
   is_admin?: boolean;
+}
+
+export interface TorZone {
+  type: "dv" | "monotown" | "sez";
+  label: string;
+  description: string;
 }
 
 export interface Alert {
