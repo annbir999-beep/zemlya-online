@@ -242,25 +242,49 @@ class TorgiGovScraper:
         """
         saved = 0
         try:
-            # 1) Продажа ЗУ — одним общим запросом (объём небольшой, < 10000)
+            # 0) Свежие PUBLISHED-лоты (только что опубликованные, ещё не в приёме
+            #    заявок). Их обычно <1000, важно поймать первыми — это новинки.
+            saved += await self._scrape_with_filter(
+                cat_code="301", lot_statuses=["PUBLISHED"], subject_rf_code=None,
+            )
+            saved += await self._scrape_with_filter(
+                cat_code="302", lot_statuses=["PUBLISHED"], subject_rf_code=None,
+            )
+
+            # 1) Продажа ЗУ APPLICATIONS_SUBMISSION (объём небольшой, < 10000)
             saved += await self._scrape_with_filter(cat_code="302")
 
-            # 2) Аренда ЗУ — большой объём, бьём по регионам
+            # 2) Аренда ЗУ APPLICATIONS_SUBMISSION — бьём по регионам через dynSubjRF.
+            #    NB: dynSubjRF — это не subjectRFCode, а внутренний ID API torgi.
+            #    Маппинг нелинейный, в диапазоне 1-85 покрываются НЕ все регионы.
             if by_region:
                 for rc in range(1, 86):
                     cnt = await self._scrape_with_filter(cat_code="301", subject_rf_code=str(rc))
                     saved += cnt
+                # Доп. прогон без региона по createDate desc — ловит регионы,
+                # которые не попали под dynSubjRF и свежие лоты в общем потоке.
+                saved += await self._scrape_with_filter(
+                    cat_code="301", subject_rf_code=None, sort="createDate,desc",
+                )
             else:
                 saved += await self._scrape_with_filter(cat_code="301")
         finally:
             await self.client.aclose()
         return saved
 
-    async def _scrape_with_filter(self, cat_code: str = "301", subject_rf_code: str = None) -> int:
+    async def _scrape_with_filter(
+        self,
+        cat_code: str = "301",
+        subject_rf_code: str = None,
+        lot_statuses: list = None,
+        sort: str = None,
+    ) -> int:
         """Парсит все страницы с указанным фильтром (или без).
 
         cat_code — категория торгов (301 = аренда ЗУ, 302 = продажа ЗУ).
         subject_rf_code — значение для параметра dynSubjRF (1..85).
+        lot_statuses — список статусов lotStatus (default: PUBLISHED + APPLICATIONS_SUBMISSION).
+        sort — поле сортировки (default: firstVersionPublicationDate,desc).
         """
         saved = 0
         page = 0
@@ -268,7 +292,9 @@ class TorgiGovScraper:
         total_pages = None
 
         while True:
-            lots_data, total_pages_resp = await self._fetch_page(page, size, cat_code, subject_rf_code)
+            lots_data, total_pages_resp = await self._fetch_page(
+                page, size, cat_code, subject_rf_code, lot_statuses=lot_statuses, sort=sort,
+            )
             if total_pages is None and total_pages_resp is not None:
                 total_pages = total_pages_resp
 
@@ -296,16 +322,22 @@ class TorgiGovScraper:
             print(f"[torgi] catCode={cat_code}{tag}: {saved} лотов")
         return saved
 
-    async def _fetch_page(self, page: int, size: int, cat_code: str = "301", subject_rf_code: str = None) -> tuple:
+    async def _fetch_page(
+        self,
+        page: int, size: int,
+        cat_code: str = "301", subject_rf_code: str = None,
+        lot_statuses: list = None, sort: str = None,
+    ) -> tuple:
+        statuses = lot_statuses or ["PUBLISHED", "APPLICATIONS_SUBMISSION"]
+        sort_param = sort or "firstVersionPublicationDate,desc"
         # Новый API принимает lotStatus как Set — передаём списком
         params = [
-            ("lotStatus", "PUBLISHED"),
-            ("lotStatus", "APPLICATIONS_SUBMISSION"),
+            *[("lotStatus", s) for s in statuses],
             ("catCode", cat_code),
             ("byFirstVersion", "true"),
             ("page", page),
             ("size", size),
-            ("sort", "firstVersionPublicationDate,desc"),
+            ("sort", sort_param),
         ]
         if subject_rf_code:
             params.append(("dynSubjRF", subject_rf_code))
