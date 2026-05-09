@@ -31,6 +31,7 @@ async def _scrape_torgi():
     async with AsyncSessionLocal() as db:
         scraper = TorgiGovScraper(db)
         saved = await scraper.run()
+        await db.commit()  # КРИТИЧНО: иначе при выходе сессия делает rollback
         print(f"[torgi.gov] Сохранено/обновлено лотов: {saved}")
 
 

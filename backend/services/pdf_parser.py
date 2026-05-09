@@ -274,10 +274,13 @@ def extract_text_from_pdf(pdf_bytes: bytes, max_pages: int = 30) -> str:
 
 
 def truncate_for_db(text: str, limit: int = 100_000) -> str:
-    """Обрезает текст до разумного размера для хранения в БД."""
+    """Обрезает текст до разумного размера для хранения в БД.
+    Удаляет null-байты (0x00) — Postgres+asyncpg на них падает с
+    CharacterNotInRepertoireError, а в извлечённом тексте PDF они
+    встречаются от мусорных фрагментов OLE-кодировок."""
     if not text:
         return ""
-    text = text.strip()
+    text = text.replace("\x00", "").strip()
     if len(text) <= limit:
         return text
     return text[: limit - 1000] + "\n\n[...пропущено...]\n\n" + text[-1000:]

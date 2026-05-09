@@ -307,6 +307,20 @@ class TorgiGovScraper:
                     saved += count
                 except Exception as e:
                     print(f"[torgi] Ошибка лота {raw_lot.get('id')}: {e}")
+                    # При ошибке делаем rollback к последней точке коммита,
+                    # иначе сессия попадёт в InFailedSqlTransaction и все
+                    # последующие upsert тоже упадут
+                    try:
+                        await self.db.rollback()
+                    except Exception:
+                        pass
+
+            # Коммитим каждую страницу — если задача упадёт, прогресс не теряется
+            try:
+                await self.db.commit()
+            except Exception as e:
+                print(f"[torgi] commit ошибка на page={page}: {type(e).__name__}: {e}")
+                await self.db.rollback()
 
             await asyncio.sleep(settings.TORGI_GOV_DELAY)
 
