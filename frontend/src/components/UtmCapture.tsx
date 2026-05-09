@@ -19,6 +19,12 @@ export default function UtmCapture() {
     if (camp && !sessionStorage.getItem("utm_campaign")) {
       sessionStorage.setItem("utm_campaign", camp);
     }
+    // Реф-код тоже сохраняем — пользователь может перейти по ?ref=ABC, потом
+    // покликать сайт и зарегистрироваться. Реферер должен получить кредит.
+    const ref = params.get("ref");
+    if (ref && !sessionStorage.getItem("ref")) {
+      sessionStorage.setItem("ref", ref);
+    }
   }, []);
   return null;
 }

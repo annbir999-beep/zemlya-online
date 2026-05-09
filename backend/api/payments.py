@@ -412,6 +412,8 @@ async def yukassa_webhook(request: Request, db: AsyncSession = Depends(get_db)):
         u = result_user.scalar_one_or_none()
         if u:
             u.free_audits_left = (u.free_audits_left or 0) + 1
+            # Бонус рефереру за первую покупку приглашённого
+            await _credit_referrer_first_purchase(db, u, sub.id)
         await db.commit()
         return {"status": "ok", "type": "one_time"}
 
@@ -424,9 +426,32 @@ async def yukassa_webhook(request: Request, db: AsyncSession = Depends(get_db)):
         user.subscription_plan = PLAN_ENUM[sub.plan]
         user.subscription_expires_at = base + timedelta(days=30 * sub.months)
         user.saved_filters_limit = PLAN_FILTERS.get(sub.plan, user.saved_filters_limit)
+        # Бонус рефереру при первой успешной покупке
+        await _credit_referrer_first_purchase(db, user, sub.id)
 
     await db.commit()
     return {"status": "ok"}
+
+
+async def _credit_referrer_first_purchase(db, user, current_sub_id: int):
+    """Если у пользователя есть referred_by и эта покупка — первая успешная,
+    начислить пригласившему +1 бесплатный аудит."""
+    if not user.referred_by:
+        return
+    # Проверяем что это первая успешная покупка пользователя
+    prior_q = await db.execute(
+        select(Subscription).where(
+            Subscription.user_id == user.id,
+            Subscription.status == "succeeded",
+            Subscription.id != current_sub_id,
+        ).limit(1)
+    )
+    if prior_q.scalar_one_or_none():
+        return  # уже была покупка ранее, бонус не повторяем
+    referrer_q = await db.execute(select(User).where(User.id == user.referred_by))
+    referrer = referrer_q.scalar_one_or_none()
+    if referrer:
+        referrer.free_audits_left = (referrer.free_audits_left or 0) + 1
 
 
 # ── Промокоды: проверка перед оплатой ──────────────────────────────────────────

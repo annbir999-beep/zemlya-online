@@ -21,6 +21,7 @@ class RegisterRequest(BaseModel):
     name: Optional[str] = None
     utm_source: Optional[str] = None      # из ?utm_source — TG-канал, blog и т.д.
     utm_campaign: Optional[str] = None
+    referral_code: Optional[str] = None   # из ?ref=XXXX — код пригласившего
 
 
 class TokenResponse(BaseModel):
@@ -82,9 +83,23 @@ PLAN_FILTER_LIMITS = {
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
+    import secrets as _s
+
     existing = await db.execute(select(User).where(User.email == data.email))
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Email уже зарегистрирован")
+
+    # Реферальный код пригласившего → находим его и даём бонус +1 аудит обоим
+    referrer = None
+    if data.referral_code:
+        ref_norm = data.referral_code.strip().upper()
+        referrer_q = await db.execute(select(User).where(User.referral_code == ref_norm))
+        referrer = referrer_q.scalar_one_or_none()
+        if referrer:
+            referrer.free_audits_left = (referrer.free_audits_left or 0) + 1
+
+    # Свой реферальный код (8 символов URL-safe, в верхнем регистре)
+    own_code = _s.token_urlsafe(6).rstrip("-_=")[:8].upper()
 
     user = User(
         email=data.email,
@@ -92,9 +107,11 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
         name=data.name,
         subscription_plan=SubscriptionPlan.FREE,
         saved_filters_limit=PLAN_FILTER_LIMITS[SubscriptionPlan.FREE],
-        free_audits_left=1,  # один бесплатный AI-аудит при регистрации
-        signup_source=(data.utm_source or "direct")[:80],
+        free_audits_left=2 if referrer else 1,  # +1 бонус если по реф-ссылке
+        signup_source=(data.utm_source or ("ref" if referrer else "direct"))[:80],
         signup_campaign=(data.utm_campaign or None) and data.utm_campaign[:80],
+        referral_code=own_code,
+        referred_by=referrer.id if referrer else None,
     )
     db.add(user)
     await db.commit()
@@ -198,6 +215,36 @@ async def update_profile(
         free_audits_left=user.free_audits_left or 0,
         is_admin=user.is_admin or False,
     )
+
+
+@router.get("/referral")
+async def my_referral(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Реферальная статистика и ссылка для приглашений."""
+    from models.alert import Subscription
+    from sqlalchemy import func, distinct
+
+    invited_count = (await db.execute(
+        select(func.count()).select_from(User).where(User.referred_by == user.id)
+    )).scalar() or 0
+
+    # Сколько приглашённых сделали хотя бы одну успешную покупку
+    paying_q = await db.execute(
+        select(func.count(distinct(Subscription.user_id)))
+        .join(User, User.id == Subscription.user_id)
+        .where(User.referred_by == user.id, Subscription.status == "succeeded")
+    )
+    invited_paying = paying_q.scalar() or 0
+
+    return {
+        "code": user.referral_code,
+        "url": f"https://xn--e1adnd0h.online/register?ref={user.referral_code}",
+        "invited_count": invited_count,
+        "invited_paying": invited_paying,
+        "free_audits_left": user.free_audits_left or 0,
+    }
 
 
 @router.get("/saved-lots")

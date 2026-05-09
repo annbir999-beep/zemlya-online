@@ -23,21 +23,22 @@ export async function register(email: string, password: string, name?: string): 
   // Захватываем UTM из URL — для аналитики откуда пришёл пользователь
   let utm_source: string | undefined;
   let utm_campaign: string | undefined;
+  let referral_code: string | undefined;
   if (typeof window !== "undefined") {
     const params = new URLSearchParams(window.location.search);
     utm_source = params.get("utm_source") || undefined;
     utm_campaign = params.get("utm_campaign") || undefined;
-    // Также читаем сохранённые UTM из sessionStorage (если пользователь
-    // сначала посмотрел сайт, а потом зарегистрировался — UTM из URL пропадает)
+    referral_code = params.get("ref") || undefined;
     if (!utm_source) utm_source = sessionStorage.getItem("utm_source") || undefined;
     if (!utm_campaign) utm_campaign = sessionStorage.getItem("utm_campaign") || undefined;
+    if (!referral_code) referral_code = sessionStorage.getItem("ref") || undefined;
   }
   const res = await fetch(
     `${process.env.NEXT_PUBLIC_API_URL}/api/users/register`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password, name, utm_source, utm_campaign }),
+      body: JSON.stringify({ email, password, name, utm_source, utm_campaign, referral_code }),
     }
   );
   if (!res.ok) {

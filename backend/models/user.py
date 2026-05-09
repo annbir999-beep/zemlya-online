@@ -47,6 +47,10 @@ class User(Base):
     signup_source = Column(String(80))      # tg_channel_xyz, seo_blog, direct, ...
     signup_campaign = Column(String(80))    # утм-campaign
 
+    # Реферальная программа: уникальный код для приглашений + кто привёл
+    referral_code = Column(String(12), unique=True, index=True)
+    referred_by = Column(Integer, ForeignKey("users.id"))
+
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     last_login_at = Column(DateTime(timezone=True))
 

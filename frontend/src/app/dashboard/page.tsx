@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { api, UserProfile, Alert } from "@/lib/api";
 import { getMe, logout } from "@/lib/auth";
 import TelegramConnect from "@/components/TelegramConnect";
+import ReferralCard from "@/components/ReferralCard";
 import CreateAlertModal from "@/components/CreateAlertModal";
 
 const PLAN_LABEL: Record<string, string> = {
@@ -103,6 +104,7 @@ export default function DashboardPage() {
             </div>
           </div>
           <TelegramConnect />
+          <ReferralCard />
         </div>
       )}
 
