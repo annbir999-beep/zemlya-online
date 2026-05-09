@@ -3,6 +3,7 @@ import "./globals.css";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import UtmCapture from "@/components/UtmCapture";
+import HeroBar from "@/components/HeroBar";
 
 export const metadata: Metadata = {
   title: "Земля.ОНЛАЙН — агрегатор земельных аукционов",
@@ -16,6 +17,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <div className="app-layout">
           <UtmCapture />
+          <HeroBar />
           <Header />
           <main className="main-content">{children}</main>
           <Footer />
