@@ -54,7 +54,30 @@ async def request_assessment(
         user.free_audits_left = (user.free_audits_left or 0) - 1
         await db.commit()
 
-    assessment = await assess_lot(lot_to_ai_dict(lot))
+    # Если AI-провайдер недоступен (нет баланса / rate limit / упал сервер) —
+    # возвращаем free_audits_left обратно и говорим пользователю понятным текстом.
+    try:
+        assessment = await assess_lot(lot_to_ai_dict(lot))
+    except Exception as e:
+        # Откат списанного free-аудита, чтобы пользователь не терял его при сбое AI
+        if user.subscription_plan not in UNLIMITED_PLANS:
+            user.free_audits_left = (user.free_audits_left or 0) + 1
+            await db.commit()
+        err_text = str(e)
+        if "402" in err_text or "Insufficient balance" in err_text or "credit" in err_text.lower():
+            raise HTTPException(
+                status_code=503,
+                detail="AI-оценка временно недоступна. Мы уже работаем над восстановлением — попробуйте через несколько минут.",
+            )
+        if "429" in err_text or "rate" in err_text.lower():
+            raise HTTPException(
+                status_code=503,
+                detail="AI-сервис сейчас перегружен. Попробуйте через минуту.",
+            )
+        raise HTTPException(
+            status_code=503,
+            detail="AI-оценка временно недоступна. Попробуйте позже.",
+        )
 
     lot.ai_assessment = assessment
     lot.ai_assessed_at = datetime.now(timezone.utc)

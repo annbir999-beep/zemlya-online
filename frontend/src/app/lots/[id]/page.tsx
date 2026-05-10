@@ -128,7 +128,13 @@ function AiPanel({ lotId, user }: { lotId: number; user: UserProfile | null }) {
       const d = await api.post<{ assessment: AiAssessment }>(`/api/ai/assess/${lotId}`, {});
       setAssessment(d.assessment);
     } catch (e) {
-      setError((e as Error).message);
+      const raw = (e as Error).message || "";
+      // Бэкенд для сбоя AI отдаёт 503 с понятным текстом — показываем его.
+      // Для совсем непонятных ошибок — fallback на общий текст.
+      const friendly = raw.length > 5 && raw.length < 300
+        ? raw
+        : "AI-оценка временно недоступна. Попробуйте позже.";
+      setError(friendly);
     } finally {
       setLoading(false);
     }
