@@ -37,9 +37,14 @@ async def request_assessment(
 
     # Кэш — без списания. Бюро/Бюро+/Enterprise — без лимита и кэша.
     is_cached = False
-    if lot.ai_assessment and lot.ai_assessed_at:
-        age_hours = (datetime.now(timezone.utc) - lot.ai_assessed_at).total_seconds() / 3600
-        if age_hours < 24:
+    # Кэш по отпечатку: если ключевые поля лота не менялись и оценка не старше 30 дней —
+    # отдаём кэш и не тратим API. Раньше был 24-часовой TTL без учёта данных — каждое утро
+    # одни и те же лоты пере-оценивались (~500₽/сутки лишних).
+    from services.ai_assessment import compute_ai_fingerprint
+    current_fp = compute_ai_fingerprint(lot)
+    if lot.ai_assessment and lot.ai_assessed_at and lot.ai_assessment_hash == current_fp:
+        age_days = (datetime.now(timezone.utc) - lot.ai_assessed_at).total_seconds() / 86400
+        if age_days < 30:
             is_cached = True
             return {"lot_id": lot_id, "assessment": lot.ai_assessment, "cached": True}
 
@@ -81,6 +86,7 @@ async def request_assessment(
 
     lot.ai_assessment = assessment
     lot.ai_assessed_at = datetime.now(timezone.utc)
+    lot.ai_assessment_hash = current_fp
     await db.commit()
 
     return {"lot_id": lot_id, "assessment": assessment, "cached": False}

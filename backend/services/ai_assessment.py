@@ -1,9 +1,28 @@
 import anthropic
+import hashlib
 import json
 from datetime import datetime, timezone
 from typing import Optional
 
 from core.config import settings
+
+
+def compute_ai_fingerprint(lot) -> str:
+    """sha256-отпечаток ключевых полей лота, влияющих на AI-оценку.
+
+    Если отпечаток не изменился — оценка та же, повторный запрос к Anthropic не нужен.
+    Так экономим деньги на ночном batch-анализе и на повторных открытиях карточки лота.
+    """
+    parts = [
+        str(getattr(lot, "cadastral_number", None) or ""),
+        str(getattr(lot, "start_price", None) or ""),
+        str(getattr(lot, "area_sqm", None) or ""),
+        str(getattr(lot, "vri_tg", None) or ""),
+        # land_purpose — это enum, берём его строковое значение
+        str(getattr(getattr(lot, "land_purpose", None), "value", "") or ""),
+    ]
+    raw = "|".join(parts)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
 _base_url = getattr(settings, "ANTHROPIC_BASE_URL", None)

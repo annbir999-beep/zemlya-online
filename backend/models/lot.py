@@ -157,6 +157,10 @@ class Lot(Base):
     # AI-оценка
     ai_assessment = Column(JSON)
     ai_assessed_at = Column(DateTime(timezone=True))
+    # sha256 от ключевых полей лота (КН + цена + площадь + ВРИ + назначение) —
+    # если отпечаток совпадает, переанализ не запускаем (экономия API).
+    # Перезапросим только если данные лота поменялись или прошло >30 дней.
+    ai_assessment_hash = Column(String(64))
 
     # ── Рентабельность ──
     score = Column(Integer, index=True)                   # Скор рентабельности 0-100

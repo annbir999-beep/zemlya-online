@@ -38,7 +38,7 @@ async def _run(limit: int):
     from db.database import AsyncSessionLocal
     from sqlalchemy import select, or_, and_
     from models.lot import Lot, LotStatus, LandPurpose
-    from services.ai_assessment import assess_lot, lot_to_ai_dict
+    from services.ai_assessment import assess_lot, lot_to_ai_dict, compute_ai_fingerprint
 
     cutoff = datetime.now(timezone.utc) - timedelta(days=AI_REFRESH_DAYS)
 
@@ -80,7 +80,13 @@ async def _run(limit: int):
 
         ok = 0
         errors = 0
+        skipped_by_hash = 0
         for i, lot in enumerate(lots, 1):
+            # Если ключевые поля лота не менялись — переоценивать нет смысла
+            fp = compute_ai_fingerprint(lot)
+            if lot.ai_assessment and lot.ai_assessment_hash == fp:
+                skipped_by_hash += 1
+                continue
             try:
                 assessment = await assess_lot(lot_to_ai_dict(lot))
                 # Если ИИ вернул заглушку с _raw_truncated — не сохраняем (потом перезапросим)
@@ -90,11 +96,12 @@ async def _run(limit: int):
                 else:
                     lot.ai_assessment = assessment
                     lot.ai_assessed_at = datetime.now(timezone.utc)
+                    lot.ai_assessment_hash = fp
                     db.add(lot)
                     ok += 1
                     if i % 10 == 0:
                         await db.commit()
-                        print(f"[ai-batch] {i}/{len(lots)} обработано, успешно: {ok}")
+                        print(f"[ai-batch] {i}/{len(lots)} обработано, успешно: {ok}, по кэшу: {skipped_by_hash}")
             except Exception as e:
                 errors += 1
                 print(f"[ai-batch] lot={lot.id} error: {type(e).__name__}: {e}")
@@ -102,4 +109,4 @@ async def _run(limit: int):
             await asyncio.sleep(AI_BATCH_DELAY)
 
         await db.commit()
-        print(f"[ai-batch] Готово. Обработано: {len(lots)}, успешно: {ok}, ошибок: {errors}")
+        print(f"[ai-batch] Готово. Всего: {len(lots)}, заново: {ok}, по кэшу (пропущено): {skipped_by_hash}, ошибок: {errors}")
