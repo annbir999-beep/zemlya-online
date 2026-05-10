@@ -33,6 +33,20 @@ function buildDefaultFilters(): FiltersState {
 
 export default function MapPage() {
   const [filters, setFilters] = useState<FiltersState>(buildDefaultFilters);
+  const [deadlinePreset, setDeadlinePreset] = useState<string>(DEFAULT_DEADLINE_PRESET);
+
+  // Пользователь выбрал новый пресет дедлайна → пересчитываем submission_end диапазон
+  const applyDeadlinePreset = (value: string) => {
+    setDeadlinePreset(value);
+    const p = DEADLINE_PRESETS.find(x => x.value === value);
+    if (!p) return;
+    setFilters(f => ({
+      ...f,
+      submission_end_from: p.from_days != null ? isoDatePlus(p.from_days) : undefined,
+      submission_end_to: p.to_days != null ? isoDatePlus(p.to_days) : undefined,
+      page: 1,
+    }));
+  };
   const [selectedLot, setSelectedLot] = useState<LotListItem | null>(null);
   const [sidebarLots, setSidebarLots] = useState<LotListItem[]>([]);
   const [mapPoints, setMapPoints] = useState<{ id: number; lat: number; lng: number; price?: number; area?: number; purpose?: string; rubric_tg?: number; pct?: number }[]>([]);
@@ -89,7 +103,10 @@ export default function MapPage() {
   }, [mapMode, heatmapData.length]);
 
   const handleFiltersChange = (f: FiltersState) => setFilters(f);
-  const handleReset = () => setFilters(buildDefaultFilters());
+  const handleReset = () => {
+    setFilters(buildDefaultFilters());
+    setDeadlinePreset(DEFAULT_DEADLINE_PRESET);
+  };
 
   const toggleCompare = (id: number) => {
     setCompareIds((prev) =>
@@ -188,6 +205,25 @@ export default function MapPage() {
             </div>
           </div>
         )}
+
+        {/* Срок до закрытия окна — пресеты. Тот же селектор, что в /lots, чтобы
+            пользователь мог быстро переключиться между «Срочно / Оптимально / Все». */}
+        <select
+          className="select"
+          value={deadlinePreset}
+          onChange={e => applyDeadlinePreset(e.target.value)}
+          title="Сколько дней осталось до закрытия приёма заявок"
+          style={{
+            position: "absolute", top: 12, right: 170, zIndex: 1000,
+            height: 32, fontSize: 12, padding: "0 10px",
+            background: "var(--surface)", color: "var(--text)",
+            border: "1px solid var(--border)", borderRadius: 8,
+            boxShadow: "0 1px 4px rgba(0,0,0,.15)", cursor: "pointer",
+            maxWidth: 220,
+          }}
+        >
+          {DEADLINE_PRESETS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+        </select>
 
         {/* Переключатель режима карты */}
         <div style={{
