@@ -205,6 +205,47 @@ async def _scrape_domclick(region_codes: list = None, pages_per_region: int = 3)
 
 
 @celery_app.task
+def reclassify_land_purpose():
+    """Переразметка land_purpose по обновлённому списку ключевых слов.
+
+    Запускается вручную после правки PURPOSE_KEYWORDS в scraper_torgi.py.
+    Иначе изменения применятся только к НОВЫМ лотам.
+    """
+    _run(_reclassify_land_purpose())
+
+
+async def _reclassify_land_purpose():
+    from sqlalchemy import select
+    from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+    from core.config import settings
+    from models.lot import Lot, LandPurpose
+    from services.scraper_torgi import _parse_purpose
+
+    engine = create_async_engine(settings.DATABASE_URL, echo=False, pool_pre_ping=True)
+    SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
+
+    async with SessionLocal() as db:
+        # Только лоты с заполненным VRI/category — иначе классифицировать нечем
+        result = await db.execute(
+            select(Lot).where(Lot.vri_tg.isnot(None) | Lot.category_tg.isnot(None))
+        )
+        lots = result.scalars().all()
+        changed = 0
+        per_purpose: dict = {}
+        for lot in lots:
+            new = _parse_purpose(lot.category_tg or "", lot.vri_tg or "")
+            if new != lot.land_purpose:
+                lot.land_purpose = new
+                changed += 1
+                per_purpose[new.value] = per_purpose.get(new.value, 0) + 1
+        await db.commit()
+        print(f"[reclassify] Переклассифицировано: {changed}/{len(lots)}")
+        for k, v in sorted(per_purpose.items(), key=lambda x: -x[1]):
+            print(f"  {k}: {v}")
+    await engine.dispose()
+
+
+@celery_app.task
 def update_lot_statuses():
     """Переводим завершённые аукционы в статус completed"""
     _run(_update_statuses())

@@ -165,7 +165,7 @@ def main():
     pages = [("/", "Главная (карта)"), ("/lots", "Каталог"),
              ("/pricing", "Тарифы"), ("/blog", "Блог"),
              ("/dashboard", "Кабинет"), ("/admin", "Админка"),
-             ("/compare", "Сравнение"), ("/landing", "Лендинг")]
+             ("/compare", "Сравнение")]
     for path, label in pages:
         code = head(path)
         if code in (200, 307, 308):

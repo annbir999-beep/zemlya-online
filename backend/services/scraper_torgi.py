@@ -63,6 +63,9 @@ PURPOSE_KEYWORDS: list[tuple[str, LandPurpose]] = [
     ("ижс", LandPurpose.IZhS),
     ("жилищное строительство", LandPurpose.IZhS),
     ("малоэтажн", LandPurpose.IZhS),
+    ("блокированн", LandPurpose.IZhS),  # таунхаусы — блокированная жилая застройка
+    ("среднеэтажн", LandPurpose.IZhS),
+    ("жилая застройка", LandPurpose.IZhS),  # широкая категория ВРИ
     # СНТ / дача
     ("садоводств", LandPurpose.SNT),
     ("огородничеств", LandPurpose.SNT),
@@ -81,20 +84,34 @@ PURPOSE_KEYWORDS: list[tuple[str, LandPurpose]] = [
     ("растениеводств", LandPurpose.AGRICULTURAL),
     ("животноводств", LandPurpose.AGRICULTURAL),
     ("для сельскохозяйств", LandPurpose.AGRICULTURAL),
-    # Коммерция
+    # Коммерция (расширено — топ ВРИ из реальной базы)
     ("коммерческого использования", LandPurpose.COMMERCIAL),
     ("объектов торговли", LandPurpose.COMMERCIAL),
     ("торговл", LandPurpose.COMMERCIAL),
     ("офисн", LandPurpose.COMMERCIAL),
     ("деловой", LandPurpose.COMMERCIAL),
+    ("деловое управлен", LandPurpose.COMMERCIAL),
     ("гостиниц", LandPurpose.COMMERCIAL),
+    ("магазин", LandPurpose.COMMERCIAL),
+    ("предпринимательств", LandPurpose.COMMERCIAL),
+    ("дорожного сервис", LandPurpose.COMMERCIAL),  # АЗС, мойки, СТО у дорог
+    ("бытового обслуж", LandPurpose.COMMERCIAL),
+    ("бытовое обслуж", LandPurpose.COMMERCIAL),
+    ("ремонт автомобил", LandPurpose.COMMERCIAL),
+    ("общественного питан", LandPurpose.COMMERCIAL),
+    ("общественное питан", LandPurpose.COMMERCIAL),
+    ("общественн дел", LandPurpose.COMMERCIAL),
+    ("рынк", LandPurpose.COMMERCIAL),
+    ("автозаправ", LandPurpose.COMMERCIAL),
     # Промышленность
     ("промышленност", LandPurpose.INDUSTRIAL),
     ("производственн", LandPurpose.INDUSTRIAL),
     ("складск", LandPurpose.INDUSTRIAL),
+    ("склад", LandPurpose.INDUSTRIAL),
     ("транспорт", LandPurpose.INDUSTRIAL),
     ("энергетик", LandPurpose.INDUSTRIAL),
     ("земли промышленн", LandPurpose.INDUSTRIAL),
+    ("коммунальн обслуж", LandPurpose.INDUSTRIAL),
     # Лес
     ("лесного фонда", LandPurpose.FOREST),
     ("лесн", LandPurpose.FOREST),
