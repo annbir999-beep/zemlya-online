@@ -3,17 +3,36 @@ import { useState, useCallback, useEffect } from "react";
 import dynamic from "next/dynamic";
 import FilterSidebar from "@/components/FilterSidebar";
 import LotCard from "@/components/LotCard";
-import { FiltersState, filtersToQueryString } from "@/lib/filters";
+import {
+  FiltersState, filtersToQueryString,
+  DEADLINE_PRESETS, DEFAULT_DEADLINE_PRESET,
+} from "@/lib/filters";
 import type { LotListItem, LotsResponse } from "@/lib/api";
 
 const MapView = dynamic(() => import("@/components/MapView"), { ssr: false });
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "";
 
-const DEFAULT_FILTERS: FiltersState = { status: "active", sort_by: "score", sort_order: "desc", source: ["torgi_gov"] };
+function isoDatePlus(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+function buildDefaultFilters(): FiltersState {
+  const preset = DEADLINE_PRESETS.find(p => p.value === DEFAULT_DEADLINE_PRESET)!;
+  return {
+    status: "active",
+    sort_by: "score",
+    sort_order: "desc",
+    source: ["torgi_gov"],
+    submission_end_from: preset.from_days != null ? isoDatePlus(preset.from_days) : undefined,
+    submission_end_to: preset.to_days != null ? isoDatePlus(preset.to_days) : undefined,
+  };
+}
 
 export default function MapPage() {
-  const [filters, setFilters] = useState<FiltersState>(DEFAULT_FILTERS);
+  const [filters, setFilters] = useState<FiltersState>(buildDefaultFilters);
   const [selectedLot, setSelectedLot] = useState<LotListItem | null>(null);
   const [sidebarLots, setSidebarLots] = useState<LotListItem[]>([]);
   const [mapPoints, setMapPoints] = useState<{ id: number; lat: number; lng: number; price?: number; area?: number; purpose?: string; rubric_tg?: number; pct?: number }[]>([]);
@@ -70,7 +89,7 @@ export default function MapPage() {
   }, [mapMode, heatmapData.length]);
 
   const handleFiltersChange = (f: FiltersState) => setFilters(f);
-  const handleReset = () => setFilters(DEFAULT_FILTERS);
+  const handleReset = () => setFilters(buildDefaultFilters());
 
   const toggleCompare = (id: number) => {
     setCompareIds((prev) =>
@@ -150,6 +169,25 @@ export default function MapPage() {
           heatmap={heatmapData}
           mode={mapMode}
         />
+
+        {/* Плашка о покрытии карты — показываем, когда часть лотов из списка
+            не видна на карте из-за отсутствия координат (ждут обогащения PKK) */}
+        {mapMode === "points" && total > 0 && mapPoints.length < total && (
+          <div style={{
+            position: "absolute", top: 12, left: 12, zIndex: 1000,
+            background: "rgba(255,255,255,0.96)", borderRadius: 8,
+            padding: "8px 12px", boxShadow: "0 2px 8px rgba(0,0,0,.15)",
+            border: "1px solid var(--border)",
+            fontSize: 12, color: "var(--text-2)", maxWidth: 320,
+          }}>
+            <div style={{ fontWeight: 600, color: "var(--text)", marginBottom: 2 }}>
+              На карте {mapPoints.length.toLocaleString("ru")} из {total.toLocaleString("ru")} участков
+            </div>
+            <div style={{ lineHeight: 1.4 }}>
+              Остальные ждут получения координат из Росреестра. Все они есть в списке справа →
+            </div>
+          </div>
+        )}
 
         {/* Переключатель режима карты */}
         <div style={{

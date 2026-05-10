@@ -383,6 +383,14 @@ class TorgiGovScraper:
         result = await self.db.execute(select(Lot).where(Lot.external_id == external_id))
         lot = result.scalar_one_or_none()
 
+        # Архивный лот (окно подачи заявок уже закрыто) — пропускаем, если лот новый.
+        # torgi.gov оставляет статус PUBLISHED даже после закрытия окна, пока итоги не
+        # подведены — но нам такие в БД не нужны, мы про активные торги.
+        if lot is None:
+            biddEnd = _parse_datetime(raw.get("biddEndTime"))
+            if biddEnd and biddEnd < datetime.now(timezone.utc):
+                return 0
+
         # Извлекаем данные
         # Новый API: characteristics — массив объектов с полем characteristicValue
         char_list = raw.get("characteristics", [])
@@ -544,10 +552,13 @@ class TorgiGovScraper:
         lot.submission_end = _parse_datetime(raw.get("biddEndTime"))
 
         # Статус — приоритет API torgi.gov (он знает реальное состояние).
-        # Дата submission_end используется только когда API статус неизвестен —
-        # на torgi лот может быть в стадии "Подведение итогов" с датой в прошлом,
-        # но всё ещё ACTIVE.
+        # НО: API может оставить статус PUBLISHED после закрытия окна подачи заявок
+        # (пока организатор не подведёт итоги вручную). В этом случае это уже не
+        # активные торги для пользователя — переводим в COMPLETED по дате окна.
         api_status = _parse_status(raw.get("lotStatus", "PUBLISHED"))
+        if api_status == LotStatus.ACTIVE and lot.submission_end:
+            if lot.submission_end < datetime.now(timezone.utc):
+                api_status = LotStatus.COMPLETED
         lot.status = api_status
         lot.published_at = _parse_datetime(raw.get("firstVersionPublicationDate"))
         lot.raw_data = raw

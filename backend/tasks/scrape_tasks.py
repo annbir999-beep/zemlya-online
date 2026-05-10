@@ -53,20 +53,25 @@ async def _scrape_avito(region_codes: list = None, pages_per_region: int = 3):
 
 
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=600)
-def enrich_with_rosreestr(self):
-    """Обогащаем участки данными из Росреестра (кадастровые данные)"""
+def enrich_with_rosreestr(self, batch_size: int = 2000):
+    """Обогащаем участки данными из Росреестра (кадастровые данные).
+
+    batch_size — сколько лотов брать за один прогон. Дефолт 2000 — при паузе
+    0.35с между запросами PKK даёт ~12 минут на цикл, помещается в часовой beat.
+    Был 500/6ч — слишком медленно для 12000+ backlog без координат.
+    """
     try:
-        _run(_enrich_rosreestr())
+        _run(_enrich_rosreestr(batch_size))
     except Exception as exc:
         raise self.retry(exc=exc)
 
 
-async def _enrich_rosreestr():
+async def _enrich_rosreestr(batch_size: int = 2000):
     import asyncio
     from sqlalchemy import select
     from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
     from core.config import settings
-    from models.lot import Lot
+    from models.lot import Lot, LotStatus
 
     # Свежий engine на каждый вызов — иначе asyncpg-соединения из предыдущего
     # event loop ломают Celery worker.
@@ -74,7 +79,8 @@ async def _enrich_rosreestr():
     SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
     async with SessionLocal() as db:
-        # Лоты с кадастром без кадастровой стоимости или без координат
+        # Лоты с кадастром без кадастровой стоимости или без координат.
+        # Приоритет — активным (их видно на карте, важнее для UX).
         result = await db.execute(
             select(Lot)
             .where(
@@ -82,7 +88,12 @@ async def _enrich_rosreestr():
                 Lot.cadastral_number != "",
                 (Lot.cadastral_cost.is_(None)) | (Lot.location.is_(None)),
             )
-            .limit(500)
+            .order_by(
+                # Активные сначала (на карте видны), затем по score
+                (Lot.status != LotStatus.ACTIVE).asc(),
+                Lot.score.desc().nulls_last(),
+            )
+            .limit(batch_size)
         )
         lots = result.scalars().all()
         client = RosreestrClient()
@@ -719,8 +730,13 @@ async def _enrich_torgi_details(batch_size: int):
 
 
 async def _update_statuses():
-    """Закрываем только лоты не виденные на torgi.gov больше 14 дней (исчезли из поиска).
-    Для активных лотов статус ставит сам скрапер из API torgi.gov на каждом прогоне."""
+    """Переводим в COMPLETED лоты, у которых окно подачи заявок уже закрылось,
+    либо лот пропал из выдачи torgi.gov >14 дней назад.
+
+    Для активных лотов статус ставит сам скрапер при апсёрте из API. Эта задача —
+    подметает то, что не попало в обновление API (например, лот не приходит в
+    свежей выгрузке, но в БД ещё ACTIVE).
+    """
     from db.database import AsyncSessionLocal
     from sqlalchemy import update
     from models.lot import Lot, LotStatus, LotSource
@@ -729,7 +745,17 @@ async def _update_statuses():
     now = datetime.now(timezone.utc)
     cutoff = now - timedelta(days=14)
     async with AsyncSessionLocal() as db:
-        # Лот пропал из выдачи torgi.gov более 14 дней назад → закрыт
+        # 1) Окно подачи заявок закрыто → лот не активен для пользователя
+        r0 = await db.execute(
+            update(Lot)
+            .where(
+                Lot.status == LotStatus.ACTIVE,
+                Lot.submission_end.isnot(None),
+                Lot.submission_end < now,
+            )
+            .values(status=LotStatus.COMPLETED)
+        )
+        # 2) Лот пропал из выдачи torgi.gov более 14 дней назад → закрыт
         r1 = await db.execute(
             update(Lot)
             .where(
@@ -739,6 +765,5 @@ async def _update_statuses():
             )
             .values(status=LotStatus.COMPLETED)
         )
-        r2_rowcount = 0  # не пытаемся переводить из UPCOMING — это делает API
         await db.commit()
-        print(f"[statuses] закрыто 'забытых' (>14д без обновления): {r1.rowcount}")
+        print(f"[statuses] закрыто по окну: {r0.rowcount}, забытых (>14д): {r1.rowcount}")

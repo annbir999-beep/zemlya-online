@@ -1,12 +1,32 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 import FilterSidebar from "@/components/FilterSidebar";
-import { FiltersState, filtersToQueryString, SORT_OPTIONS } from "@/lib/filters";
+import {
+  FiltersState, filtersToQueryString, SORT_OPTIONS,
+  DEADLINE_PRESETS, DEFAULT_DEADLINE_PRESET,
+} from "@/lib/filters";
 import type { LotListItem, LotsResponse } from "@/lib/api";
 import { ScoreCircle, ScoreBadges } from "@/components/ScoreBadge";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "";
-const DEFAULT_FILTERS: FiltersState = { status: "active", sort_by: "score", sort_order: "desc", source: ["torgi_gov"] };
+
+function isoDatePlus(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+function buildDefaultFilters(): FiltersState {
+  const preset = DEADLINE_PRESETS.find(p => p.value === DEFAULT_DEADLINE_PRESET)!;
+  return {
+    status: "active",
+    sort_by: "score",
+    sort_order: "desc",
+    source: ["torgi_gov"],
+    submission_end_from: preset.from_days != null ? isoDatePlus(preset.from_days) : undefined,
+    submission_end_to: preset.to_days != null ? isoDatePlus(preset.to_days) : undefined,
+  };
+}
 
 const PURPOSE_LABEL: Record<string, string> = {
   izhs: "ИЖС", snt: "СНТ", lpkh: "ЛПХ", agricultural: "Сельхоз",
@@ -47,10 +67,24 @@ function daysLeft(iso?: string) {
 }
 
 export default function CatalogPage() {
-  const [filters, setFilters] = useState<FiltersState>(DEFAULT_FILTERS);
+  const [filters, setFilters] = useState<FiltersState>(buildDefaultFilters);
+  const [deadlinePreset, setDeadlinePreset] = useState<string>(DEFAULT_DEADLINE_PRESET);
   const [data, setData] = useState<LotsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [compareIds, setCompareIds] = useState<number[]>([]);
+
+  // Пользователь выбрал новый пресет дедлайна → пересчитываем submission_end диапазон
+  const applyDeadlinePreset = (value: string) => {
+    setDeadlinePreset(value);
+    const p = DEADLINE_PRESETS.find(x => x.value === value);
+    if (!p) return;
+    setFilters(f => ({
+      ...f,
+      submission_end_from: p.from_days != null ? isoDatePlus(p.from_days) : undefined,
+      submission_end_to: p.to_days != null ? isoDatePlus(p.to_days) : undefined,
+      page: 1,
+    }));
+  };
 
   const load = useCallback(async (f: FiltersState) => {
     setLoading(true);
@@ -74,7 +108,14 @@ export default function CatalogPage() {
 
   return (
     <>
-      <FilterSidebar filters={filters} onChange={setFilters} onReset={() => setFilters(DEFAULT_FILTERS)} />
+      <FilterSidebar
+        filters={filters}
+        onChange={setFilters}
+        onReset={() => {
+          setFilters(buildDefaultFilters());
+          setDeadlinePreset(DEFAULT_DEADLINE_PRESET);
+        }}
+      />
 
       <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--bg)" }}>
         {/* Toolbar */}
@@ -82,6 +123,17 @@ export default function CatalogPage() {
           <span style={{ fontSize: 13, color: "var(--text-2)", marginRight: "auto" }}>
             {loading ? "Загрузка..." : data ? `${data.total.toLocaleString("ru")} участков` : ""}
           </span>
+
+          {/* Срок до закрытия окна подачи заявок — пресеты */}
+          <select
+            className="select"
+            style={{ width: 230 }}
+            value={deadlinePreset}
+            onChange={e => applyDeadlinePreset(e.target.value)}
+            title="Сколько дней осталось до закрытия приёма заявок"
+          >
+            {DEADLINE_PRESETS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+          </select>
 
           {/* Sort */}
           <select

@@ -21,10 +21,22 @@ export const AUCTION_TYPES = [
 
 export const LOT_STATUSES = [
   { value: "active", label: "Активные торги" },
-  { value: "upcoming", label: "Скоро" },
   { value: "completed", label: "Завершённые" },
-  { value: "cancelled", label: "Отменённые" },
 ];
+
+// Пресеты по сроку до закрытия окна подачи заявок.
+// Нужны, чтобы из тысяч активных лотов показать пользователю те, по которым
+// действительно есть смысл готовить заявку: не слишком близкий дедлайн (успеть
+// собрать задаток и документы), не слишком дальний (не теряться в архиве).
+export const DEADLINE_PRESETS = [
+  { value: "urgent",   label: "🔥 Срочно (1–3 дня)",     from_days: 0,  to_days: 3 },
+  { value: "optimal",  label: "✓ Оптимально (3–14 дней)", from_days: 3,  to_days: 14 },
+  { value: "extended", label: "До 30 дней",                from_days: 0,  to_days: 30 },
+  { value: "future",   label: "30+ дней",                  from_days: 30, to_days: null },
+  { value: "all",      label: "Все сроки",                 from_days: null, to_days: null },
+];
+
+export const DEFAULT_DEADLINE_PRESET = "optimal";
 
 export const SOURCES = [
   { value: "torgi_gov", label: "torgi.gov" },
