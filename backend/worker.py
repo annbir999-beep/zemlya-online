@@ -32,12 +32,13 @@ celery_app.conf.update(
             "task": "tasks.scrape_tasks.scrape_torgi_gov",
             "schedule": crontab(minute=0, hour="*/2"),
         },
-        # Обогащение данными Росреестра — каждый час по 2000 лотов
-        # (был раз в 6ч по 500 — слишком медленно, на карте лотов было 14% от списка)
+        # Обогащение данными Росреестра — каждый час по 1000 лотов
+        # batch=2000 заваливал очередь (3.6ч на прогон при hourly beat → накапливалось).
+        # 1000 × 0.35с = ~6 минут на прогон — влезает в час с запасом.
         "enrich-rosreestr": {
             "task": "tasks.scrape_tasks.enrich_with_rosreestr",
             "schedule": crontab(minute=30, hour="*"),
-            "args": (2000,),
+            "args": (1000,),
         },
         # Подтягивание даты торгов из детального API torgi — каждые 3 часа
         "enrich-torgi-details": {

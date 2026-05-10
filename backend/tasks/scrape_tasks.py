@@ -68,7 +68,8 @@ def enrich_with_rosreestr(self, batch_size: int = 2000):
 
 async def _enrich_rosreestr(batch_size: int = 2000):
     import asyncio
-    from sqlalchemy import select
+    from datetime import datetime, timezone, timedelta
+    from sqlalchemy import select, or_, and_, func
     from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
     from core.config import settings
     from models.lot import Lot, LotStatus
@@ -78,19 +79,30 @@ async def _enrich_rosreestr(batch_size: int = 2000):
     engine = create_async_engine(settings.DATABASE_URL, echo=False, pool_pre_ping=True)
     SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
+    # Раз в 7 дней даём ещё одну попытку лотам, у которых PKK раньше не отдал
+    # координаты (rosreestr_data заполнен, но location IS NULL). Без этой ротации
+    # очередь забивается «непробиваемыми» лотами и до новых не доходит.
+    retry_cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+
     async with SessionLocal() as db:
-        # Лоты с кадастром без кадастровой стоимости или без координат.
-        # Приоритет — активным (их видно на карте, важнее для UX).
+        # Приоритет:
+        # 1) ACTIVE с КН, у которых rosreestr_data ещё не запрашивался
+        # 2) ACTIVE с КН, попытка которых старше 7 дней (повторная)
+        # 3) затем остальные (UPCOMING, COMPLETED — низкий приоритет)
         result = await db.execute(
             select(Lot)
             .where(
                 Lot.cadastral_number.isnot(None),
                 Lot.cadastral_number != "",
                 (Lot.cadastral_cost.is_(None)) | (Lot.location.is_(None)),
+                or_(
+                    Lot.rosreestr_data.is_(None),
+                    Lot.updated_at < retry_cutoff,
+                ),
             )
             .order_by(
-                # Активные сначала (на карте видны), затем по score
                 (Lot.status != LotStatus.ACTIVE).asc(),
+                Lot.rosreestr_data.is_(None).desc(),  # сначала ни разу не пробованные
                 Lot.score.desc().nulls_last(),
             )
             .limit(batch_size)
