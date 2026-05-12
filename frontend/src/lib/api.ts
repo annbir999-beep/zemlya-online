@@ -22,6 +22,11 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     throw new Error(err.detail || "Ошибка запроса");
   }
 
+  // 204 No Content / пустое тело — нельзя звать .json(), кинет SyntaxError.
+  // Возвращаем undefined как T — вызвавший код всё равно ничего не ожидает (DELETE и т.п.).
+  if (res.status === 204 || res.headers.get("content-length") === "0") {
+    return undefined as T;
+  }
   return res.json();
 }
 
