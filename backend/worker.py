@@ -32,6 +32,14 @@ celery_app.conf.update(
             "task": "tasks.scrape_tasks.scrape_torgi_gov",
             "schedule": crontab(minute=0, hour="*/2"),
         },
+        # Ежедневный re-parse PDF договоров обновлёнными regex'ами contract_parser.
+        # Берёт лоты, у которых contract_terms ещё пуст / неполный — повторно скачивает
+        # contract.pdf и применяет новые патерны. ~500 лотов за прогон = ~10 минут.
+        "reparse-contract-terms": {
+            "task": "tasks.scrape_tasks.reparse_contract_terms",
+            "schedule": crontab(minute=45, hour=4),
+            "args": (500,),
+        },
         # Ежедневный пересчёт флагов переуступки и субаренды по тексту лота
         # (поля, установленные из PDF договора в enrich_torgi_details, не трогаются).
         # 03:30 МСК — до утренних beat-задач, после ночного scrape_avito.

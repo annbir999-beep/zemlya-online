@@ -204,6 +204,111 @@ async def _scrape_domclick(region_codes: list = None, pages_per_region: int = 3)
         print(f"[domclick] Сохранено/обновлено лотов: {saved}")
 
 
+@celery_app.task(bind=True, max_retries=1, default_retry_delay=600)
+def reparse_contract_terms(self, batch_size: int = 200):
+    """Перепарсить условия договора у активных torgi_gov лотов — для применения
+    обновлённого contract_parser к уже распарсенным лотам.
+
+    Берёт лоты, у которых:
+      - status = ACTIVE, source = TORGI_GOV
+      - pdf_parsed_at не пустой (PDF скачивали раньше)
+      - contract_terms пуст ИЛИ оба assignment_allowed/sublease_allowed NULL
+        (то есть прошлый regex ничего не нашёл — стоит попробовать новый)
+
+    Скачивает PDF договора заново, парсит обновлёнными регэкспами и обновляет
+    contract_terms + флаги assignment_allowed/sublease_allowed.
+    """
+    try:
+        _run(_reparse_contract_terms(batch_size))
+    except Exception as exc:
+        raise self.retry(exc=exc)
+
+
+async def _reparse_contract_terms(batch_size: int):
+    import asyncio as _asyncio
+    from datetime import datetime, timezone
+    from sqlalchemy import select, and_, or_
+    from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+    from core.config import settings
+    from models.lot import Lot, LotStatus, LotSource
+    from services.scraper_torgi import TorgiGovScraper
+    from services.pdf_parser import select_best_attachments, download_file, extract_text
+    from services.contract_parser import parse_contract
+
+    engine = create_async_engine(settings.DATABASE_URL, pool_pre_ping=True)
+    SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
+
+    async with SessionLocal() as db:
+        # Кандидаты: PDF уже парсили, но contract_terms или sublease/assignment пуст
+        q = (
+            select(Lot)
+            .where(
+                and_(
+                    Lot.source == LotSource.TORGI_GOV,
+                    Lot.status == LotStatus.ACTIVE,
+                    Lot.pdf_parsed_at.isnot(None),
+                    or_(
+                        Lot.contract_terms.is_(None),
+                        and_(Lot.sublease_allowed.is_(None), Lot.assignment_allowed.is_(None)),
+                    ),
+                )
+            )
+            .order_by(Lot.score.desc().nulls_last())
+            .limit(batch_size)
+        )
+        lots = (await db.execute(q)).scalars().all()
+        if not lots:
+            print("[reparse-contract] Нет кандидатов")
+            await engine.dispose()
+            return
+
+        scraper = TorgiGovScraper(db)
+        updated = 0
+        no_pdf = 0
+        try:
+            for i, lot in enumerate(lots, 1):
+                torgi_id = (lot.external_id or "").removeprefix("torgi_")
+                if not torgi_id:
+                    continue
+                try:
+                    det = await scraper.fetch_lot_details(torgi_id)
+                    attachments = (det or {}).get("attachments") or []
+                    selected = select_best_attachments(attachments)
+                    if "contract" not in selected:
+                        no_pdf += 1
+                        continue
+                    att = selected["contract"]
+                    b = await download_file(scraper.client, att.get("fileId"))
+                    if not b:
+                        continue
+                    contract_text = extract_text(b, att.get("fileName", ""))
+                    if not contract_text:
+                        continue
+                    terms = parse_contract(contract_text)
+                    if terms:
+                        lot.contract_terms = terms
+                        if terms.get("assignment") == "forbidden":
+                            lot.assignment_allowed = False
+                        elif terms.get("assignment") in ("with_notice", "with_consent", "allowed"):
+                            lot.assignment_allowed = True
+                        if terms.get("sublease") == "forbidden":
+                            lot.sublease_allowed = False
+                        elif terms.get("sublease") in ("with_consent", "allowed"):
+                            lot.sublease_allowed = True
+                        updated += 1
+                except Exception as e:
+                    print(f"[reparse-contract] lot={lot.id} error: {type(e).__name__}: {str(e)[:80]}")
+                if i % 20 == 0:
+                    await db.commit()
+                    print(f"[reparse-contract] {i}/{len(lots)} обработано, обновлено: {updated}, нет PDF: {no_pdf}")
+                await _asyncio.sleep(1.0)
+            await db.commit()
+            print(f"[reparse-contract] Готово. Обновлено: {updated}/{len(lots)} (нет PDF: {no_pdf})")
+        finally:
+            await scraper.client.aclose()
+    await engine.dispose()
+
+
 SUBLEASE_KEYWORDS = ("субаренд",)
 ASSIGNMENT_KEYWORDS = ("переуступ", "уступк", "цессия", "третьим лицам")
 
