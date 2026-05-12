@@ -32,6 +32,14 @@ celery_app.conf.update(
             "task": "tasks.scrape_tasks.scrape_torgi_gov",
             "schedule": crontab(minute=0, hour="*/2"),
         },
+        # Ежедневный пересчёт флагов переуступки и субаренды по тексту лота
+        # (поля, установленные из PDF договора в enrich_torgi_details, не трогаются).
+        # 03:30 МСК — до утренних beat-задач, после ночного scrape_avito.
+        "enrich-sublease-flags": {
+            "task": "tasks.scrape_tasks.enrich_sublease_flags",
+            "schedule": crontab(minute=30, hour=3),
+            "args": (2000,),
+        },
         # Обогащение данными Росреестра — каждый час по 1000 лотов
         # batch=2000 заваливал очередь (3.6ч на прогон при hourly beat → накапливалось).
         # 1000 × 0.35с = ~6 минут на прогон — влезает в час с запасом.

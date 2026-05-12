@@ -204,6 +204,98 @@ async def _scrape_domclick(region_codes: list = None, pages_per_region: int = 3)
         print(f"[domclick] Сохранено/обновлено лотов: {saved}")
 
 
+SUBLEASE_KEYWORDS = ("субаренд",)
+ASSIGNMENT_KEYWORDS = ("переуступ", "уступк", "цессия", "третьим лицам")
+
+
+def _detect_sublease_assignment(raw: dict, title: str, description: str) -> tuple:
+    """Текстовый поиск ключевых слов по raw_data + title + description + атрибутам.
+
+    Возвращает (sublease, assignment) — каждое True/False.
+    """
+    texts = [title or "", description or "", (raw or {}).get("lotDescription", "") or ""]
+    for attr in ((raw or {}).get("noticeAttributes") or []) + ((raw or {}).get("attributes") or []):
+        val = attr.get("value") or attr.get("characteristicValue") or ""
+        if isinstance(val, str):
+            texts.append(val)
+        texts.append(attr.get("fullName", "") or "")
+    combined = " ".join(texts).lower()
+    return (
+        any(kw in combined for kw in SUBLEASE_KEYWORDS),
+        any(kw in combined for kw in ASSIGNMENT_KEYWORDS),
+    )
+
+
+@celery_app.task(bind=True, max_retries=2, default_retry_delay=600)
+def enrich_sublease_flags(self, batch_size: int = 2000, full_scan: bool = False):
+    """Ежедневное обновление флагов sublease_allowed / assignment_allowed по тексту лота.
+
+    full_scan=False (по умолчанию для beat) — берём только лоты, обновлённые за
+    последние 7 дней (новые поступления и переразметка).
+    full_scan=True — разовый прогон по всей активной базе (вызывать руками
+    через celery call после изменения словаря ключевых слов).
+
+    PDF-источник приоритетнее: если оба флага уже заполнены через enrich_torgi_details
+    (распарсен проект договора) — не трогаем.
+    """
+    try:
+        _run(_enrich_sublease_flags(batch_size, full_scan))
+    except Exception as exc:
+        raise self.retry(exc=exc)
+
+
+async def _enrich_sublease_flags(batch_size: int, full_scan: bool):
+    from datetime import datetime, timezone, timedelta
+    from sqlalchemy import select, and_, or_
+    from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+    from core.config import settings
+    from models.lot import Lot, LotStatus
+
+    engine = create_async_engine(settings.DATABASE_URL, echo=False, pool_pre_ping=True)
+    SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+
+    async with SessionLocal() as db:
+        # PDF приоритетнее: пропускаем лоты, у которых оба флага уже заполнены.
+        # Тут не трогаем False/True от PDF.
+        conditions = [
+            Lot.status == LotStatus.ACTIVE,
+            or_(
+                Lot.sublease_allowed.is_(None),
+                Lot.assignment_allowed.is_(None),
+            ),
+        ]
+        if not full_scan:
+            conditions.append(Lot.updated_at >= cutoff)
+
+        result = await db.execute(
+            select(Lot)
+            .where(and_(*conditions))
+            .limit(batch_size)
+        )
+        lots = result.scalars().all()
+        updated_with_flag = 0
+        cleared_null = 0
+        for lot in lots:
+            sublease, assignment = _detect_sublease_assignment(
+                lot.raw_data or {}, lot.title or "", lot.description or ""
+            )
+            # Не перетираем поле, если PDF-источник его уже выставил (то есть оно NOT NULL).
+            # Заполняем только NULL-ячейки текущей логикой.
+            if lot.sublease_allowed is None:
+                lot.sublease_allowed = sublease if (sublease or assignment) else None
+            if lot.assignment_allowed is None:
+                lot.assignment_allowed = assignment if (sublease or assignment) else None
+            if sublease or assignment:
+                updated_with_flag += 1
+            else:
+                cleared_null += 1
+        await db.commit()
+        print(f"[sublease] full_scan={full_scan} обработано: {len(lots)}, с упоминаниями: {updated_with_flag}, без: {cleared_null}")
+    await engine.dispose()
+
+
 @celery_app.task
 def reclassify_land_purpose():
     """Переразметка land_purpose по обновлённому списку ключевых слов.

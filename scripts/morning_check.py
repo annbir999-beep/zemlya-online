@@ -197,7 +197,20 @@ def main():
                 signal("red", "Самый свежий лот опубликован", f"{hours_ago:.1f} ч назад", "<6ч")
                 issues.append("Свежие лоты не приходят — проверить scrape_torgi_gov")
 
-    # ─── 8. Heatmap ────────────────────────────────────────────────────
+    # ─── 8b. Флаги переуступки/субаренды ───────────────────────────────
+    section("ПЕРЕУСТУПКА / СУБАРЕНДА")
+    d_sub = fetch_json("/lots?status=active&sublease_allowed=true&per_page=1")
+    d_ass = fetch_json("/lots?status=active&assignment_allowed=true&per_page=1")
+    sub_n = d_sub.get("total", 0)
+    ass_n = d_ass.get("total", 0)
+    signal("green" if sub_n >= 100 else ("yellow" if sub_n >= 20 else "red"),
+           "Лоты с разрешённой субарендой", str(sub_n), ">=100")
+    signal("green" if ass_n >= 100 else ("yellow" if ass_n >= 20 else "red"),
+           "Лоты с разрешённой переуступкой", str(ass_n), ">=100")
+    if sub_n < 20 and ass_n < 20:
+        issues.append("Покрытие фильтра переуступки/субаренды слишком низкое — проверь enrich_sublease_flags")
+
+    # ─── 9. Heatmap ────────────────────────────────────────────────────
     section("HEATMAP (АНАЛИТИКА)")
     d = fetch_json("/lots/heatmap")
     items = d.get("items", [])
@@ -212,7 +225,7 @@ def main():
         signal("green" if with_disc >= 60 else "yellow",
                "Регионов с avg_discount_pct", str(with_disc), ">=60")
 
-    # ─── 9. ИТОГ ───────────────────────────────────────────────────────
+    # ─── 10. ИТОГ ──────────────────────────────────────────────────────
     section("ИТОГ")
     if not issues:
         print(f"{GREEN}{BOLD}✓ ВСЁ В ПОРЯДКЕ{END}")
