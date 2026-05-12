@@ -164,6 +164,7 @@ def main():
     section("HTML-СТРАНИЦЫ")
     pages = [("/", "Главная (карта)"), ("/lots", "Каталог"),
              ("/pricing", "Тарифы"), ("/blog", "Блог"),
+             ("/faq", "FAQ и контакты"),
              ("/dashboard", "Кабинет"), ("/admin", "Админка"),
              ("/compare", "Сравнение")]
     for path, label in pages:

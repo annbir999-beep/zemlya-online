@@ -18,6 +18,9 @@ export default function Footer() {
           © 2026 Земля.ОНЛАЙН · ИП Бирюкова А.И. · ИНН 753611302731
         </div>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+          <Link href="/faq" style={{ color: "var(--text-3)", textDecoration: "none" }}>
+            FAQ и контакты
+          </Link>
           <Link href="/oferta" style={{ color: "var(--text-3)", textDecoration: "none" }}>
             Публичная оферта
           </Link>
