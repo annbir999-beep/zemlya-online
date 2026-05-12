@@ -402,6 +402,70 @@ async def _enrich_sublease_flags(batch_size: int, full_scan: bool):
 
 
 @celery_app.task
+def reclassify_auction_type():
+    """Переразметка auction_type / deal_type по тексту title+lotDescription для
+    всех torgi_gov лотов. Запускается вручную после правки `_parse_deal_type`
+    или дополнения логики в `_upsert_lot`.
+
+    Чинит исторический баг: раньше API-поле `dealType` было пустым, и все лоты
+    падали в default `auction_type = SALE` независимо от того, аренда это или
+    продажа. Парсер теперь смотрит на title (там «договор аренды» / «продажа»).
+    """
+    _run(_reclassify_auction_type())
+
+
+async def _reclassify_auction_type():
+    from sqlalchemy import select
+    from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+    from core.config import settings
+    from models.lot import Lot, LotSource, AuctionType, DealType
+    from services.scraper_torgi import _parse_deal_type
+
+    engine = create_async_engine(settings.DATABASE_URL, echo=False, pool_pre_ping=True)
+    SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
+
+    async with SessionLocal() as db:
+        result = await db.execute(
+            select(Lot).where(Lot.source == LotSource.TORGI_GOV)
+        )
+        lots = result.scalars().all()
+        changed_deal = 0
+        changed_auction = 0
+        per_auction: dict = {}
+        for lot in lots:
+            raw = lot.raw_data or {}
+            deal_str_api = (raw.get("dealType") or {}).get("name", "") or ""
+            text_blob = " ".join([
+                deal_str_api,
+                lot.title or "",
+                (lot.description or "")[:500],
+            ])
+            new_deal = _parse_deal_type(text_blob)
+            if new_deal == DealType.LEASE:
+                new_auction = AuctionType.RENT
+            elif "приватизац" in text_blob.lower():
+                new_auction = AuctionType.PRIVATIZATION
+            elif new_deal == DealType.OWNERSHIP:
+                new_auction = AuctionType.SALE
+            else:
+                new_auction = lot.auction_type  # не знаем — не трогаем
+            if lot.deal_type != new_deal and new_deal is not None:
+                lot.deal_type = new_deal
+                changed_deal += 1
+            if lot.auction_type != new_auction and new_auction is not None:
+                lot.auction_type = new_auction
+                changed_auction += 1
+            per_auction[new_auction.value if new_auction else "—"] = per_auction.get(
+                new_auction.value if new_auction else "—", 0
+            ) + 1
+        await db.commit()
+        print(f"[reclassify-auction] обработано: {len(lots)}, изменено deal: {changed_deal}, auction: {changed_auction}")
+        for k, v in sorted(per_auction.items(), key=lambda x: -x[1]):
+            print(f"  {k}: {v}")
+    await engine.dispose()
+
+
+@celery_app.task
 def reclassify_land_purpose():
     """Переразметка land_purpose по обновлённому списку ключевых слов.
 

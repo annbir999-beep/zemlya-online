@@ -155,14 +155,21 @@ def _parse_auction_form(form_str: str) -> Optional[AuctionForm]:
 
 
 def _parse_deal_type(deal_str: str) -> Optional[DealType]:
+    """Парсит вид сделки по любому текстовому полю.
+
+    Передавать сюда удобно конкатенацию title + lotDescription + biddType.name —
+    в большинстве случаев фактический тип (аренда/продажа) есть в title лота
+    ("Право заключения договора аренды..."), а специальное поле dealType от
+    torgi.gov почти всегда пустое.
+    """
     raw = (deal_str or "").lower()
-    if "аренд" in raw:
+    if "аренд" in raw or "перенайм" in raw or "субаренд" in raw:
         return DealType.LEASE
     if "безвозмезд" in raw:
         return DealType.FREE_USE
     if "оперативн" in raw:
         return DealType.OPERATIONAL
-    if "собственност" in raw or "купл" in raw:
+    if "собственност" in raw or "купл" in raw or "приватизац" in raw or "продаж" in raw:
         return DealType.OWNERSHIP
     return None
 
@@ -479,7 +486,12 @@ class TorgiGovScraper:
         # Извлекаем форму проведения, вид сделки и раздел torgi.gov
         procedure = raw.get("procedure", {})
         form_str = procedure.get("name", "") or bidding.get("name", "")
-        deal_str = raw.get("dealType", {}).get("name", "") or ""
+        # Поле dealType у torgi.gov почти всегда пустое — реальный тип сделки
+        # надо вытаскивать из title и lotDescription (там фраза «договор аренды» / «продажа»).
+        lot_title_for_deal = (raw.get("lotName") or "")
+        lot_desc_for_deal = (raw.get("lotDescription") or "")[:500]
+        deal_str_from_api = (raw.get("dealType") or {}).get("name", "") or ""
+        deal_str = " ".join([deal_str_from_api, lot_title_for_deal, lot_desc_for_deal])
         bidd_type = raw.get("biddType", {}) or {}
         section_name = bidd_type.get("name", "") or ""  # "Аренда и продажа земельных участков"
 
