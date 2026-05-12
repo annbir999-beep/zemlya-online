@@ -19,8 +19,25 @@ class AlertFilters(BaseModel):
     area_min: Optional[float] = None
     area_max: Optional[float] = None
     land_purposes: Optional[List[str]] = None
+    # «Вид сделки» (купля-продажа / аренда / приватизация и т.д.) — что именно приобретается
     auction_types: Optional[List[str]] = None
+    # «Вид торгов» (аукцион / конкурс / публичное предложение / без торгов) — форма проведения
+    auction_forms: Optional[List[str]] = None
+    deal_types: Optional[List[str]] = None  # ownership / lease / free_use / operational
     keywords: Optional[str] = None
+    # Скоринг и финансы
+    score_min: Optional[int] = None              # минимальная инвестпривлекательность (0-100)
+    badges_min: Optional[int] = None             # минимальное число бейджей
+    discount_min: Optional[float] = None         # мин. дисконт к рынку, %
+    price_drop_min: Optional[float] = None       # мин. % снижения цены на повторных торгах
+    liquidity: Optional[str] = None              # high / medium / low
+    pct_cadastral_max: Optional[float] = None    # макс. цена в % от кадастровой
+    cadastral_cost_min: Optional[float] = None
+    cadastral_cost_max: Optional[float] = None
+    deposit_pct_min: Optional[float] = None
+    deposit_pct_max: Optional[float] = None
+    sublease_allowed: Optional[bool] = None
+    assignment_allowed: Optional[bool] = None
 
 
 class AlertCreateRequest(BaseModel):

@@ -52,6 +52,48 @@ async def _check_alerts():
                 conditions.append(Lot.land_purpose.in_(filters["land_purposes"]))
             if filters.get("auction_types"):
                 conditions.append(Lot.auction_type.in_(filters["auction_types"]))
+            if filters.get("auction_forms"):
+                conditions.append(Lot.auction_form.in_(filters["auction_forms"]))
+            if filters.get("deal_types"):
+                conditions.append(Lot.deal_type.in_(filters["deal_types"]))
+            # Скоринг / финансы
+            if filters.get("score_min") is not None:
+                conditions.append(Lot.score >= filters["score_min"])
+            if filters.get("badges_min") is not None:
+                # PostgreSQL array length: jsonb_array_length(score_badges) >= N
+                from sqlalchemy import func
+                conditions.append(func.jsonb_array_length(Lot.score_badges) >= filters["badges_min"])
+            if filters.get("discount_min") is not None:
+                conditions.append(Lot.discount_to_market_pct >= filters["discount_min"])
+            if filters.get("price_drop_min") is not None:
+                conditions.append(Lot.last_price_drop_pct >= filters["price_drop_min"])
+            if filters.get("pct_cadastral_max") is not None:
+                conditions.append(Lot.pct_price_to_cadastral <= filters["pct_cadastral_max"])
+            if filters.get("cadastral_cost_min") is not None:
+                conditions.append(Lot.cadastral_cost >= filters["cadastral_cost_min"])
+            if filters.get("cadastral_cost_max") is not None:
+                conditions.append(Lot.cadastral_cost <= filters["cadastral_cost_max"])
+            if filters.get("deposit_pct_min") is not None:
+                conditions.append(Lot.deposit_pct >= filters["deposit_pct_min"])
+            if filters.get("deposit_pct_max") is not None:
+                conditions.append(Lot.deposit_pct <= filters["deposit_pct_max"])
+            if filters.get("sublease_allowed") is True:
+                conditions.append(Lot.sublease_allowed == True)
+            if filters.get("assignment_allowed") is True:
+                conditions.append(Lot.assignment_allowed == True)
+            # Ликвидность (повтор логики из api/lots.py)
+            if filters.get("liquidity") == "high":
+                conditions.append(Lot.nearest_city_distance_km <= 30)
+                conditions.append(Lot.nearest_city_population >= 500_000)
+            elif filters.get("liquidity") == "medium":
+                conditions.append(Lot.nearest_city_distance_km <= 100)
+                conditions.append(Lot.nearest_city_population >= 100_000)
+            elif filters.get("liquidity") == "low":
+                from sqlalchemy import or_ as _or
+                conditions.append(_or(
+                    Lot.nearest_city_distance_km > 100,
+                    Lot.nearest_city_population < 100_000,
+                ))
 
             lots_result = await db.execute(select(Lot).where(and_(*conditions)).limit(20))
             new_lots = lots_result.scalars().all()
