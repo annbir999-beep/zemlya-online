@@ -260,61 +260,50 @@ async def create_payment(
             detail="Платёжная система настраивается. Напишите @ZemlyaOnlineBot или anna_zemlya в Telegram — оформим оплату по реквизитам ИП.",
         )
 
-    # Используем Invoice API ЮКассы — он работает сразу для нового магазина,
-    # в отличие от Payment API, который требует активации платёжной формы
-    # менеджером. Invoice генерирует ссылку yookassa.ru/my/i/..., клиент
-    # переходит и оплачивает картой/СБП. После оплаты ЮКасса шлёт нам
-    # стандартный payment.succeeded webhook с теми же metadata.
+    # Payment API ЮКассы — стандартный путь для SaaS-подписок и разовых платежей.
+    # POST /v3/payments создаёт payment, возвращает confirmation.confirmation_url —
+    # туда редиректим клиента. После оплаты ЮКасса шлёт payment.succeeded webhook
+    # с теми же metadata, по которым находим pending Subscription и активируем.
     import base64, secrets as _s, httpx as _httpx
-    from datetime import datetime as _dt, timezone as _tz, timedelta as _td
 
     auth = base64.b64encode(
         f"{settings.YUKASSA_SHOP_ID}:{settings.YUKASSA_SECRET_KEY}".encode()
     ).decode()
-    expires = (_dt.now(_tz.utc) + _td(days=3)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
-    invoice_payload = {
-        "payment_data": {
-            "amount": {"value": f"{price:.2f}", "currency": "RUB"},
-            "description": descr[:128],  # ЮКасса лимитит 128 символов
-            "capture": True,
-            "metadata": {
-                "user_id": str(user.id),
-                "plan": data.plan,
-                "months": str(months),
-                "lot_id": str(data.lot_id or ""),
-            },
+    payment_payload = {
+        "amount": {"value": f"{price:.2f}", "currency": "RUB"},
+        "confirmation": {
+            "type": "redirect",
+            "return_url": data.return_url or "https://xn--e1adnd0h.online/dashboard",
         },
-        "cart": [
-            {
-                "description": descr[:128],
-                "price": {"value": f"{price:.2f}", "currency": "RUB"},
-                "quantity": "1.00",
-            }
-        ],
-        "delivery_method_data": {"type": "self"},
-        "expires_at": expires,
-        "description": descr[:128],
+        "capture": True,
+        "description": descr[:128],  # ЮКасса лимитит 128 символов
+        "metadata": {
+            "user_id": str(user.id),
+            "plan": data.plan,
+            "months": str(months),
+            "lot_id": str(data.lot_id or ""),
+        },
     }
 
     try:
         async with _httpx.AsyncClient(timeout=20) as _c:
             resp = await _c.post(
-                "https://api.yookassa.ru/v3/invoices",
+                "https://api.yookassa.ru/v3/payments",
                 headers={
                     "Authorization": f"Basic {auth}",
                     "Idempotence-Key": _s.token_hex(16),
                     "Content-Type": "application/json",
                 },
-                json=invoice_payload,
+                json=payment_payload,
             )
         if resp.status_code != 200:
-            print(f"[payments] yookassa invoice error {resp.status_code}: {resp.text[:300]}")
+            print(f"[payments] yookassa payment error {resp.status_code}: {resp.text[:300]}")
             raise HTTPException(
                 status_code=503,
                 detail="Платёжная система временно недоступна. Напишите @ZemlyaOnlineBot или anna_zemlya в Telegram — оформим оплату вручную.",
             )
-        invoice = resp.json()
+        payment = resp.json()
     except HTTPException:
         raise
     except Exception as e:
@@ -324,18 +313,17 @@ async def create_payment(
             detail="Платёжная система временно недоступна. Напишите @ZemlyaOnlineBot или anna_zemlya в Telegram — оформим оплату вручную.",
         )
 
-    invoice_id = invoice.get("id")
-    pay_url = (invoice.get("delivery_method") or {}).get("url")
+    payment_id = payment.get("id")
+    pay_url = (payment.get("confirmation") or {}).get("confirmation_url")
 
-    # Сохраняем pending-платёж — yukassa_payment_id хранит invoice_id;
-    # после оплаты webhook получит payment.succeeded с metadata, по
-    # которым мы найдём этот pending Subscription и активируем подписку.
+    # Сохраняем pending-платёж — yukassa_payment_id совпадает с id из webhook
+    # (Payment API: id создаваемого payment == id в payment.succeeded событии).
     sub = Subscription(
         user_id=user.id,
         plan=data.plan,
         amount=price,
         months=months,
-        yukassa_payment_id=invoice_id,
+        yukassa_payment_id=payment_id,
         status="pending",
     )
     db.add(sub)
@@ -355,7 +343,7 @@ async def create_payment(
         await db.commit()
 
     return {
-        "payment_id": invoice_id,
+        "payment_id": payment_id,
         "confirmation_url": pay_url,
     }
 

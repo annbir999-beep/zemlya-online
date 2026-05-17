@@ -9,8 +9,6 @@ import { getMe } from "@/lib/auth";
 // ID — цифры с возможным суффиксом _N (например 22000175410000000063_1).
 const TORGI_RE = /(?:lots\/lot\/|lotcards\/(?:lot\/)?)(\d+(?:_\d+)?)/;
 
-const YOOKASSA_PAY_URL = "https://yookassa.ru/my/i/agoI5yfm7CAY/l";
-
 export default function AuditLotPage() {
   const [url, setUrl] = useState("");
   const [resolving, setResolving] = useState(false);
@@ -18,7 +16,6 @@ export default function AuditLotPage() {
   const [error, setError] = useState<string | null>(null);
   const [acceptedOferta, setAcceptedOferta] = useState(false);
   const [user, setUser] = useState<UserProfile | null>(null);
-  const [showPostPay, setShowPostPay] = useState(false);
   useEffect(() => { getMe().then(setUser); }, []);
   const hasFreeAudit = (user?.free_audits_left || 0) > 0;
 
@@ -58,7 +55,7 @@ export default function AuditLotPage() {
     }
   };
 
-  const buy = () => {
+  const buy = async () => {
     if (!isAuthenticated()) {
       window.location.href = `/login?next=${encodeURIComponent("/audit-lot")}`;
       return;
@@ -68,9 +65,17 @@ export default function AuditLotPage() {
       setError("Согласитесь с условиями оферты, чтобы продолжить");
       return;
     }
-    setError(null);
-    setShowPostPay(true);
-    window.open(YOOKASSA_PAY_URL, "_blank", "noopener,noreferrer");
+    try {
+      const r = await api.post<{ confirmation_url: string }>("/api/payments/create", {
+        plan: "audit_lot",
+        months: 0,
+        return_url: `${window.location.origin}/lots/${resolvedLot.id}`,
+        lot_id: resolvedLot.id,
+      });
+      window.location.href = r.confirmation_url;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Ошибка платежа");
+    }
   };
 
   return (
@@ -185,29 +190,6 @@ export default function AuditLotPage() {
               </button>
             )}
 
-            {showPostPay && resolvedLot && (
-              <div style={{
-                marginTop: 14, padding: 16,
-                background: "#fef3c7", border: "1px solid #fcd34d",
-                borderRadius: 10, color: "#78350f",
-                fontSize: 13, lineHeight: 1.55,
-              }}>
-                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8 }}>
-                  ⏳ Оплачиваете на ЮКассе (открылась в новой вкладке)
-                </div>
-                <div style={{ marginBottom: 8 }}>
-                  После оплаты напишите боту <a href="https://t.me/ZemlyaOnlineBot" target="_blank" rel="noreferrer" style={{ color: "#78350f", fontWeight: 600 }}>@ZemlyaOnlineBot</a> или на <a href="mailto:anna@xn--e1adnd0h.online" style={{ color: "#78350f", fontWeight: 600 }}>anna@земля.online</a> следующее:
-                </div>
-                <div style={{ background: "white", padding: 10, borderRadius: 6, fontFamily: "monospace", fontSize: 12, marginBottom: 8, whiteSpace: "pre-line" }}>
-                  {`Оплачен AI-аудит 490 ₽
-Email аккаунта: ${user?.email || "ваш@email"}
-Лот: https://земля.online/lots/${resolvedLot.id}`}
-                </div>
-                <div style={{ fontSize: 12, opacity: 0.85 }}>
-                  Зачислим аудит в течение 1 часа в рабочее время.
-                </div>
-              </div>
-            )}
           </div>
         )}
       </div>
