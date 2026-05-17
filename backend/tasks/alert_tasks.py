@@ -69,6 +69,14 @@ async def _check_alerts():
                 conditions.append(Lot.last_price_drop_pct >= filters["price_drop_min"])
             if filters.get("pct_cadastral_max") is not None:
                 conditions.append(Lot.pct_price_to_cadastral <= filters["pct_cadastral_max"])
+            # КС / Рынок (cadastral_cost / (market_price_sqm * area_sqm) * 100)
+            if filters.get("cadastral_to_market_min") is not None or filters.get("cadastral_to_market_max") is not None:
+                from sqlalchemy import func as _func
+                _ratio = Lot.cadastral_cost / _func.nullif(Lot.market_price_sqm * Lot.area_sqm, 0) * 100
+                if filters.get("cadastral_to_market_min") is not None:
+                    conditions.append(_ratio >= filters["cadastral_to_market_min"])
+                if filters.get("cadastral_to_market_max") is not None:
+                    conditions.append(_ratio <= filters["cadastral_to_market_max"])
             if filters.get("cadastral_cost_min") is not None:
                 conditions.append(Lot.cadastral_cost >= filters["cadastral_cost_min"])
             if filters.get("cadastral_cost_max") is not None:

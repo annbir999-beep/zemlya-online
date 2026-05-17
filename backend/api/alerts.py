@@ -32,6 +32,8 @@ class AlertFilters(BaseModel):
     price_drop_min: Optional[float] = None       # мин. % снижения цены на повторных торгах
     liquidity: Optional[str] = None              # high / medium / low
     pct_cadastral_max: Optional[float] = None    # макс. цена в % от кадастровой
+    cadastral_to_market_min: Optional[float] = None  # КС/Рынок ≥ X% (искать переоценённые)
+    cadastral_to_market_max: Optional[float] = None  # КС/Рынок ≤ X% (искать недооценённые)
     cadastral_cost_min: Optional[float] = None
     cadastral_cost_max: Optional[float] = None
     deposit_pct_min: Optional[float] = None

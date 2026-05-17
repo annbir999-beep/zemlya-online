@@ -120,6 +120,9 @@ def build_filters(
     # % НЦ / КС
     pct_cadastral_min: Optional[float] = None,
     pct_cadastral_max: Optional[float] = None,
+    # % КС / Рынок (cadastral_cost / market_value × 100)
+    cadastral_to_market_min: Optional[float] = None,
+    cadastral_to_market_max: Optional[float] = None,
     # Задаток руб
     deposit_min: Optional[float] = None,
     deposit_max: Optional[float] = None,
@@ -221,6 +224,17 @@ def build_filters(
         conditions.append(Lot.pct_price_to_cadastral >= pct_cadastral_min)
     if pct_cadastral_max is not None:
         conditions.append(Lot.pct_price_to_cadastral <= pct_cadastral_max)
+
+    # % КС/Рынок: cadastral_cost / (market_price_sqm * area_sqm) * 100
+    # <100 — КС ниже рынка (низкие налоги, выгодно для покупателя)
+    # >100 — КС выше рынка (повод оспаривать КС)
+    if cadastral_to_market_min is not None or cadastral_to_market_max is not None:
+        from sqlalchemy import func as _func
+        ratio_expr = Lot.cadastral_cost / _func.nullif(Lot.market_price_sqm * Lot.area_sqm, 0) * 100
+        if cadastral_to_market_min is not None:
+            conditions.append(ratio_expr >= cadastral_to_market_min)
+        if cadastral_to_market_max is not None:
+            conditions.append(ratio_expr <= cadastral_to_market_max)
 
     # Задаток руб
     if deposit_min is not None:
@@ -439,6 +453,9 @@ async def get_lots(
     # % НЦ / КС
     pct_cadastral_min: Optional[float] = Query(None, ge=0),
     pct_cadastral_max: Optional[float] = Query(None, ge=0),
+    # % КС / Рынок
+    cadastral_to_market_min: Optional[float] = Query(None, ge=0),
+    cadastral_to_market_max: Optional[float] = Query(None, ge=0),
     # Задаток
     deposit_min: Optional[float] = Query(None, ge=0),
     deposit_max: Optional[float] = Query(None, ge=0),
@@ -503,6 +520,7 @@ async def get_lots(
         price_min=price_min, price_max=price_max,
         cadastral_cost_min=cadastral_cost_min, cadastral_cost_max=cadastral_cost_max,
         pct_cadastral_min=pct_cadastral_min, pct_cadastral_max=pct_cadastral_max,
+        cadastral_to_market_min=cadastral_to_market_min, cadastral_to_market_max=cadastral_to_market_max,
         deposit_min=deposit_min, deposit_max=deposit_max,
         deposit_pct_min=deposit_pct_min, deposit_pct_max=deposit_pct_max,
         area_min=area_min, area_max=area_max,
@@ -1251,6 +1269,8 @@ async def get_lots_for_map(
     cadastral_cost_max: Optional[float] = Query(None),
     pct_cadastral_min: Optional[float] = Query(None),
     pct_cadastral_max: Optional[float] = Query(None),
+    cadastral_to_market_min: Optional[float] = Query(None),
+    cadastral_to_market_max: Optional[float] = Query(None),
     deposit_min: Optional[float] = Query(None),
     deposit_max: Optional[float] = Query(None),
     area_min: Optional[float] = Query(None),
@@ -1283,6 +1303,7 @@ async def get_lots_for_map(
         price_min=price_min, price_max=price_max,
         cadastral_cost_min=cadastral_cost_min, cadastral_cost_max=cadastral_cost_max,
         pct_cadastral_min=pct_cadastral_min, pct_cadastral_max=pct_cadastral_max,
+        cadastral_to_market_min=cadastral_to_market_min, cadastral_to_market_max=cadastral_to_market_max,
         deposit_min=deposit_min, deposit_max=deposit_max,
         area_min=area_min, area_max=area_max,
         area_kn_min=area_kn_min, area_kn_max=area_kn_max,

@@ -52,6 +52,8 @@ export default function CreateAlertModal({ hasTelegram, onCreated, onClose }: Pr
   const [priceDropMin, setPriceDropMin] = useState("");
   const [liquidity, setLiquidity] = useState("");
   const [pctCadastralMax, setPctCadastralMax] = useState("");
+  const [cadToMarketMin, setCadToMarketMin] = useState("");
+  const [cadToMarketMax, setCadToMarketMax] = useState("");
   const [cadCostMin, setCadCostMin] = useState("");
   const [cadCostMax, setCadCostMax] = useState("");
   const [depPctMin, setDepPctMin] = useState("");
@@ -103,6 +105,8 @@ export default function CreateAlertModal({ hasTelegram, onCreated, onClose }: Pr
           price_drop_min: num(priceDropMin),
           liquidity: liquidity || undefined,
           pct_cadastral_max: num(pctCadastralMax),
+          cadastral_to_market_min: num(cadToMarketMin),
+          cadastral_to_market_max: num(cadToMarketMax),
           cadastral_cost_min: num(cadCostMin),
           cadastral_cost_max: num(cadCostMax),
           deposit_pct_min: num(depPctMin),
@@ -253,6 +257,17 @@ export default function CreateAlertModal({ hasTelegram, onCreated, onClose }: Pr
               <select className="select" value={liquidity} onChange={e => setLiquidity(e.target.value)}>
                 {LIQUIDITY_OPTS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
+            </Field>
+          </Row>
+
+          <Row>
+            <Field label="КС/Рынок от, %">
+              <input className="input" type="number" min={0} max={500} placeholder="напр. 80"
+                value={cadToMarketMin} onChange={e => setCadToMarketMin(e.target.value)} />
+            </Field>
+            <Field label="КС/Рынок до, %">
+              <input className="input" type="number" min={0} max={500} placeholder="напр. 100"
+                value={cadToMarketMax} onChange={e => setCadToMarketMax(e.target.value)} />
             </Field>
           </Row>
 
