@@ -306,20 +306,12 @@ def build_filters(
     if assignment_allowed is not None:
         conditions.append(Lot.assignment_allowed == assignment_allowed)
 
-    # Имущество банкротов — детектируем по ключевым словам в title/description
-    # (арбитражный управляющий, конкурсное производство, имущество должника)
+    # Имущество банкротов — используем флаг is_bankruptcy на лоте
+    # (проставляется при парсинге или явно при импорте с bankrot.fedresurs.ru)
     if is_bankruptcy is True:
-        bankrupt_terms = or_(
-            Lot.title.ilike("%банкрот%"),
-            Lot.title.ilike("%конкурсн%"),
-            Lot.title.ilike("%арбитражн%"),
-            Lot.title.ilike("%несостоятельн%"),
-            Lot.title.ilike("%должник%"),
-            Lot.description.ilike("%банкрот%"),
-            Lot.description.ilike("%конкурсное производство%"),
-            Lot.description.ilike("%арбитражный управляющий%"),
-        )
-        conditions.append(bankrupt_terms)
+        conditions.append(Lot.is_bankruptcy == True)
+    elif is_bankruptcy is False:
+        conditions.append(Lot.is_bankruptcy == False)
 
     # Источник
     if sources:

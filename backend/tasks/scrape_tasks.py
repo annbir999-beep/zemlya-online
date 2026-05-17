@@ -4,6 +4,7 @@ from services.scraper_torgi import TorgiGovScraper
 from services.scraper_avito import AvitoScraper
 from services.scraper_cian import CianScraper
 from services.scraper_domclick import DomclickScraper
+from services.scraper_bankrot import scrape_once as scrape_bankrot_once
 from services.rosreestr import RosreestrClient
 
 
@@ -33,6 +34,22 @@ async def _scrape_torgi():
         saved = await scraper.run()
         await db.commit()  # КРИТИЧНО: иначе при выходе сессия делает rollback
         print(f"[torgi.gov] Сохранено/обновлено лотов: {saved}")
+
+
+@celery_app.task(bind=True, max_retries=2, default_retry_delay=900)
+def scrape_bankrot_fedresurs(self):
+    """Парсинг банкротных торгов с bankrot.fedresurs.ru — официальный реестр.
+
+    Запускается раз в 6 часов по beat schedule. Берёт активные торги по
+    земельным участкам, сохраняет в lots с source=bankrot_fedresurs и
+    is_bankruptcy=True. Идемпотентно: повторный запуск обновляет существующие
+    записи (по external_id = bankrot_{trade_id}_{lot_num}).
+    """
+    try:
+        stats = _run(scrape_bankrot_once())
+        print(f"[bankrot.fedresurs] {stats}")
+    except Exception as exc:
+        raise self.retry(exc=exc)
 
 
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=600)

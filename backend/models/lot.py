@@ -15,6 +15,7 @@ class LotSource(str, enum.Enum):
     AVITO = "avito"
     CIAN = "cian"
     DOMCLICK = "domclick"
+    BANKROT_FEDRESURS = "bankrot_fedresurs"
 
 
 class LotStatus(str, enum.Enum):
@@ -193,6 +194,12 @@ class Lot(Base):
     technical_conditions = Column(Text)                    # ТУ — текст технических условий
     contract_terms = Column(JSON)                          # {assignment, sublease, lease_term_years, ...}
     pdf_parsed_at = Column(DateTime(timezone=True))        # Когда последний раз парсили PDF
+
+    # ── Банкротное имущество ──
+    # True для лотов от арбитражных управляющих / конкурсного производства.
+    # Проставляется при парсинге по ключевым словам в title/description
+    # или явно при импорте из bankrot.fedresurs.ru.
+    is_bankruptcy = Column(Boolean, default=False, nullable=False, index=True)
 
     # Технические
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))

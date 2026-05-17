@@ -154,6 +154,25 @@ def _parse_auction_form(form_str: str) -> Optional[AuctionForm]:
     return None
 
 
+_BANKRUPTCY_KEYWORDS = (
+    "банкрот", "конкурсн", "арбитражн", "несостоятельн",
+    "должник", "имущество должник", "конкурсное производство",
+    "арбитражный управляющий",
+)
+
+
+def _is_bankruptcy_text(text: str) -> bool:
+    """Детекция банкротных лотов: проверяет наличие ключевых слов в title/description.
+
+    Использует то же множество слов, что и миграция migrate_add_is_bankruptcy.py,
+    чтобы обогащение при парсинге было консистентно с пересчётом существующих лотов.
+    """
+    if not text:
+        return False
+    low = text.lower()
+    return any(kw in low for kw in _BANKRUPTCY_KEYWORDS)
+
+
 def _parse_deal_type(deal_str: str) -> Optional[DealType]:
     """Парсит вид сделки по любому текстовому полю.
 
@@ -566,6 +585,10 @@ class TorgiGovScraper:
         )
         lot.sublease_allowed = sublease if (sublease or assignment) else None
         lot.assignment_allowed = assignment if (sublease or assignment) else None
+        # Имущество банкротов — детектируем по ключевым словам
+        lot.is_bankruptcy = _is_bankruptcy_text(
+            (lot.title or "") + " " + (lot.description or "") + " " + (lot.organizer_name or "")
+        )
         lot.region_code = str(region_code)
         lot.region_name = region_name
         lot.address = address

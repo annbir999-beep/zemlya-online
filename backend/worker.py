@@ -32,6 +32,13 @@ celery_app.conf.update(
             "task": "tasks.scrape_tasks.scrape_torgi_gov",
             "schedule": crontab(minute=0, hour="*/2"),
         },
+        # Парсинг bankrot.fedresurs.ru — каждые 6 часов со сдвигом :40
+        # (чтобы не пересекаться с torgi.gov на чётных часах).
+        # Берёт активные банкротные торги по земельным участкам.
+        "scrape-bankrot": {
+            "task": "tasks.scrape_tasks.scrape_bankrot_fedresurs",
+            "schedule": crontab(minute=40, hour="*/6"),
+        },
         # Ежедневный re-parse PDF договоров обновлёнными regex'ами contract_parser.
         # Берёт лоты, у которых contract_terms ещё пуст / неполный — повторно скачивает
         # contract.pdf и применяет новые патерны. ~500 лотов за прогон = ~10 минут.
