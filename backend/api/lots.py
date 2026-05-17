@@ -157,6 +157,8 @@ def build_filters(
     # Субаренда / переуступка (из текста)
     sublease_allowed: Optional[bool] = None,
     assignment_allowed: Optional[bool] = None,
+    # Имущество банкротов (детекция по ключевым словам в title/description)
+    is_bankruptcy: Optional[bool] = None,
     # Прочее
     sources: Optional[List[str]] = None,
     cadastral: Optional[str] = None,
@@ -303,6 +305,21 @@ def build_filters(
         conditions.append(Lot.sublease_allowed == sublease_allowed)
     if assignment_allowed is not None:
         conditions.append(Lot.assignment_allowed == assignment_allowed)
+
+    # Имущество банкротов — детектируем по ключевым словам в title/description
+    # (арбитражный управляющий, конкурсное производство, имущество должника)
+    if is_bankruptcy is True:
+        bankrupt_terms = or_(
+            Lot.title.ilike("%банкрот%"),
+            Lot.title.ilike("%конкурсн%"),
+            Lot.title.ilike("%арбитражн%"),
+            Lot.title.ilike("%несостоятельн%"),
+            Lot.title.ilike("%должник%"),
+            Lot.description.ilike("%банкрот%"),
+            Lot.description.ilike("%конкурсное производство%"),
+            Lot.description.ilike("%арбитражный управляющий%"),
+        )
+        conditions.append(bankrupt_terms)
 
     # Источник
     if sources:
@@ -488,6 +505,8 @@ async def get_lots(
     # Субаренда / переуступка из текста
     sublease_allowed: Optional[bool] = Query(None),
     assignment_allowed: Optional[bool] = Query(None),
+    # Имущество банкротов
+    is_bankruptcy: Optional[bool] = Query(None),
     # Источник
     source: Optional[List[str]] = Query(None, alias="source"),
     # Поиск
@@ -531,6 +550,7 @@ async def get_lots(
         category_tg=category_tg, vri_tg=vri_tg, section_tg=section_tg,
         etp=etp, resale_types=resale_type,
         sublease_allowed=sublease_allowed, assignment_allowed=assignment_allowed,
+        is_bankruptcy=is_bankruptcy,
         sources=source if source else ["torgi_gov"], cadastral=cadastral, notice_number=notice_number, q=q,
         submission_start_from=submission_start_from, submission_start_to=submission_start_to,
         submission_end_from=submission_end_from, submission_end_to=submission_end_to,
@@ -1288,6 +1308,7 @@ async def get_lots_for_map(
     resale_type: Optional[List[str]] = Query(None, alias="resale_type"),
     sublease_allowed: Optional[bool] = Query(None),
     assignment_allowed: Optional[bool] = Query(None),
+    is_bankruptcy: Optional[bool] = Query(None),
     source: Optional[List[str]] = Query(None, alias="source"),
     cadastral: Optional[str] = Query(None),
     submission_end_from: Optional[date] = Query(None),
@@ -1312,6 +1333,7 @@ async def get_lots_for_map(
         section_tg=section_tg, etp=etp,
         resale_types=resale_type,
         sublease_allowed=sublease_allowed, assignment_allowed=assignment_allowed,
+        is_bankruptcy=is_bankruptcy,
         sources=source if source else ["torgi_gov"], cadastral=cadastral,
         submission_end_from=submission_end_from, submission_end_to=submission_end_to,
         has_coords=has_coords,
