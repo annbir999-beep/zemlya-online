@@ -1,7 +1,8 @@
 "use client";
-import { useState, useEffect } from "react";
-import { isAuthenticated } from "@/lib/auth";
+import { useState, useEffect, useRef } from "react";
+import { isAuthenticated, getMe } from "@/lib/auth";
 import { api } from "@/lib/api";
+import type { UserProfile } from "@/lib/api";
 
 const PERIOD_LABELS: Record<string, string> = {
   "1": "1 мес", "3": "3 мес", "12": "12 мес",
@@ -55,6 +56,13 @@ export default function PricingPage() {
   const [showEnterpriseForm, setShowEnterpriseForm] = useState(false);
   const [promoCode, setPromoCode] = useState("");
   const [promoStatus, setPromoStatus] = useState<{ ok: boolean; message: string } | null>(null);
+  const [waitingPayment, setWaitingPayment] = useState<{ plan: string; isOneTime: boolean } | null>(null);
+  const [paymentConfirmed, setPaymentConfirmed] = useState<{ plan: string; isOneTime: boolean } | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const baselineRef = useRef<UserProfile | null>(null);
+
+  // Останавливаем поллинг при размонтировании
+  useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
 
   const validatePromo = async () => {
     setPromoStatus(null);
@@ -98,6 +106,32 @@ export default function PricingPage() {
       });
       // Открываем ЮКассу в новой вкладке, чтобы пользователь не терял состояние страницы
       window.open(r.confirmation_url, "_blank", "noopener,noreferrer");
+
+      // Запоминаем baseline профиля и начинаем поллинг — ждём пока webhook обновит БД
+      baselineRef.current = await getMe();
+      setWaitingPayment({ plan: planId, isOneTime: oneTime });
+      if (pollRef.current) clearInterval(pollRef.current);
+      const startedAt = Date.now();
+      pollRef.current = setInterval(async () => {
+        // Стоп после 10 минут (если пользователь забил)
+        if (Date.now() - startedAt > 10 * 60 * 1000) {
+          if (pollRef.current) clearInterval(pollRef.current);
+          setWaitingPayment(null);
+          return;
+        }
+        const fresh = await getMe();
+        const base = baselineRef.current;
+        if (!fresh || !base) return;
+        // Разовый — выросло free_audits_left. Подписка — изменился plan или expires_at.
+        const auditsGrew = (fresh.free_audits_left || 0) > (base.free_audits_left || 0);
+        const planChanged = fresh.subscription_plan !== base.subscription_plan
+          || fresh.subscription_expires_at !== base.subscription_expires_at;
+        if (auditsGrew || planChanged) {
+          if (pollRef.current) clearInterval(pollRef.current);
+          setWaitingPayment(null);
+          setPaymentConfirmed({ plan: planId, isOneTime: oneTime });
+        }
+      }, 4000);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Ошибка платежа";
       alert(msg);
@@ -114,6 +148,47 @@ export default function PricingPage() {
           От разового AI-аудита за 490 ₽ до Enterprise с SLA. Подписка отменяется в один клик, разовые продукты — без обязательств.
         </p>
       </div>
+
+      {/* Баннер ожидания оплаты — пока поллим webhook */}
+      {waitingPayment && !paymentConfirmed && (
+        <div style={{
+          background: "#fef3c7", border: "1px solid #fcd34d",
+          borderRadius: 10, padding: 16, marginBottom: 16,
+          textAlign: "center", color: "#78350f", maxWidth: 720, margin: "0 auto 16px",
+        }}>
+          <div style={{ fontWeight: 700, marginBottom: 4 }}>
+            ⏳ Ожидаем подтверждение оплаты от ЮКассы…
+          </div>
+          <div style={{ fontSize: 13, opacity: 0.85 }}>
+            Оплата открыта в новой вкладке. После завершения мы автоматически активируем покупку (обычно занимает 5-30 секунд).
+          </div>
+        </div>
+      )}
+
+      {/* Баннер успеха — webhook отработал, профиль обновился */}
+      {paymentConfirmed && (
+        <div style={{
+          background: "linear-gradient(135deg, #dcfce7, #d1fae5)",
+          border: "1px solid #16a34a", borderRadius: 10, padding: 16, marginBottom: 16,
+          textAlign: "center", color: "#166534", maxWidth: 720, margin: "0 auto 16px",
+        }}>
+          <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 6 }}>
+            ✅ Оплата подтверждена!
+          </div>
+          <div style={{ fontSize: 13, marginBottom: 10 }}>
+            {paymentConfirmed.isOneTime
+              ? "Аудит зачислен на ваш счёт. Перейдите по кнопке ниже и вставьте ссылку на лот с torgi.gov."
+              : "Подписка активирована. Все возможности тарифа доступны в кабинете."}
+          </div>
+          <a
+            href={paymentConfirmed.isOneTime ? "/audit-lot" : "/dashboard"}
+            className="btn btn-primary"
+            style={{ padding: "8px 22px", fontWeight: 700, textDecoration: "none", display: "inline-block" }}
+          >
+            {paymentConfirmed.isOneTime ? "Перейти к аудиту →" : "Открыть кабинет →"}
+          </a>
+        </div>
+      )}
 
       {/* Промокод */}
       <div style={{

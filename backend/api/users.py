@@ -301,6 +301,36 @@ async def record_view(lot_id: int, user: User = Depends(get_current_user), db: A
     return {"status": "recorded"}
 
 
+@router.get("/subscriptions")
+async def get_payment_history(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """История покупок пользователя — оплаченные и pending подписки/разовые услуги."""
+    from models.alert import Subscription
+    from sqlalchemy import desc
+
+    rows = (await db.execute(
+        select(Subscription)
+        .where(Subscription.user_id == user.id)
+        .order_by(desc(Subscription.created_at))
+        .limit(100)
+    )).scalars().all()
+
+    return {
+        "items": [
+            {
+                "id": s.id,
+                "plan": s.plan,
+                "amount": s.amount,
+                "currency": s.currency,
+                "months": s.months,
+                "status": s.status,
+                "created_at": s.created_at.isoformat() if s.created_at else None,
+                "paid_at": s.paid_at.isoformat() if s.paid_at else None,
+            }
+            for s in rows
+        ]
+    }
+
+
 @router.get("/views")
 async def get_view_history(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Последние 50 уникальных лотов, отсортированных по последнему просмотру."""

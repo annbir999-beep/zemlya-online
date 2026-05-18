@@ -16,9 +16,10 @@ export default function DashboardPage() {
   const router = useRouter();
   const [user, setUser] = useState<UserProfile | null>(null);
   const [alerts, setAlerts] = useState<Alert[]>([]);
-  const [tab, setTab] = useState<"profile" | "alerts" | "history" | "views">("profile");
+  const [tab, setTab] = useState<"profile" | "alerts" | "history" | "views" | "purchases">("profile");
   const [savedLots, setSavedLots] = useState<{ id: number; title: string; start_price?: number; status: string }[]>([]);
   const [views, setViews] = useState<{ id: number; title: string; region_name?: string; start_price?: number; area_sqm?: number; status?: string; score?: number; viewed_at?: string }[]>([]);
+  const [purchases, setPurchases] = useState<{ id: number; plan: string; amount: number; currency?: string; months?: number; status: string; created_at?: string; paid_at?: string }[]>([]);
   const [showCreateAlert, setShowCreateAlert] = useState(false);
 
   const reloadAlerts = () =>
@@ -34,6 +35,7 @@ export default function DashboardPage() {
     api.get<Alert[] | { items: Alert[] }>("/api/alerts").then((d) => setAlerts(Array.isArray(d) ? d : (d?.items ?? [])));
     api.get<typeof savedLots | { items: typeof savedLots }>("/api/users/saved-lots").then((d) => setSavedLots(Array.isArray(d) ? d : (d?.items ?? [])));
     api.get<{ items: typeof views }>("/api/users/views").then((d) => setViews(d?.items ?? []));
+    api.get<{ items: typeof purchases }>("/api/users/subscriptions").then((d) => setPurchases(d?.items ?? []));
   }, [router]);
 
   const toggleAlert = async (id: number) => {
@@ -58,7 +60,7 @@ export default function DashboardPage() {
 
       {/* Tabs */}
       <div style={{ display: "flex", gap: 4, borderBottom: "1px solid var(--border)", marginBottom: 24 }}>
-        {(["profile", "alerts", "history", "views"] as const).map((t) => (
+        {(["profile", "alerts", "history", "views", "purchases"] as const).map((t) => (
           <button
             key={t}
             className="btn btn-ghost"
@@ -70,7 +72,7 @@ export default function DashboardPage() {
             }}
             onClick={() => setTab(t)}
           >
-            {{ profile: "Профиль", alerts: `Фильтры (${alerts.length})`, history: `Избранное (${savedLots.length})`, views: `История (${views.length})` }[t]}
+            {{ profile: "Профиль", alerts: `Фильтры (${alerts.length})`, history: `Избранное (${savedLots.length})`, views: `История (${views.length})`, purchases: `Покупки (${purchases.length})` }[t]}
           </button>
         ))}
       </div>
@@ -221,6 +223,60 @@ export default function DashboardPage() {
               )}
             </a>
           ))}
+        </div>
+      )}
+
+      {/* Purchases tab */}
+      {tab === "purchases" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {purchases.length === 0 && (
+            <div style={{ padding: 32, textAlign: "center", color: "var(--text-3)", background: "var(--surface)", borderRadius: 10, border: "1px solid var(--border)" }}>
+              Здесь появятся ваши покупки: подписки и разовые аудиты.
+            </div>
+          )}
+          {purchases.map((p) => {
+            const planLabel: Record<string, string> = {
+              audit_lot: "AI-аудит лота",
+              predd: "preDD аудит договора",
+              pro: "Подписка Pro",
+              buro: "Подписка Бюро",
+              buro_plus: "Подписка Бюро+",
+            };
+            const statusLabel: Record<string, { text: string; color: string }> = {
+              succeeded: { text: "Оплачено", color: "#16a34a" },
+              pending: { text: "В ожидании", color: "#ca8a04" },
+              cancelled: { text: "Отменено", color: "#94a3b8" },
+            };
+            const st = statusLabel[p.status] || { text: p.status, color: "#64748b" };
+            return (
+              <div key={p.id} style={{
+                background: "var(--surface)", border: "1px solid var(--border)",
+                borderRadius: 10, padding: 14,
+                display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap",
+              }}>
+                <div style={{ flex: 1, minWidth: 180 }}>
+                  <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 2 }}>
+                    {planLabel[p.plan] || p.plan}
+                    {p.months && p.months > 0 && <span style={{ fontWeight: 400, color: "var(--text-3)" }}> · {p.months} мес.</span>}
+                  </div>
+                  <div style={{ fontSize: 12, color: "var(--text-3)" }}>
+                    {p.created_at && <span>Создан: {new Date(p.created_at).toLocaleString("ru", { day: "2-digit", month: "2-digit", year: "2-digit" })}</span>}
+                    {p.paid_at && <span>  ·  Оплачен: {new Date(p.paid_at).toLocaleString("ru", { day: "2-digit", month: "2-digit", year: "2-digit" })}</span>}
+                  </div>
+                </div>
+                <div style={{ fontWeight: 700, fontSize: 15 }}>
+                  {p.amount.toLocaleString("ru")} ₽
+                </div>
+                <span style={{
+                  fontSize: 11, fontWeight: 600,
+                  padding: "3px 10px", borderRadius: 12,
+                  background: st.color + "20", color: st.color, flexShrink: 0,
+                }}>
+                  {st.text}
+                </span>
+              </div>
+            );
+          })}
         </div>
       )}
 
