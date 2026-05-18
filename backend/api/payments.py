@@ -270,6 +270,15 @@ async def create_payment(
         f"{settings.YUKASSA_SHOP_ID}:{settings.YUKASSA_SECRET_KEY}".encode()
     ).decode()
 
+    # Receipt обязателен при фискализации 54-ФЗ (ИП Бирюкова — есть «Чеки от ЮКассы»).
+    # Без receipt Payment API возвращает 400.
+    # vat_code=1 = «Без НДС» (УСН), payment_subject=service для разовых и подписок.
+    receipt_customer = {}
+    if user.email:
+        receipt_customer["email"] = user.email
+    elif getattr(user, "phone", None):
+        receipt_customer["phone"] = user.phone
+
     payment_payload = {
         "amount": {"value": f"{price:.2f}", "currency": "RUB"},
         "confirmation": {
@@ -283,6 +292,17 @@ async def create_payment(
             "plan": data.plan,
             "months": str(months),
             "lot_id": str(data.lot_id or ""),
+        },
+        "receipt": {
+            "customer": receipt_customer or {"email": "noreply@xn--e1adnd0h.online"},
+            "items": [{
+                "description": descr[:128],
+                "quantity": "1.00",
+                "amount": {"value": f"{price:.2f}", "currency": "RUB"},
+                "vat_code": 1,
+                "payment_mode": "full_payment",
+                "payment_subject": "service",
+            }],
         },
     }
 
