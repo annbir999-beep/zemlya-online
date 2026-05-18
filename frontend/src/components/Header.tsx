@@ -56,23 +56,11 @@ export default function Header() {
       </Link>
 
       <nav className="header-nav">
-        {nav.map((n) => {
-          const isPricing = n.href === "/pricing";
-          return (
-            <Link key={n.href} href={n.href} className={pathname === n.href ? "active" : ""}>
-              {isPricing ? (
-                <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", lineHeight: 1.1, gap: 2 }}>
-                  <span style={{ fontSize: 15 }}>{n.icon}</span>
-                  <span>{n.label}</span>
-                </span>
-              ) : (
-                <>
-                  <span style={{ marginRight: 6 }}>{n.icon}</span>{n.label}
-                </>
-              )}
-            </Link>
-          );
-        })}
+        {nav.map((n) => (
+          <Link key={n.href} href={n.href} className={pathname === n.href ? "active" : ""}>
+            <span style={{ marginRight: 6 }}>{n.icon}</span>{n.label}
+          </Link>
+        ))}
       </nav>
 
       {/* Burger — только на мобиле */}
