@@ -62,9 +62,15 @@ export default function HeroBar() {
             fontSize: 13,
             whiteSpace: "nowrap",
             border: "1px solid rgba(255,255,255,0.4)",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            lineHeight: 1.1,
+            gap: 2,
           }}
         >
-          ⚡ Тарифы
+          <span style={{ fontSize: 15 }}>⚡</span>
+          <span>Тарифы</span>
         </Link>
         <Link
           href="/audit-lot"
