@@ -72,7 +72,7 @@ export default function AuditLotPage() {
         return_url: `${window.location.origin}/lots/${resolvedLot.id}`,
         lot_id: resolvedLot.id,
       });
-      window.location.href = r.confirmation_url;
+      window.open(r.confirmation_url, "_blank", "noopener,noreferrer");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ошибка платежа");
     }

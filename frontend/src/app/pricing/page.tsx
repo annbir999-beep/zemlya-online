@@ -78,22 +78,23 @@ export default function PricingPage() {
     });
   }, []);
 
-  const buy = async (plan: Plan, lotId?: number) => {
+  const buy = async (planId: string, oneTime: boolean, lotId?: number) => {
     if (!isAuthenticated()) {
       window.location.href = `/login?next=${encodeURIComponent("/pricing")}`;
       return;
     }
-    setLoading(plan.id);
+    setLoading(planId);
     try {
-      const months = plan.one_time ? 0 : Number(periods[plan.id] || 1);
+      const months = oneTime ? 0 : Number(periods[planId] || 1);
       const r = await api.post<{ confirmation_url: string }>("/api/payments/create", {
-        plan: plan.id,
+        plan: planId,
         months,
         return_url: `${window.location.origin}/dashboard`,
         lot_id: lotId,
         promo_code: promoCode.trim() || undefined,
       });
-      window.location.href = r.confirmation_url;
+      // Открываем ЮКассу в новой вкладке, чтобы пользователь не терял состояние страницы
+      window.open(r.confirmation_url, "_blank", "noopener,noreferrer");
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Ошибка платежа";
       alert(msg);
@@ -162,7 +163,7 @@ export default function PricingPage() {
             setPeriod={(p) => setPeriods((s) => ({ ...s, [plan.id]: p }))}
             onBuy={() => {
               if (plan.contact_only) setShowEnterpriseForm(true);
-              else buy(plan);
+              else buy(plan.id, !!plan.one_time);
             }}
             loading={loading === plan.id}
           />
@@ -179,12 +180,21 @@ export default function PricingPage() {
                 background: "var(--surface)",
                 border: "1px solid var(--border)",
                 borderRadius: 12, padding: 20,
+                display: "flex", flexDirection: "column",
               }}>
                 <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>{ex.name}</div>
                 <div style={{ fontSize: 24, fontWeight: 700, color: "var(--primary)", marginBottom: 6 }}>
                   {fmtPrice(ex.price)}
                 </div>
-                <div style={{ fontSize: 13, color: "var(--text-3)", lineHeight: 1.5 }}>{ex.description}</div>
+                <div style={{ fontSize: 13, color: "var(--text-3)", lineHeight: 1.5, marginBottom: 14, flex: 1 }}>{ex.description}</div>
+                <button
+                  className="btn btn-primary"
+                  onClick={() => buy(ex.id, true)}
+                  disabled={loading === ex.id}
+                  style={{ width: "100%", padding: "10px 14px", fontWeight: 600 }}
+                >
+                  {loading === ex.id ? "Открываем ЮКассу..." : `Купить за ${fmtPrice(ex.price)} →`}
+                </button>
               </div>
             ))}
           </div>
