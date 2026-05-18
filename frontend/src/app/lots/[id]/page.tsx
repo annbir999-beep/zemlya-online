@@ -328,6 +328,54 @@ export default function LotDetailPage({ params }: { params: Promise<{ id: string
           </div>
         </div>
 
+        {/* Внешние сервисы — НСПД, Авито, ЦИАН, Сообщить об ошибке */}
+        <div style={{
+          display: "flex", gap: 8, flexWrap: "wrap",
+          padding: "10px 12px", marginBottom: 18,
+          background: "var(--surface-2)", borderRadius: 10,
+          border: "1px solid var(--border)", fontSize: 13,
+        }}>
+          <span style={{ color: "var(--text-3)", marginRight: 4, alignSelf: "center" }}>Открыть в:</span>
+          {lot.cadastral_number && (
+            <a
+              href={`https://nspd.gov.ru/map?thematic=PKK&zoom=18&attributeFilter=%7B%22cadNum%22:%22${encodeURIComponent(lot.cadastral_number)}%22%7D`}
+              target="_blank" rel="noopener noreferrer"
+              style={{ color: "var(--primary)", textDecoration: "none", fontWeight: 500 }}
+              title="Национальная система пространственных данных — карта Росреестра"
+            >
+              🌐 НСПД ↗
+            </a>
+          )}
+          {lot.address && (
+            <>
+              <a
+                href={`https://www.avito.ru/all/zemelnye_uchastki?q=${encodeURIComponent(lot.address)}`}
+                target="_blank" rel="noopener noreferrer"
+                style={{ color: "var(--primary)", textDecoration: "none", fontWeight: 500 }}
+                title="Поиск похожих участков на Авито"
+              >
+                🏠 Авито ↗
+              </a>
+              <a
+                href={`https://www.cian.ru/cat.php?deal_type=sale&offer_type=suburban&q=${encodeURIComponent(lot.address)}`}
+                target="_blank" rel="noopener noreferrer"
+                style={{ color: "var(--primary)", textDecoration: "none", fontWeight: 500 }}
+                title="Поиск похожих участков на ЦИАН"
+              >
+                🏢 ЦИАН ↗
+              </a>
+            </>
+          )}
+          <a
+            href={`https://t.me/ZemlyaOnlineBot?start=err_${id}`}
+            target="_blank" rel="noopener noreferrer"
+            style={{ color: "var(--text-3)", textDecoration: "none", marginLeft: "auto" }}
+            title="Сообщить, что данные в лоте устарели или ошибочны"
+          >
+            ⚠️ Сообщить об ошибке
+          </a>
+        </div>
+
         {/* Key metrics */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 24 }}>
           {[
