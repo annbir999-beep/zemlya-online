@@ -86,10 +86,13 @@ export default function PricingPage() {
     setLoading(planId);
     try {
       const months = oneTime ? 0 : Number(periods[planId] || 1);
+      // Разовые продукты → /audit-lot (туда вставлять ссылку с torgi.gov).
+      // Подписки → /dashboard (увидеть активный тариф + остаток аудитов).
+      const returnPath = oneTime ? "/audit-lot" : "/dashboard";
       const r = await api.post<{ confirmation_url: string }>("/api/payments/create", {
         plan: planId,
         months,
-        return_url: `${window.location.origin}/dashboard`,
+        return_url: `${window.location.origin}${returnPath}`,
         lot_id: lotId,
         promo_code: promoCode.trim() || undefined,
       });

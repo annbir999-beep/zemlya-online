@@ -434,6 +434,10 @@ async def yukassa_webhook(request: Request, db: AsyncSession = Depends(get_db)):
         user.subscription_plan = PLAN_ENUM[sub.plan]
         user.subscription_expires_at = base + timedelta(days=30 * sub.months)
         user.saved_filters_limit = PLAN_FILTERS.get(sub.plan, user.saved_filters_limit)
+        # Pro: пополнение разовых AI-аудитов (30/мес × кол-во месяцев).
+        # Бюро/Бюро+/Enterprise — без лимита (UNLIMITED_PLANS в api/ai.py), пополнение не нужно.
+        if sub.plan == "pro":
+            user.free_audits_left = (user.free_audits_left or 0) + 30 * (sub.months or 1)
         # Бонус рефереру при первой успешной покупке
         await _credit_referrer_first_purchase(db, user, sub.id)
 
