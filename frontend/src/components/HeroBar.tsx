@@ -49,21 +49,39 @@ export default function HeroBar() {
           Дисконты до 80%, AI-аудит каждого лота, региональная аналитика.
         </span>
       </span>
-      <Link
-        href="/audit-lot"
-        style={{
-          background: "white",
-          color: "#0d9488",
-          padding: "6px 16px",
-          borderRadius: 8,
-          textDecoration: "none",
-          fontWeight: 700,
-          fontSize: 13,
-          whiteSpace: "nowrap",
-        }}
-      >
-        Бесплатный аудит →
-      </Link>
+      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <Link
+          href="/pricing"
+          style={{
+            background: "rgba(255,255,255,0.18)",
+            color: "white",
+            padding: "6px 14px",
+            borderRadius: 8,
+            textDecoration: "none",
+            fontWeight: 700,
+            fontSize: 13,
+            whiteSpace: "nowrap",
+            border: "1px solid rgba(255,255,255,0.4)",
+          }}
+        >
+          ⚡ Тарифы
+        </Link>
+        <Link
+          href="/audit-lot"
+          style={{
+            background: "white",
+            color: "#0d9488",
+            padding: "6px 16px",
+            borderRadius: 8,
+            textDecoration: "none",
+            fontWeight: 700,
+            fontSize: 13,
+            whiteSpace: "nowrap",
+          }}
+        >
+          Бесплатный аудит →
+        </Link>
+      </div>
       <button
         onClick={dismiss}
         aria-label="Закрыть"
