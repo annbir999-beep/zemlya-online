@@ -116,23 +116,35 @@ export default function LotCard({ lot, selected, compareIds, onSelect, onToggleC
         <span style={{ fontSize: 12, color: "var(--text-3)" }}>{formatArea(lot.area_sqm)}</span>
       </div>
 
-      {/* Кадастровая стоимость и % НЦ/КС */}
-      {(lot.cadastral_cost || lot.pct_price_to_cadastral) && (
-        <div style={{ display: "flex", gap: 8, marginBottom: 5, flexWrap: "wrap" }}>
-          {lot.cadastral_cost && (
-            <span style={{ fontSize: 11, color: "var(--text-3)" }}>
-              КС: <b style={{ color: "var(--text-2)" }}>{formatPrice(lot.cadastral_cost)}</b>
-            </span>
-          )}
-          {lot.pct_price_to_cadastral && (
-            <span style={{ fontSize: 11, color: "var(--text-3)" }}>
-              НЦ/КС: <b style={{ color: lot.pct_price_to_cadastral < 50 ? "var(--success, #16a34a)" : "var(--text-2)" }}>
-                {lot.pct_price_to_cadastral.toFixed(1)}%
-              </b>
-            </span>
-          )}
-        </div>
-      )}
+      {/* Кадастровая стоимость, % НЦ/КС и % КС/Рынок */}
+      {(lot.cadastral_cost || lot.pct_price_to_cadastral) && (() => {
+        const cadToMarket = (lot.cadastral_cost && lot.market_price_sqm && lot.area_sqm)
+          ? (lot.cadastral_cost / (lot.market_price_sqm * lot.area_sqm)) * 100
+          : null;
+        return (
+          <div style={{ display: "flex", gap: 8, marginBottom: 5, flexWrap: "wrap" }}>
+            {lot.cadastral_cost && (
+              <span style={{ fontSize: 11, color: "var(--text-3)" }}>
+                КС: <b style={{ color: "var(--text-2)" }}>{formatPrice(lot.cadastral_cost)}</b>
+              </span>
+            )}
+            {lot.pct_price_to_cadastral && (
+              <span style={{ fontSize: 11, color: "var(--text-3)" }}>
+                НЦ/КС: <b style={{ color: lot.pct_price_to_cadastral < 50 ? "var(--success, #16a34a)" : "var(--text-2)" }}>
+                  {lot.pct_price_to_cadastral.toFixed(1)}%
+                </b>
+              </span>
+            )}
+            {cadToMarket != null && (
+              <span style={{ fontSize: 11, color: "var(--text-3)" }}>
+                КС/Рынок: <b style={{ color: cadToMarket < 100 ? "var(--success, #16a34a)" : "var(--danger, #dc2626)" }}>
+                  {cadToMarket.toFixed(1)}%
+                </b>
+              </span>
+            )}
+          </div>
+        );
+      })()}
 
       {/* ВРИ */}
       {lot.vri_tg && (
