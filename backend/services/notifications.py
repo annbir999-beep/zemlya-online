@@ -102,6 +102,124 @@ async def send_email_alert(user: User, alert: Alert, lots: List[Lot]):
     )
 
 
+PLAN_LABELS_RU = {
+    "audit_lot": "AI-аудит лота",
+    "predd": "preDD аудит договора",
+    "pro": "Pro",
+    "buro": "Бюро",
+    "buro_plus": "Бюро+",
+}
+
+
+def _format_expires(dt) -> str:
+    if not dt:
+        return "—"
+    try:
+        return dt.strftime("%d.%m.%Y")
+    except Exception:
+        return "—"
+
+
+async def send_payment_email(user: User, plan: str, amount: float, *,
+                             months: int = 0, free_audits_total: int = 0,
+                             expires_at=None) -> None:
+    """Письмо пользователю после успешной оплаты."""
+    if not settings.SMTP_USER or not user.email:
+        return
+
+    plan_label = PLAN_LABELS_RU.get(plan, plan)
+    is_one_time = plan in ("audit_lot", "predd")
+
+    if is_one_time:
+        subject = f"✅ Оплата получена — {plan_label}"
+        cta_url = "https://xn--e1adnd0h.online/audit-lot"
+        cta_text = "Перейти к аудиту →"
+        body_inner = f"""
+            <p>Спасибо за оплату <b>{plan_label}</b> на сумму <b>{_format_price(amount)}</b>.</p>
+            <p>На вашем счету сейчас <b>{free_audits_total}</b> разовых аудитов.</p>
+            <p>Перейдите по кнопке ниже, вставьте ссылку на лот с torgi.gov — и получите PDF-отчёт.</p>
+        """
+    else:
+        subject = f"✅ Подписка «{plan_label}» активирована"
+        cta_url = "https://xn--e1adnd0h.online/dashboard"
+        cta_text = "Открыть кабинет →"
+        body_inner = f"""
+            <p>Подписка <b>«{plan_label}»</b> активна на <b>{months}</b> мес.</p>
+            <p>Действует до <b>{_format_expires(expires_at)}</b>.</p>
+            <p>В личном кабинете доступны все возможности тарифа: сохранённые фильтры, AI-аудит лотов, региональная аналитика.</p>
+        """
+
+    html = f"""<!DOCTYPE html>
+    <html><body style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#f7f7f7;padding:20px;">
+    <div style="max-width:560px;margin:0 auto;background:white;border-radius:10px;padding:28px;">
+      <h2 style="margin:0 0 8px;color:#16a34a;">✅ Оплата прошла успешно</h2>
+      {body_inner}
+      <p style="margin-top:24px;">
+        <a href="{cta_url}" style="display:inline-block;padding:10px 22px;background:#0d9488;color:white;border-radius:8px;text-decoration:none;font-weight:600;">{cta_text}</a>
+      </p>
+      <hr style="border:none;border-top:1px solid #eee;margin:24px 0;">
+      <p style="font-size:12px;color:#888;">Земля.ОНЛАЙН — агрегатор земельных аукционов РФ.<br>
+      Вопросы: anna@земля.online · <a href="https://t.me/ZemlyaOnlineBot">@ZemlyaOnlineBot</a></p>
+    </div></body></html>"""
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"] = settings.SMTP_USER
+    msg["To"] = user.email
+    msg.attach(MIMEText(html, "html", "utf-8"))
+
+    try:
+        await aiosmtplib.send(
+            msg,
+            hostname=settings.SMTP_HOST,
+            port=settings.SMTP_PORT,
+            username=settings.SMTP_USER,
+            password=settings.SMTP_PASSWORD,
+            use_tls=True,
+        )
+    except Exception as e:
+        print(f"[payment-email] send failed for user {user.id}: {type(e).__name__}: {e}")
+
+
+async def send_payment_telegram(user: User, plan: str, amount: float, *,
+                                months: int = 0, free_audits_total: int = 0,
+                                expires_at=None) -> None:
+    """Telegram-уведомление пользователю после успешной оплаты."""
+    if not settings.TELEGRAM_BOT_TOKEN or not user.telegram_id:
+        return
+
+    plan_label = PLAN_LABELS_RU.get(plan, plan)
+    is_one_time = plan in ("audit_lot", "predd")
+
+    if is_one_time:
+        text = (
+            f"✅ *Оплата получена* — {plan_label}\n"
+            f"Сумма: *{_format_price(amount)}*\n"
+            f"На счету: *{free_audits_total}* разовых аудитов\n\n"
+            f"[Перейти к аудиту →](https://xn--e1adnd0h.online/audit-lot)"
+        )
+    else:
+        text = (
+            f"✅ *Подписка «{plan_label}» активна*\n"
+            f"Срок: {months} мес. (до {_format_expires(expires_at)})\n\n"
+            f"[Открыть кабинет →](https://xn--e1adnd0h.online/dashboard)"
+        )
+
+    try:
+        async with _tg_client(timeout=10) as client:
+            await client.post(
+                f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/sendMessage",
+                json={
+                    "chat_id": user.telegram_id,
+                    "text": text,
+                    "parse_mode": "Markdown",
+                    "disable_web_page_preview": True,
+                },
+            )
+    except Exception as e:
+        print(f"[payment-tg] send failed for user {user.id}: {type(e).__name__}: {e}")
+
+
 async def send_telegram_alert(user: User, alert: Alert, lots: List[Lot]):
     if not settings.TELEGRAM_BOT_TOKEN or not user.telegram_id:
         return

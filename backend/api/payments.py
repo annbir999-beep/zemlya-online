@@ -414,6 +414,8 @@ async def yukassa_webhook(request: Request, db: AsyncSession = Depends(get_db)):
     sub.status = "succeeded"
     sub.paid_at = datetime.now(timezone.utc)
 
+    from services.notifications import send_payment_email, send_payment_telegram
+
     # Разовые продукты — даём пользователю 1 аудит/preDD
     if sub.plan in ("audit_lot", "predd"):
         result_user = await db.execute(select(User).where(User.id == sub.user_id))
@@ -423,6 +425,12 @@ async def yukassa_webhook(request: Request, db: AsyncSession = Depends(get_db)):
             # Бонус рефереру за первую покупку приглашённого
             await _credit_referrer_first_purchase(db, u, sub.id)
         await db.commit()
+        if u:
+            try:
+                await send_payment_email(u, sub.plan, float(sub.amount or 0), free_audits_total=u.free_audits_left or 0)
+                await send_payment_telegram(u, sub.plan, float(sub.amount or 0), free_audits_total=u.free_audits_left or 0)
+            except Exception as e:
+                print(f"[payment-webhook] notify error: {type(e).__name__}: {e}")
         return {"status": "ok", "type": "one_time"}
 
     # Подписочный тариф — обновляем пользователя
@@ -442,6 +450,20 @@ async def yukassa_webhook(request: Request, db: AsyncSession = Depends(get_db)):
         await _credit_referrer_first_purchase(db, user, sub.id)
 
     await db.commit()
+    if user:
+        try:
+            await send_payment_email(
+                user, sub.plan, float(sub.amount or 0),
+                months=sub.months or 1,
+                expires_at=user.subscription_expires_at,
+            )
+            await send_payment_telegram(
+                user, sub.plan, float(sub.amount or 0),
+                months=sub.months or 1,
+                expires_at=user.subscription_expires_at,
+            )
+        except Exception as e:
+            print(f"[payment-webhook] notify error: {type(e).__name__}: {e}")
     return {"status": "ok"}
 
 
