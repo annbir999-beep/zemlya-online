@@ -9,6 +9,8 @@ import math
 
 from db.database import get_db
 from models.lot import Lot, LotStatus, LandPurpose, AuctionType, LotSource, AuctionForm, DealType, AreaDiscrepancy, ResaleType
+from models.user import User, SubscriptionPlan
+from api.users import get_current_user, get_current_user_optional
 from services.rubrics import get_all_rubrics, get_rubrics_by_section, get_sections
 
 router = APIRouter()
@@ -591,11 +593,25 @@ async def get_lots(
 
 
 @router.get("/{lot_id}/report.pdf")
-async def lot_pdf_report(lot_id: int, db: AsyncSession = Depends(get_db)):
-    """PDF-отчёт по лоту: ключевые KPI + ИИ-вердикт + контакты + что рядом."""
+async def lot_pdf_report(
+    lot_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """PDF-отчёт по лоту: ключевые KPI + ИИ-вердикт + контакты + что рядом.
+
+    Доступно для Pro/Бюро/Бюро+/Enterprise. Free тариф — 403 с подсказкой.
+    """
     from io import BytesIO
     from fastapi.responses import StreamingResponse
     from xhtml2pdf import pisa
+    from models.user import SubscriptionPlan as _SP
+
+    if user.subscription_plan == _SP.FREE:
+        raise HTTPException(
+            status_code=403,
+            detail="PDF-отчёт доступен с тарифа Pro. Перейдите в /pricing.",
+        )
 
     result = await db.execute(select(Lot).where(Lot.id == lot_id))
     lot = result.scalar_one_or_none()
@@ -952,9 +968,19 @@ async def export_lots_csv(
     auction_type: Optional[List[str]] = Query(None, alias="auction_type"),
     source: Optional[List[str]] = Query(None, alias="source"),
     db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
     limit: int = Query(2000, le=5000),
 ):
-    """Экспорт списка лотов в CSV (UTF-8 BOM для Excel)."""
+    """Экспорт списка лотов в CSV (UTF-8 BOM для Excel).
+
+    Доступно для Pro+ (включая Бюро/Бюро+/Enterprise).
+    """
+    from models.user import SubscriptionPlan as _SP
+    if user.subscription_plan == _SP.FREE:
+        raise HTTPException(
+            status_code=403,
+            detail="Экспорт CSV доступен с тарифа Pro. Перейдите в /pricing.",
+        )
     import csv
     import io
     from fastapi.responses import StreamingResponse
@@ -1569,11 +1595,24 @@ async def get_region_data(region_code: str):
 
 
 @router.get("/{lot_id}", response_model=LotDetail)
-async def get_lot(lot_id: int, db: AsyncSession = Depends(get_db)):
+async def get_lot(
+    lot_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: Optional[User] = Depends(get_current_user_optional),
+):
     result = await db.execute(select(Lot).where(Lot.id == lot_id))
     lot = result.scalar_one_or_none()
     if not lot:
         raise HTTPException(status_code=404, detail="Лот не найден")
+
+    # Контакты администрации — только для Pro+. Free и неавторизованным отдаём None,
+    # фронт показывает upsell-плашку «🔒 Доступно с тарифа Pro».
+    is_paid = user is not None and user.subscription_plan != SubscriptionPlan.FREE
+    contacts = (
+        lot.organizer_contacts
+        if (is_paid and isinstance(lot.organizer_contacts, dict))
+        else None
+    )
 
     item = _lot_to_item(lot)
     return LotDetail(
@@ -1589,5 +1628,5 @@ async def get_lot(lot_id: int, db: AsyncSession = Depends(get_db)):
         technical_conditions=lot.technical_conditions,
         contract_terms=lot.contract_terms if isinstance(lot.contract_terms, dict) else None,
         nearby_features=lot.nearby_features if isinstance(lot.nearby_features, dict) else None,
-        organizer_contacts=lot.organizer_contacts if isinstance(lot.organizer_contacts, dict) else None,
+        organizer_contacts=contacts,
     )

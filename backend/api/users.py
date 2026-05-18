@@ -8,7 +8,7 @@ from typing import Optional
 
 from db.database import get_db
 from models.user import User, SubscriptionPlan
-from core.security import hash_password, verify_password, create_access_token, create_refresh_token, decode_token, oauth2_scheme
+from core.security import hash_password, verify_password, create_access_token, create_refresh_token, decode_token, oauth2_scheme, oauth2_scheme_optional
 
 router = APIRouter()
 
@@ -68,6 +68,30 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession
     if not user or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Пользователь не найден")
     return user
+
+
+async def get_current_user_optional(
+    token: Optional[str] = Depends(oauth2_scheme_optional),
+    db: AsyncSession = Depends(get_db),
+) -> Optional[User]:
+    """Как get_current_user, но возвращает None для неавторизованных вместо 401.
+
+    Нужно для public endpoint'ов, которые отдают расширенные данные авторизованным
+    (например, контакты администрации только для Pro+).
+    """
+    if not token:
+        return None
+    try:
+        user_id = decode_token(token)
+        if not user_id:
+            return None
+        result = await db.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
+        if not user or not user.is_active:
+            return None
+        return user
+    except Exception:
+        return None
 
 
 PLAN_FILTER_LIMITS = {

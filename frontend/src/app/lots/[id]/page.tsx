@@ -483,10 +483,26 @@ export default function LotDetailPage({ params }: { params: Promise<{ id: string
             <NearbyFeaturesCard data={(lot as unknown as { nearby_features?: NearbyFeatures }).nearby_features} />
 
             {/* Контакты организатора (отдел земельных отношений) */}
-            <OrganizerContactsCard
-              organizerName={lot.organizer_name}
-              contacts={(lot as unknown as { organizer_contacts?: OrganizerContacts }).organizer_contacts}
-            />
+            {user && user.subscription_plan !== "free" ? (
+              <OrganizerContactsCard
+                organizerName={lot.organizer_name}
+                contacts={(lot as unknown as { organizer_contacts?: OrganizerContacts }).organizer_contacts}
+              />
+            ) : (
+              <div style={{
+                background: "var(--surface)", border: "1px solid var(--border)",
+                borderRadius: 10, padding: 16, marginBottom: 12,
+              }}>
+                <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>🔒 Контакты администрации</div>
+                <div style={{ fontSize: 13, color: "var(--text-3)", marginBottom: 10, lineHeight: 1.5 }}>
+                  Прямые телефоны и email отдела земельных отношений организатора торгов — доступны с тарифа <b>Pro</b> и выше.
+                  Помогает уточнить детали лота до подачи заявки и избежать лишних подводных камней.
+                </div>
+                <a href="/pricing" className="btn btn-primary btn-sm" style={{ textDecoration: "none" }}>
+                  ⚡ Перейти к тарифам
+                </a>
+              </div>
+            )}
 
             {/* Калькулятор окупаемости — каркасный дом */}
             <RoiCalculator lotId={Number(id)} />
