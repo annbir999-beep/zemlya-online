@@ -49,6 +49,18 @@ export default function DashboardPage() {
     setAlerts((prev) => prev.filter((a) => a.id !== id));
   };
 
+  const sendTestNotification = async (id: number) => {
+    try {
+      const r = await api.post<{ sent_email: boolean; sent_telegram: boolean; lots_count: number }>(
+        `/api/alerts/${id}/test`, {},
+      );
+      const channels = [r.sent_email && "email", r.sent_telegram && "Telegram"].filter(Boolean).join(" + ");
+      alert(`✅ Отправлено по ${channels} (${r.lots_count} лота для примера). Проверь почту/чат.`);
+    } catch (e) {
+      alert(e instanceof Error ? `Ошибка: ${e.message}` : "Ошибка отправки");
+    }
+  };
+
   if (!user) return <div style={{ padding: 40, textAlign: "center", color: "var(--text-3)" }}>Загрузка...</div>;
 
   return (
@@ -143,7 +155,10 @@ export default function DashboardPage() {
                   Последнее срабатывание: {new Date(alert.last_triggered_at).toLocaleString("ru")}
                 </div>
               )}
-              <div style={{ display: "flex", gap: 8 }}>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button className="btn btn-primary btn-sm" onClick={() => sendTestNotification(alert.id)}>
+                  📨 Тест
+                </button>
                 <button className="btn btn-secondary btn-sm" onClick={() => toggleAlert(alert.id)}>
                   {alert.is_active ? "Приостановить" : "Возобновить"}
                 </button>
