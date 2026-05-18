@@ -337,6 +337,12 @@ export default function LotDetailPage({ params }: { params: Promise<{ id: string
             { label: "Задаток", value: lot.deposit ? `${fmtPrice(lot.deposit)}${lot.deposit_pct ? ` (${lot.deposit_pct}%)` : ""}` : "—" },
             { label: "Кадастровая стоимость", value: fmtPrice(lot.cadastral_cost) },
             { label: "% НЦ / КС", value: lot.pct_price_to_cadastral ? `${lot.pct_price_to_cadastral.toFixed(1)}%` : "—" },
+            {
+              label: "% КС / Рынок",
+              value: (lot.cadastral_cost && lot.market_price_sqm && lot.area_sqm)
+                ? `${((lot.cadastral_cost / (lot.market_price_sqm * lot.area_sqm)) * 100).toFixed(1)}%`
+                : "—",
+            },
           ].map(m => (
             <div key={m.label} style={{
               background: "var(--surface)", border: m.accent ? "1px solid var(--primary)" : "1px solid var(--border)",

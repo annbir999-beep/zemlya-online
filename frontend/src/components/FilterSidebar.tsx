@@ -351,6 +351,18 @@ export default function FilterSidebar({ filters, onChange, onReset }: Props) {
           />
         </Section>
 
+        {/* % КС / Рынок */}
+        <Section title="% КС / Рыночная стоимость">
+          <div style={{ fontSize: 12, color: "var(--text-3)", marginBottom: 4 }}>
+            КС к рынку (медиана ЦИАН/Авито × площадь). &lt;100 — КС ниже рынка, &gt;100 — КС завышена.
+          </div>
+          <RangeInput
+            labelMin="более %" labelMax="менее %"
+            min={filters.cadastral_to_market_min} max={filters.cadastral_to_market_max}
+            onMin={v => set("cadastral_to_market_min", v)} onMax={v => set("cadastral_to_market_max", v)}
+          />
+        </Section>
+
         {/* Кадастровая стоимость */}
         <Section title="Кадастровая стоимость, ₽">
           <RangeInput

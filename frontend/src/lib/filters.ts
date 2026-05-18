@@ -104,6 +104,9 @@ export interface FiltersState {
   // % НЦ/КС
   pct_cadastral_min?: number;
   pct_cadastral_max?: number;
+  // % КС/Рынок
+  cadastral_to_market_min?: number;
+  cadastral_to_market_max?: number;
   // Задаток
   deposit_min?: number;
   deposit_max?: number;
@@ -167,6 +170,9 @@ export function filtersToQueryString(f: FiltersState & { per_page?: number }): s
   // % НЦ/КС
   if (f.pct_cadastral_min != null) params.set("pct_cadastral_min", String(f.pct_cadastral_min));
   if (f.pct_cadastral_max != null) params.set("pct_cadastral_max", String(f.pct_cadastral_max));
+  // % КС/Рынок
+  if (f.cadastral_to_market_min != null) params.set("cadastral_to_market_min", String(f.cadastral_to_market_min));
+  if (f.cadastral_to_market_max != null) params.set("cadastral_to_market_max", String(f.cadastral_to_market_max));
   // Задаток
   if (f.deposit_min != null) params.set("deposit_min", String(f.deposit_min));
   if (f.deposit_max != null) params.set("deposit_max", String(f.deposit_max));
