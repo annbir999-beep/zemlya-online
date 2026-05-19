@@ -550,34 +550,26 @@ async def submit_enterprise_request(
 
     На M3 это просто email-уведомление; в M13 здесь будет CRM с воронкой.
     """
-    import aiosmtplib
-    from email.mime.text import MIMEText
+    from services.notifications import _send_via_resend
 
-    body = (
-        f"Новая заявка Enterprise — Земля.ОНЛАЙН\n\n"
-        f"Имя: {data.name}\n"
-        f"Компания: {data.company}\n"
-        f"Email: {data.email}\n"
-        f"Телефон: {data.phone or '—'}\n"
-        f"Сотрудников: {data.estimated_users or '—'}\n\n"
-        f"Комментарий:\n{data.comment or '—'}\n"
+    body_html = (
+        f"<h2>Новая заявка Enterprise — Земля.ОНЛАЙН</h2>"
+        f"<p><b>Имя:</b> {data.name}<br>"
+        f"<b>Компания:</b> {data.company}<br>"
+        f"<b>Email:</b> {data.email}<br>"
+        f"<b>Телефон:</b> {data.phone or '—'}<br>"
+        f"<b>Сотрудников:</b> {data.estimated_users or '—'}</p>"
+        f"<p><b>Комментарий:</b><br>{(data.comment or '—').replace(chr(10), '<br>')}</p>"
     )
 
-    if settings.SMTP_USER:
-        msg = MIMEText(body, "plain", "utf-8")
-        msg["Subject"] = f"💼 Enterprise-заявка от {data.company}"
-        msg["From"] = settings.SMTP_USER
-        msg["To"] = settings.SMTP_USER  # себе на ящик
-        try:
-            await aiosmtplib.send(
-                msg,
-                hostname=settings.SMTP_HOST,
-                port=settings.SMTP_PORT,
-                username=settings.SMTP_USER,
-                password=settings.SMTP_PASSWORD,
-                use_tls=True,
-            )
-        except Exception as e:
-            print(f"[enterprise-request] email error: {type(e).__name__}: {e}")
+    owner_inbox = "annbir999@gmail.com"  # куда падают заявки
+    try:
+        await _send_via_resend(
+            to=owner_inbox,
+            subject=f"💼 Enterprise-заявка от {data.company}",
+            html=body_html,
+        )
+    except Exception as e:
+        print(f"[enterprise-request] email error: {type(e).__name__}: {e}")
 
     return {"ok": True, "message": "Заявка принята, свяжемся в течение 24 часов"}

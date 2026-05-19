@@ -27,11 +27,15 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str = ""
     ANTHROPIC_BASE_URL: str = ""  # ProxyAPI/VseGPT base url для российских юзеров
 
-    # Email
+    # Email (legacy SMTP — оставлено для совместимости, не используется)
     SMTP_HOST: str = "smtp.yandex.ru"
     SMTP_PORT: int = 465
     SMTP_USER: str = ""
     SMTP_PASSWORD: str = ""
+
+    # Resend (HTTP API для email; VPS-провайдер блокирует SMTP-порты)
+    RESEND_API_KEY: str = ""
+    RESEND_FROM: str = "Земля.ОНЛАЙН <noreply@xn--e1adnd0h.online>"
 
     # Telegram
     TELEGRAM_BOT_TOKEN: str = ""

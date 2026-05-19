@@ -1,13 +1,44 @@
-import aiosmtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 from typing import List
+
+import httpx
 
 from core.config import settings
 from models.user import User
 from models.alert import Alert
 from models.lot import Lot
 from services.telegram_bot import _tg_client
+
+
+async def _send_via_resend(*, to: str, subject: str, html: str) -> None:
+    """Отправка письма через Resend HTTP API.
+
+    Используется вместо aiosmtplib, потому что VPS Timeweb блокирует
+    исходящие SMTP-порты (25/465/587). Resend ходит по HTTPS — не блокируется.
+    """
+    if not settings.RESEND_API_KEY:
+        print("[email] RESEND_API_KEY пуст — письмо не отправлено")
+        return
+
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.post(
+            "https://api.resend.com/emails",
+            headers={
+                "Authorization": f"Bearer {settings.RESEND_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "from": settings.RESEND_FROM,
+                "to": [to],
+                "subject": subject,
+                "html": html,
+            },
+        )
+    if resp.status_code >= 300:
+        # Не бросаем исключение — оно поймается выше и не сломает основной поток.
+        # Просто логируем для диагностики.
+        print(f"[email] Resend HTTP {resp.status_code}: {resp.text[:300]}")
+        # И всё-таки бросаем, чтобы caller знал
+        raise RuntimeError(f"Resend returned {resp.status_code}: {resp.text[:200]}")
 
 
 def _format_price(price: float) -> str:
@@ -81,24 +112,13 @@ def _build_email_html(user: User, alert: Alert, lots: List[Lot]) -> str:
 
 
 async def send_email_alert(user: User, alert: Alert, lots: List[Lot]):
-    if not settings.SMTP_USER or not user.email:
+    if not user.email:
         return
-
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = f"🌍 {len(lots)} новых участков — «{alert.name}»"
-    msg["From"] = settings.SMTP_USER
-    msg["To"] = user.email
-
     html = _build_email_html(user, alert, lots)
-    msg.attach(MIMEText(html, "html", "utf-8"))
-
-    await aiosmtplib.send(
-        msg,
-        hostname=settings.SMTP_HOST,
-        port=settings.SMTP_PORT,
-        username=settings.SMTP_USER,
-        password=settings.SMTP_PASSWORD,
-        use_tls=True,
+    await _send_via_resend(
+        to=user.email,
+        subject=f"🌍 {len(lots)} новых участков — «{alert.name}»",
+        html=html,
     )
 
 
@@ -162,21 +182,8 @@ async def send_payment_email(user: User, plan: str, amount: float, *,
       Вопросы: anna@земля.online · <a href="https://t.me/ZemlyaOnlineBot">@ZemlyaOnlineBot</a></p>
     </div></body></html>"""
 
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
-    msg["From"] = settings.SMTP_USER
-    msg["To"] = user.email
-    msg.attach(MIMEText(html, "html", "utf-8"))
-
     try:
-        await aiosmtplib.send(
-            msg,
-            hostname=settings.SMTP_HOST,
-            port=settings.SMTP_PORT,
-            username=settings.SMTP_USER,
-            password=settings.SMTP_PASSWORD,
-            use_tls=True,
-        )
+        await _send_via_resend(to=user.email, subject=subject, html=html)
     except Exception as e:
         print(f"[payment-email] send failed for user {user.id}: {type(e).__name__}: {e}")
 
