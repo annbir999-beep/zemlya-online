@@ -157,11 +157,13 @@ export default function MapPage() {
           }}
         >
           <div
+            className="mobile-drawer"
             onClick={(e) => e.stopPropagation()}
             style={{
               position: "absolute", left: 0, top: 0, bottom: 0,
               width: "min(85%, 380px)", background: "var(--surface)",
               boxShadow: "2px 0 16px rgba(0,0,0,.3)",
+              overflowY: "auto",
             }}
           >
             <button

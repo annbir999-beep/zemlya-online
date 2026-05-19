@@ -402,7 +402,7 @@ export default function LotDetailPage({ params }: { params: Promise<{ id: string
           ))}
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 340px", gap: 20 }}>
+        <div className="lot-detail-cols" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 340px", gap: 20 }}>
           {/* Left column */}
           <div style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>
 
@@ -611,7 +611,7 @@ export default function LotDetailPage({ params }: { params: Promise<{ id: string
           </div>
 
           {/* Right column — mini map + actions */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div className="lot-detail-aside" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             {/* Mini map */}
             {lot.lat && lot.lng && (
               <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>

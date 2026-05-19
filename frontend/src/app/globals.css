@@ -365,7 +365,12 @@ html, body { overflow-x: hidden; max-width: 100vw; }
 /* ── Responsive ── */
 @media (max-width: 900px) {
   .sidebar { display: none; }
+  /* В мобильном drawer боковую панель надо показывать */
+  .mobile-drawer .sidebar { display: block !important; width: 100% !important; height: 100%; padding-top: 36px; }
   .catalog-panel { width: 100%; }
+  /* Двухколоночный лейаут на странице лота схлопывается в одну колонку */
+  .lot-detail-cols { grid-template-columns: 1fr !important; }
+  .lot-detail-aside { order: 2; position: static !important; max-width: 100% !important; }
 }
 
 @media (max-width: 900px) {
@@ -375,10 +380,20 @@ html, body { overflow-x: hidden; max-width: 100vw; }
 @media (max-width: 768px) {
   .header-nav { display: none !important; }
   .header-burger { display: inline-flex !important; }
-  .header-actions .btn { padding: 6px 10px; font-size: 13px; }
+  .header-actions { gap: 6px !important; flex-shrink: 0; }
+  .header-actions .btn { padding: 5px 9px; font-size: 12px; white-space: nowrap; }
   .header-actions .badge { display: none; }
   /* Логотип-сабтайтл скрываем на узких экранах */
   .header-logo > span:last-child > span:last-child { display: none; }
+  .header { gap: 8px !important; flex-wrap: nowrap !important; }
+}
+
+@media (max-width: 480px) {
+  /* На совсем узких — скрываем кнопку "Выйти", оставляем только Кабинет */
+  .header-actions button.btn-ghost { display: none; }
+  /* Уменьшаем логотип */
+  .header-logo > span:first-child { width: 28px !important; height: 28px !important; font-size: 14px !important; }
+  .header-logo > span:last-child > span:first-child { font-size: 15px !important; }
 }
 
 @media (max-width: 768px) {
