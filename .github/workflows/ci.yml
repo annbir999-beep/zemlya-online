@@ -1,0 +1,65 @@
+name: CI
+
+# Минимальный CI: проверяет код на push и pull request в main.
+# НЕ деплоит — деплой остаётся ручным по SSH (см. CLAUDE.md).
+# Цель: поймать сломанную сборку фронта и синтаксис/реальные баги бэка
+# до того, как они попадут на прод.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  frontend:
+    name: Frontend (lint + build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Lint
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Build
+        working-directory: frontend
+        env:
+          NEXT_PUBLIC_API_URL: ""
+          NEXT_PUBLIC_MAP_TILES: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        run: npm run build
+
+  backend:
+    name: Backend (syntax + lint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ruff
+        run: pip install ruff
+
+      # Проверка синтаксиса всех .py файлов — ловит сломанные правки
+      - name: Compile check
+        run: python -m compileall -q backend
+
+      # ruff только на реальные баги: синтаксис (E9), сравнения (F63),
+      # отступы (F7), неопределённые имена (F82). Без придирок к стилю —
+      # это можно ужесточить позже, когда код причешем.
+      - name: Ruff (errors only)
+        run: ruff check --select=E9,F63,F7,F82 backend
