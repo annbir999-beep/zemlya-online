@@ -5,7 +5,8 @@ from contextlib import asynccontextmanager
 from db.database import engine, Base
 # Импортируем модели чтобы Base.metadata знал о них (для create_all при первом старте)
 from models import promo  # noqa: F401
-from api import lots, users, alerts, ai, payments, subscriptions, telegram, admin
+from models import agent_run  # noqa: F401
+from api import lots, users, alerts, ai, payments, subscriptions, telegram, admin, agents
 from core.config import settings
 
 
@@ -40,6 +41,7 @@ app.include_router(payments.router, prefix="/api/payments", tags=["payments"])
 app.include_router(subscriptions.router, prefix="/api/subscriptions", tags=["subscriptions"])
 app.include_router(telegram.router, prefix="/api/telegram", tags=["telegram"])
 app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
+app.include_router(agents.router, prefix="/api/agents", tags=["agents"])
 
 
 @app.get("/health")

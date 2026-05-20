@@ -61,7 +61,7 @@ const fmtDate = (iso?: string | null) => iso ? new Date(iso).toLocaleString("ru"
 export default function AdminPage() {
   const router = useRouter();
   const [me, setMe] = useState<UserProfile | null>(null);
-  const [tab, setTab] = useState<"stats" | "funnel" | "users" | "promos" | "subs">("stats");
+  const [tab, setTab] = useState<"stats" | "funnel" | "users" | "promos" | "subs" | "agents">("stats");
 
   useEffect(() => {
     getMe().then((u) => {
@@ -85,6 +85,7 @@ export default function AdminPage() {
           ["users", "Пользователи"],
           ["promos", "Промокоды"],
           ["subs", "Платежи"],
+          ["agents", "🤖 Агенты"],
         ] as const).map(([k, label]) => (
           <button
             key={k}
@@ -107,6 +108,7 @@ export default function AdminPage() {
       {tab === "users" && <UsersTab />}
       {tab === "promos" && <PromosTab />}
       {tab === "subs" && <SubsTab />}
+      {tab === "agents" && <AgentsTab />}
     </div>
   );
 }
@@ -574,6 +576,185 @@ function Modal({ children, onClose }: { children: React.ReactNode; onClose: () =
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 20 }}>
       <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--surface)", borderRadius: 12, padding: 22, maxWidth: 480, width: "100%", border: "1px solid var(--border)", maxHeight: "90vh", overflowY: "auto" }}>
         {children}
+      </div>
+    </div>
+  );
+}
+
+// ── Агенты ──────────────────────────────────────────────────────────────────
+
+interface AgentRunRow {
+  id: number;
+  agent_name: string;
+  status: string;
+  started_at: string | null;
+  finished_at: string | null;
+  output: { lot_id?: number; lot_url?: string; post_text?: string; channel?: string; message?: string } | null;
+  requires_approval: boolean;
+  approved_at: string | null;
+  error: string | null;
+}
+
+interface AgentsData {
+  agents: { name: string; title: string }[];
+  runs: AgentRunRow[];
+}
+
+const AGENT_STATUS: Record<string, { label: string; color: string }> = {
+  running: { label: "Выполняется", color: "#ca8a04" },
+  done: { label: "Готово", color: "#16a34a" },
+  failed: { label: "Ошибка", color: "#dc2626" },
+  waiting_approval: { label: "Ждёт одобрения", color: "#2563eb" },
+  published: { label: "Опубликовано", color: "#16a34a" },
+  skipped: { label: "Отклонено", color: "#94a3b8" },
+};
+
+function AgentsTab() {
+  const [data, setData] = useState<AgentsData | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const reload = () => api.get<AgentsData>("/api/agents/runs").then(setData);
+  useEffect(() => { reload(); }, []);
+
+  const trigger = async (name: string) => {
+    setBusy(`trigger-${name}`);
+    try {
+      await api.post(`/api/agents/${name}/trigger`, {});
+      await reload();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Ошибка запуска");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const publish = async (id: number) => {
+    setBusy(`pub-${id}`);
+    try {
+      await api.post(`/api/agents/runs/${id}/publish`, {});
+      await reload();
+      alert("✅ Опубликовано в @torgi_zemli");
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Ошибка публикации");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const skip = async (id: number) => {
+    if (!confirm("Отклонить черновик? Пост не будет опубликован.")) return;
+    setBusy(`skip-${id}`);
+    try {
+      await api.post(`/api/agents/runs/${id}/skip`, {});
+      await reload();
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  if (!data) return <div style={{ color: "var(--text-3)" }}>Загрузка...</div>;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {/* Список агентов с кнопкой запуска */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {data.agents.map((a) => (
+          <div key={a.name} style={{
+            background: "var(--surface)", border: "1px solid var(--border)",
+            borderRadius: 10, padding: 14, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap",
+          }}>
+            <div style={{ flex: 1, minWidth: 180 }}>
+              <div style={{ fontWeight: 600 }}>🤖 {a.title}</div>
+              <div style={{ fontSize: 12, color: "var(--text-3)" }}>{a.name}</div>
+            </div>
+            <button
+              className="btn btn-secondary btn-sm"
+              disabled={busy === `trigger-${a.name}`}
+              onClick={() => trigger(a.name)}
+            >
+              {busy === `trigger-${a.name}` ? "Запуск..." : "▶ Запустить сейчас"}
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* Журнал запусков */}
+      <div>
+        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-3)", marginBottom: 8 }}>
+          Журнал запусков
+        </div>
+        {data.runs.length === 0 && (
+          <div style={{ color: "var(--text-3)", fontSize: 13 }}>Пока нет запусков.</div>
+        )}
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {data.runs.map((r) => {
+            const st = AGENT_STATUS[r.status] || { label: r.status, color: "#64748b" };
+            return (
+              <div key={r.id} style={{
+                background: "var(--surface)", border: "1px solid var(--border)",
+                borderRadius: 10, padding: 14,
+              }}>
+                <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 8 }}>
+                  <span style={{ fontWeight: 600, fontSize: 13 }}>#{r.id} · {r.agent_name}</span>
+                  <span style={{
+                    fontSize: 11, fontWeight: 600, padding: "2px 9px", borderRadius: 10,
+                    background: st.color + "20", color: st.color,
+                  }}>
+                    {st.label}
+                  </span>
+                  {r.started_at && (
+                    <span style={{ fontSize: 11, color: "var(--text-3)", marginLeft: "auto" }}>
+                      {new Date(r.started_at).toLocaleString("ru", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                    </span>
+                  )}
+                </div>
+
+                {r.error && (
+                  <div style={{ fontSize: 12, color: "#dc2626", marginBottom: 6 }}>{r.error}</div>
+                )}
+
+                {r.output?.message && (
+                  <div style={{ fontSize: 13, color: "var(--text-2)" }}>{r.output.message}</div>
+                )}
+
+                {r.output?.post_text && (
+                  <div style={{
+                    background: "var(--surface-2)", borderRadius: 8, padding: 12,
+                    fontSize: 13, lineHeight: 1.5, whiteSpace: "pre-wrap", marginBottom: 8,
+                  }}>
+                    {r.output.post_text}
+                    {r.output.lot_url && (
+                      <div style={{ marginTop: 6 }}>
+                        <a href={r.output.lot_url} target="_blank" rel="noreferrer" style={{ color: "var(--primary)", fontSize: 12 }}>
+                          → лот на сайте
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {r.status === "waiting_approval" && r.output?.post_text && (
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button
+                      className="btn btn-primary btn-sm"
+                      disabled={busy === `pub-${r.id}`}
+                      onClick={() => publish(r.id)}
+                    >
+                      {busy === `pub-${r.id}` ? "Публикуем..." : "📢 Опубликовать в канал"}
+                    </button>
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      disabled={busy === `skip-${r.id}`}
+                      onClick={() => skip(r.id)}
+                    >
+                      Отклонить
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

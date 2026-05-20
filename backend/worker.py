@@ -15,7 +15,7 @@ celery_app = Celery(
     "sotka",
     broker=settings.REDIS_URL,
     backend=settings.REDIS_URL,
-    include=["tasks.scrape_tasks", "tasks.alert_tasks", "tasks.ai_batch_tasks", "tasks.digest_tasks", "tasks.price_drop_tasks", "tasks.drip_tasks"],
+    include=["tasks.scrape_tasks", "tasks.alert_tasks", "tasks.ai_batch_tasks", "tasks.digest_tasks", "tasks.price_drop_tasks", "tasks.drip_tasks", "tasks.agent_tasks"],
 )
 
 celery_app.conf.update(
@@ -141,6 +141,12 @@ celery_app.conf.update(
         "notify-price-drops": {
             "task": "tasks.price_drop_tasks.notify_price_drops",
             "schedule": crontab(minute="5,35"),
+        },
+        # Продукт-агент «Лот дня» — ежедневно 10:00 МСК готовит черновик
+        # поста для @torgi_zemli (публикация — вручную из /admin → Агенты).
+        "agent-tg-lot-of-the-day": {
+            "task": "tasks.agent_tasks.agent_tg_lot_of_the_day",
+            "schedule": crontab(minute=0, hour=10),
         },
     },
 )
