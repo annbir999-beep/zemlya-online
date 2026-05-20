@@ -272,6 +272,29 @@ export default function LotDetailPage({ params }: { params: Promise<{ id: string
     setSaved(s => !s);
   };
 
+  const isPaid = !!user && user.subscription_plan !== "free";
+
+  const downloadPdf = async () => {
+    if (!isPaid) { router.push("/pricing"); return; }
+    try {
+      const token = (await import("js-cookie")).default.get("access_token");
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL ?? ""}/api/lots/${id}/report.pdf`,
+        { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `lot-${id}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      alert("Не удалось скачать PDF. Попробуйте позже.");
+    }
+  };
+
   if (loading) return <div style={{ padding: 40, textAlign: "center", color: "var(--text-3)" }}>Загрузка...</div>;
   if (!lot) return null;
 
@@ -310,13 +333,13 @@ export default function LotDetailPage({ params }: { params: Promise<{ id: string
             <ScoreBadges badges={lot.score_badges} max={6} />
           </div>
           <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
-            <a
-              href={`${process.env.NEXT_PUBLIC_API_URL ?? ""}/api/lots/${id}/report.pdf`}
+            <button
+              onClick={downloadPdf}
               className="btn btn-sm btn-secondary"
-              title="Скачать отчёт по лоту в PDF"
+              title={isPaid ? "Скачать отчёт по лоту в PDF" : "PDF-отчёт доступен с тарифа Pro"}
             >
-              📄 PDF
-            </a>
+              {isPaid ? "📄 PDF" : "🔒 PDF"}
+            </button>
             <button className={`btn btn-sm ${saved ? "btn-primary" : "btn-secondary"}`} onClick={toggleSave}>
               {saved ? "★ В избранном" : "☆ В избранное"}
             </button>

@@ -1,11 +1,13 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import FilterSidebar from "@/components/FilterSidebar";
 import {
   FiltersState, filtersToQueryString, SORT_OPTIONS,
   DEADLINE_PRESETS, DEFAULT_DEADLINE_PRESET,
 } from "@/lib/filters";
-import type { LotListItem, LotsResponse } from "@/lib/api";
+import type { LotListItem, LotsResponse, UserProfile } from "@/lib/api";
+import { getMe } from "@/lib/auth";
 import { ScoreCircle, ScoreBadges } from "@/components/ScoreBadge";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "";
@@ -67,11 +69,37 @@ function daysLeft(iso?: string) {
 }
 
 export default function CatalogPage() {
+  const router = useRouter();
   const [filters, setFilters] = useState<FiltersState>(buildDefaultFilters);
   const [deadlinePreset, setDeadlinePreset] = useState<string>(DEFAULT_DEADLINE_PRESET);
   const [data, setData] = useState<LotsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [compareIds, setCompareIds] = useState<number[]>([]);
+  const [user, setUser] = useState<UserProfile | null>(null);
+
+  useEffect(() => { getMe().then(setUser); }, []);
+  const isPaid = !!user && user.subscription_plan !== "free";
+
+  const downloadExcel = async () => {
+    if (!isPaid) { router.push("/pricing"); return; }
+    try {
+      const token = (await import("js-cookie")).default.get("access_token");
+      const res = await fetch(
+        `${API}/api/lots/export?${filtersToQueryString({ ...filters })}`,
+        { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "lots.csv";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      alert("Не удалось скачать файл. Попробуйте позже.");
+    }
+  };
 
   // Пользователь выбрал новый пресет дедлайна → пересчитываем submission_end диапазон
   const applyDeadlinePreset = (value: string) => {
@@ -153,13 +181,13 @@ export default function CatalogPage() {
               Сравнить {compareIds.length} →
             </a>
           )}
-          <a
-            href={`${process.env.NEXT_PUBLIC_API_URL ?? ""}/api/lots/export?${filtersToQueryString({ ...filters })}`}
+          <button
+            onClick={downloadExcel}
             className="btn btn-secondary btn-sm"
-            title="Скачать текущий список в CSV (открывается в Excel)"
+            title={isPaid ? "Скачать текущий список в CSV (открывается в Excel)" : "Экспорт доступен с тарифа Pro"}
           >
-            📥 Excel
-          </a>
+            {isPaid ? "📥 Excel" : "🔒 Excel"}
+          </button>
         </div>
 
         {/* Table */}
