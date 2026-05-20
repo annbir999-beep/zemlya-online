@@ -27,7 +27,9 @@ jobs:
 
       - name: Install dependencies
         working-directory: frontend
-        run: npm ci
+        # --legacy-peer-deps: React 19 + библиотеки с peer-range на React 18.
+        # Тот же флаг используется в frontend/Dockerfile.
+        run: npm ci --legacy-peer-deps
 
       - name: Lint
         working-directory: frontend
