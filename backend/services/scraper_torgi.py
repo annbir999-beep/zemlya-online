@@ -534,7 +534,6 @@ class TorgiGovScraper:
             lot = Lot(external_id=external_id, source=LotSource.TORGI_GOV)
 
         # Детект изменения начальной цены (повторные торги с понижением)
-        from datetime import datetime, timezone
         old_price = lot.start_price
         if start_price and old_price and abs(start_price - old_price) > 1:
             history = list(lot.price_history or [])

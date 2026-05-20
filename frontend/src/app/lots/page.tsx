@@ -226,6 +226,7 @@ export default function CatalogPage() {
                     </th>
                   );
                 })}
+                <th style={th()}>КС/Рынок</th>
                 <th style={th()}>Площадь [КН]</th>
                 <th style={th()}>Переуступка</th>
                 <th style={th()}>Регион</th>
@@ -295,6 +296,17 @@ export default function CatalogPage() {
                     <td style={{ ...td(), whiteSpace: "nowrap" }}>
                       <div>{fmtDate(lot.submission_end)}</div>
                       <div style={{ fontSize: 11 }}>{daysLeft(lot.submission_end)}</div>
+                    </td>
+                    {/* КС / Рынок */}
+                    <td style={td()}>
+                      {(() => {
+                        const r = (lot.cadastral_cost && lot.market_price_sqm && lot.area_sqm)
+                          ? (lot.cadastral_cost / (lot.market_price_sqm * lot.area_sqm)) * 100
+                          : null;
+                        return r != null
+                          ? <span style={{ fontWeight: 600, color: r < 100 ? "#16a34a" : "#dc2626" }}>{r.toFixed(0)}%</span>
+                          : <span style={{ color: "var(--text-3)" }}>—</span>;
+                      })()}
                     </td>
                     {/* Площадь КН */}
                     <td style={td()}>
