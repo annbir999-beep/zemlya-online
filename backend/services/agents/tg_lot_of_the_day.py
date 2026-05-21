@@ -21,7 +21,9 @@ from services.agents.base import BaseAgent
 from services.ai_assessment import client as anthropic_client
 from services.telegram_bot import _tg_client
 
-SITE = "https://xn--e1adnd0h.online"
+# Канонический адрес сайта. Punycode-форму ИИ не даём — он пытается её
+# «расшифровать» в кириллицу и ошибается (писал лот.online вместо земля.online).
+SITE = "https://земля.online"
 CHANNEL = "@torgi_zemli"
 
 POST_PROMPT = """Ты — SMM-редактор Telegram-канала про земельные аукционы РФ.
@@ -31,17 +33,16 @@ POST_PROMPT = """Ты — SMM-редактор Telegram-канала про зе
 - Цепляющий первый заголовок (1 строка, с эмодзи)
 - 3-4 буллета с ключевыми фактами (цена, площадь, регион, дисконт/скор)
 - Без воды и канцелярита, живой язык
-- В конце — призыв перейти на сайт
+- В конце — короткий призыв посмотреть лот на сайте
 - 3-4 хэштега
 - Всего 50-90 слов
 - НЕ выдумывай факты — используй только данные ниже
+- ВАЖНО: НЕ вставляй никаких ссылок, URL и доменов — ссылку добавим отдельно
 
 Данные участка:
 {lot_data}
 
-Ссылка на лот: {lot_url}
-
-Верни только текст поста, без пояснений."""
+Верни только текст поста, без пояснений и без ссылок."""
 
 
 class TgLotOfTheDayAgent(BaseAgent):
@@ -94,15 +95,17 @@ class TgLotOfTheDayAgent(BaseAgent):
         ]))
         lot_url = f"{SITE}/lots/{lot.id}"
 
-        # Генерим пост
+        # Генерим пост (без ссылки — ИИ её перевирает)
         message = await anthropic_client.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=600,
             messages=[{"role": "user", "content": POST_PROMPT.format(
-                lot_data=lot_data, lot_url=lot_url,
+                lot_data=lot_data,
             )}],
         )
-        post_text = message.content[0].text.strip()
+        ai_text = message.content[0].text.strip()
+        # Ссылку добавляем сами, в готовом виде — гарантированно правильную
+        post_text = f"{ai_text}\n\n🔗 {lot_url}"
 
         output = {
             "lot_id": lot.id,
