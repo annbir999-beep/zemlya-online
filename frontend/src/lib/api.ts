@@ -2,7 +2,27 @@ import Cookies from "js-cookie";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+// Обмен refresh-токена на свежую пару. true — успех, токены обновлены.
+async function tryRefresh(): Promise<boolean> {
+  const rt = Cookies.get("refresh_token");
+  if (!rt) return false;
+  try {
+    const res = await fetch(
+      `${API_URL}/api/users/refresh?refresh_token=${encodeURIComponent(rt)}`,
+      { method: "POST" },
+    );
+    if (!res.ok) return false;
+    const data = await res.json();
+    // Cookie живёт 30 дней; JWT внутри истекает через 12ч и обновляется этим же flow.
+    Cookies.set("access_token", data.access_token, { expires: 30 });
+    Cookies.set("refresh_token", data.refresh_token, { expires: 30 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function request<T>(path: string, options: RequestInit = {}, _retried = false): Promise<T> {
   const token = Cookies.get("access_token");
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -13,8 +33,16 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, { ...options, headers });
 
   if (res.status === 401) {
+    // Истёк access-токен — пробуем обновить через refresh и повторить запрос один раз.
+    if (!_retried && await tryRefresh()) {
+      return request<T>(path, options, true);
+    }
     Cookies.remove("access_token");
-    window.location.href = "/login";
+    Cookies.remove("refresh_token");
+    if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+      window.location.href = "/login";
+    }
+    throw new Error("Сессия истекла, войдите снова");
   }
 
   if (!res.ok) {
