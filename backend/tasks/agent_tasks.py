@@ -34,3 +34,22 @@ async def _run_lot_of_the_day():
         agent = TgLotOfTheDayAgent()
         run = await agent.run(db)
         print(f"[agent:tg_lot_of_the_day] run #{run.id} → {run.status}")
+
+
+@celery_app.task(bind=True, max_retries=1, default_retry_delay=300)
+def agent_morning_check(self):
+    """Агент «Утренний health-check» — собирает метрики прода и шлёт сводку в TG."""
+    try:
+        _run(_run_morning_check())
+    except Exception as exc:
+        raise self.retry(exc=exc)
+
+
+async def _run_morning_check():
+    from db.database import AsyncSessionLocal
+    from services.agents.morning_check import MorningCheckAgent
+
+    async with AsyncSessionLocal() as db:
+        agent = MorningCheckAgent()
+        run = await agent.run(db)
+        print(f"[agent:morning_check] run #{run.id} → {run.status}")

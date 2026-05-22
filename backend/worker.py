@@ -151,5 +151,11 @@ celery_app.conf.update(
             "task": "tasks.agent_tasks.agent_tg_lot_of_the_day",
             "schedule": crontab(minute=0, hour=10),
         },
+        # Продукт-агент «Утренний health-check» — ежедневно 7:00 МСК
+        # собирает метрики прода и шлёт сводку владельцу в Telegram.
+        "agent-morning-check": {
+            "task": "tasks.agent_tasks.agent_morning_check",
+            "schedule": crontab(minute=0, hour=7),
+        },
     },
 )

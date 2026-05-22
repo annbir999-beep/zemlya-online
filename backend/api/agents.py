@@ -28,8 +28,10 @@ async def require_admin(user: User = Depends(get_current_user)) -> User:
 # Реестр агентов: имя → (человекочитаемое название, async-фабрика агента)
 def _agent_registry():
     from services.agents.tg_lot_of_the_day import TgLotOfTheDayAgent
+    from services.agents.morning_check import MorningCheckAgent
     return {
         "tg_lot_of_the_day": ("Лот дня в @torgi_zemli", TgLotOfTheDayAgent),
+        "morning_check": ("Утренний health-check", MorningCheckAgent),
     }
 
 
