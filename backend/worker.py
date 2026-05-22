@@ -122,11 +122,14 @@ celery_app.conf.update(
             "schedule": crontab(minute=25, hour="*"),
             "args": (200,),
         },
-        # Ночной батч-анализ топ-100 лотов через Claude (после всех скрапов и скоринга)
-        "ai-batch-analyze": {
-            "task": "tasks.ai_batch_tasks.ai_batch_analyze",
-            "schedule": crontab(minute=30, hour=6),
-        },
+        # Ночной батч-анализ ОТКЛЮЧЁН 2026-05-22 — экономия Anthropic-бюджета
+        # (~500 ₽/сутки). AI-анализ работает только по требованию: когда
+        # пользователь открывает лот и запрашивает AI-аудит. Включить обратно —
+        # раскомментировать блок ниже (и при желании поднять AI_BATCH_LIMIT).
+        # "ai-batch-analyze": {
+        #     "task": "tasks.ai_batch_tasks.ai_batch_analyze",
+        #     "schedule": crontab(minute=30, hour=6),
+        # },
         # Еженедельный email-дайджест: воскресенье 10:00 МСК — топ-10 лотов недели
         "weekly-digest": {
             "task": "tasks.digest_tasks.send_weekly_digest",
