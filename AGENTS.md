@@ -149,6 +149,50 @@ golden-path + edge cases.
 
 ---
 
+## Внешние специализированные subagent'ы
+
+Помимо 7 ролей выше, в проекте подключён маркетплейс **wshobson/agents** —
+коллекция узкоспециализированных subagent'ов. Они доступны через Agent tool
+с `subagent_type=<имя>`. Делегирую им узкие задачи, чтобы получить
+экспертизу глубже, чем дала бы универсальная роль implementer.
+
+**Установлены в Claude Code** (`/plugin install ...`):
+
+| Subagent | Когда делегировать |
+|---|---|
+| `fastapi-pro` (из `python-development`) | Любые правки FastAPI-эндпоинтов, зависимостей, схем Pydantic |
+| `python-pro` (из `python-development`) | Бэкенд-логика, скрейперы, сервисы вне FastAPI |
+| `nextjs-pro` / `react-pro` (из `javascript-typescript`) | Новые страницы App Router, серверные компоненты, оптимизация |
+| `typescript-pro` | Сложная типизация, generics, дженерик-API клиенты |
+| `database-architect` (из `database-design`) | Проектирование новых таблиц/индексов, refactor схемы |
+| `migration-engineer` (из `database-migrations`) | SQL-миграции, безопасный rollout колонок |
+| `security-auditor` (из `backend-api-security`) | webhook-подписи, JWT, гейтинг тарифов, секреты в логах |
+| `code-reviewer` (из `comprehensive-review`) | Финальный ревью перед деплоем критичных PR |
+| `test-engineer` (из `unit-testing`) | Генерация pytest/jest тестов под существующий код |
+| `prompt-engineer` (из `llm-application-dev`) | Промпты для assess_lot, агентов «Лот дня» и других AI-фич |
+
+**Правила делегирования** (когда implementer-роль автоматически
+передаёт задачу специалисту):
+
+| Задача | Делегирую → |
+|---|---|
+| Правка `backend/api/*.py` (FastAPI) | `fastapi-pro` |
+| Правка `backend/services/scraper_*.py` или фоновых таск | `python-pro` |
+| Новая страница / большой компонент frontend | `nextjs-pro` |
+| Тяжёлая типизация TS | `typescript-pro` |
+| Новая таблица / колонка / индекс в БД | `database-architect` → `migration-engineer` |
+| Любой код, обрабатывающий платёж, токен, webhook | `security-auditor` (обязательно reviewer перед деплоем) |
+| Перед PR-мержем нетривиального изменения | `code-reviewer` |
+| Когда заводим тестовую инфраструктуру (`backend/tests/`) | `test-engineer` |
+| Меняется текст промпта для AI или агента | `prompt-engineer` |
+
+Делегирование — не замена ролей выше, а их **усиление**. Цепочка фичи
+по-прежнему: spec → architect → implementer → reviewer. Просто
+implementer и reviewer для специфических доменов передают свою
+часть профильному subagent'у.
+
+---
+
 ## Автоматическое переключение ролей
 
 Агент **сам** определяет роль по типу запроса Анны — ей не нужно называть роль
