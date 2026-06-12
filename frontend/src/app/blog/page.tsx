@@ -5,7 +5,12 @@ export const metadata = {
   description: "Юридические и инвестиционные руководства по земельным аукционам torgi.gov: ст. 39.18 ЗК РФ, документация лота, выкуп КФХ.",
 };
 
-const ARTICLES = [
+export const revalidate = 300;
+
+const BACKEND_URL = process.env.BACKEND_URL || "http://backend:8000";
+
+// Статичные статьи (написаны вручную, лежат в репо как папки-роуты)
+const STATIC_ARTICLES = [
   {
     slug: "dokumentaciya-lota-torgi-gov",
     title: "Как читать документацию лота torgi.gov.ru",
@@ -36,7 +41,43 @@ const ARTICLES = [
   },
 ];
 
-export default function BlogIndex() {
+type ArticleCard = {
+  slug: string;
+  title: string;
+  excerpt: string | null;
+  minutes: number | null;
+  date: string | null;
+};
+
+async function fetchDynamicArticles(): Promise<ArticleCard[]> {
+  try {
+    const res = await fetch(`${BACKEND_URL}/api/blog?per_page=50`, {
+      next: { revalidate: 300 },
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.items || []).map((p: {
+      slug: string; title: string; excerpt: string | null;
+      reading_minutes: number | null; published_at: string | null;
+    }) => ({
+      slug: p.slug,
+      title: p.title,
+      excerpt: p.excerpt,
+      minutes: p.reading_minutes,
+      date: p.published_at,
+    }));
+  } catch {
+    // API недоступен — показываем только статичные статьи
+    return [];
+  }
+}
+
+export default async function BlogIndex() {
+  const dynamicArticles = await fetchDynamicArticles();
+  const articles: ArticleCard[] = [...dynamicArticles, ...STATIC_ARTICLES].sort(
+    (a, b) => (b.date || "").localeCompare(a.date || "")
+  );
+
   return (
     <div style={{ flex: 1, overflow: "auto", padding: "32px 20px", maxWidth: 880, margin: "0 auto", width: "100%" }}>
       <div style={{ marginBottom: 28 }}>
@@ -47,7 +88,7 @@ export default function BlogIndex() {
         </p>
       </div>
       <div style={{ display: "grid", gap: 14 }}>
-        {ARTICLES.map((a) => (
+        {articles.map((a) => (
           <Link
             key={a.slug}
             href={`/blog/${a.slug}`}
@@ -63,7 +104,8 @@ export default function BlogIndex() {
             }}
           >
             <div style={{ fontSize: 11, color: "var(--text-3)", marginBottom: 6 }}>
-              {new Date(a.date).toLocaleDateString("ru", { day: "2-digit", month: "long", year: "numeric" })} · {a.minutes} мин чтения
+              {a.date ? new Date(a.date).toLocaleDateString("ru", { day: "2-digit", month: "long", year: "numeric" }) : ""}
+              {a.minutes ? ` · ${a.minutes} мин чтения` : ""}
             </div>
             <div style={{ fontSize: 19, fontWeight: 600, marginBottom: 6 }}>{a.title}</div>
             <div style={{ fontSize: 14, color: "var(--text-3)", lineHeight: 1.5 }}>{a.excerpt}</div>

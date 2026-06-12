@@ -32,6 +32,9 @@ xhtml2pdf==0.2.16
 # AI
 anthropic==0.40.0
 
+# Контент-машина: markdown статей → HTML для /blog
+markdown==3.7
+
 # Email
 aiosmtplib==3.0.2
 jinja2==3.1.4

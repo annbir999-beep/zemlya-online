@@ -36,6 +36,35 @@ async def _run_lot_of_the_day():
         print(f"[agent:tg_lot_of_the_day] run #{run.id} → {run.status}")
 
 
+@celery_app.task(bind=True, max_retries=1, default_retry_delay=600)
+def agent_news_scout(self):
+    """Агент «Новостной скаут» — собирает отраслевые новости в news_items."""
+    try:
+        _run(_run_simple_agent("news_scout"))
+    except Exception as exc:
+        raise self.retry(exc=exc)
+
+
+@celery_app.task(bind=True, max_retries=1, default_retry_delay=600)
+def agent_article_writer(self):
+    """Агент «Автор статей» — черновик статьи + TG-анонса из лучшей новости."""
+    try:
+        _run(_run_simple_agent("article_writer"))
+    except Exception as exc:
+        raise self.retry(exc=exc)
+
+
+async def _run_simple_agent(name: str):
+    from db.database import AsyncSessionLocal
+    from services.agents.news_scout import NewsScoutAgent
+    from services.agents.article_writer import ArticleWriterAgent
+
+    agents = {"news_scout": NewsScoutAgent, "article_writer": ArticleWriterAgent}
+    async with AsyncSessionLocal() as db:
+        run = await agents[name]().run(db)
+        print(f"[agent:{name}] run #{run.id} → {run.status}")
+
+
 @celery_app.task(bind=True, max_retries=1, default_retry_delay=300)
 def agent_morning_check(self):
     """Агент «Утренний health-check» — собирает метрики прода и шлёт сводку в TG."""

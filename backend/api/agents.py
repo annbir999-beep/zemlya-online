@@ -29,9 +29,13 @@ async def require_admin(user: User = Depends(get_current_user)) -> User:
 def _agent_registry():
     from services.agents.tg_lot_of_the_day import TgLotOfTheDayAgent
     from services.agents.morning_check import MorningCheckAgent
+    from services.agents.news_scout import NewsScoutAgent
+    from services.agents.article_writer import ArticleWriterAgent
     return {
         "tg_lot_of_the_day": ("Лот дня в @torgi_zemli", TgLotOfTheDayAgent),
         "morning_check": ("Утренний health-check", MorningCheckAgent),
+        "news_scout": ("Новостной скаут", NewsScoutAgent),
+        "article_writer": ("Автор статей блога", ArticleWriterAgent),
     }
 
 
@@ -101,16 +105,35 @@ async def publish_run(
         raise HTTPException(status_code=400, detail=f"Нельзя опубликовать запуск в статусе «{run.status}»")
 
     output = run.output or {}
-    post_text = output.get("post_text")
-    if not post_text:
-        raise HTTPException(status_code=400, detail="В черновике нет текста поста")
 
     if run.agent_name == "tg_lot_of_the_day":
+        post_text = output.get("post_text")
+        if not post_text:
+            raise HTTPException(status_code=400, detail="В черновике нет текста поста")
         from services.agents.tg_lot_of_the_day import publish_to_channel
         try:
             await publish_to_channel(post_text, output.get("channel", "@torgi_zemli"))
         except Exception as e:
             raise HTTPException(status_code=502, detail=f"Ошибка публикации в Telegram: {e}")
+
+    elif run.agent_name == "article_writer":
+        # Статья → /blog (status=published) + анонс → TG-канал
+        from models.content import ContentPost
+        post = (await db.execute(
+            select(ContentPost).where(ContentPost.id == output.get("content_post_id"))
+        )).scalar_one_or_none()
+        if not post:
+            raise HTTPException(status_code=400, detail="Статья из черновика не найдена в БД")
+        post.status = "published"
+        post.published_at = datetime.now(timezone.utc)
+        tg_text = f"{post.tg_text}\n\n🔗 {output.get('article_url', '')}".strip()
+        from services.agents.tg_lot_of_the_day import publish_to_channel
+        try:
+            await publish_to_channel(tg_text, "@torgi_zemli")
+        except Exception as e:
+            # Статью публикуем в любом случае, провал TG — не блокер
+            print(f"[agents:publish] TG publish failed for post {post.id}: {e}")
+
     else:
         raise HTTPException(status_code=400, detail="Публикация не поддерживается для этого агента")
 

@@ -8,7 +8,8 @@ from db.database import engine, Base
 # Импортируем модели чтобы Base.metadata знал о них (для create_all при первом старте)
 from models import promo  # noqa: F401
 from models import agent_run  # noqa: F401
-from api import lots, users, alerts, ai, payments, subscriptions, telegram, admin, agents
+from models import content  # noqa: F401
+from api import lots, users, alerts, ai, payments, subscriptions, telegram, admin, agents, blog
 from core.config import settings
 from core.ratelimit import limiter
 from core.sentry import init_sentry
@@ -51,6 +52,7 @@ app.include_router(subscriptions.router, prefix="/api/subscriptions", tags=["sub
 app.include_router(telegram.router, prefix="/api/telegram", tags=["telegram"])
 app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
 app.include_router(agents.router, prefix="/api/agents", tags=["agents"])
+app.include_router(blog.router, prefix="/api/blog", tags=["blog"])
 
 
 @app.get("/health")

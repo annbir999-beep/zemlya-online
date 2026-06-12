@@ -154,6 +154,16 @@ celery_app.conf.update(
             "task": "tasks.agent_tasks.agent_tg_lot_of_the_day",
             "schedule": crontab(minute=0, hour=10),
         },
+        # Контент-машина: скаут собирает отраслевые новости каждые 3 часа
+        "agent-news-scout": {
+            "task": "tasks.agent_tasks.agent_news_scout",
+            "schedule": crontab(minute=5, hour="*/3"),
+        },
+        # Автор статей — ежедневно 9:00 МСК, черновик к утреннему ревью Анны
+        "agent-article-writer": {
+            "task": "tasks.agent_tasks.agent_article_writer",
+            "schedule": crontab(minute=0, hour=9),
+        },
         # Продукт-агент «Утренний health-check» — ежедневно 7:00 МСК
         # собирает метрики прода и шлёт сводку владельцу в Telegram.
         "agent-morning-check": {
