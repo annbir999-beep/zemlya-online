@@ -3,6 +3,9 @@ from celery import Celery
 from celery.schedules import crontab
 from celery.signals import worker_process_init
 from core.config import settings
+from core.sentry import init_sentry
+
+init_sentry()
 
 
 @worker_process_init.connect

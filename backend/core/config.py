@@ -23,6 +23,9 @@ class Settings(BaseSettings):
         "https://www.xn--e1adnd0h.online",
     ]
 
+    # Sentry (мониторинг ошибок; пусто = выключено)
+    SENTRY_DSN: str = ""
+
     # Claude API
     ANTHROPIC_API_KEY: str = ""
     ANTHROPIC_BASE_URL: str = ""  # ProxyAPI/VseGPT base url для российских юзеров

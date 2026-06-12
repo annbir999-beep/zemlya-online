@@ -42,6 +42,9 @@ yookassa==3.5.0
 # Rate limiting (Redis-backed, защита auth-эндпоинтов от брутфорса)
 slowapi==0.1.9
 
+# Error monitoring (FastAPI + Celery интеграции включаются автоматически)
+sentry-sdk[fastapi,celery]==2.19.2
+
 # Utils
 pydantic[email]==2.10.3
 pydantic-settings==2.7.0

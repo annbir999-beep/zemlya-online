@@ -11,6 +11,9 @@ from models import agent_run  # noqa: F401
 from api import lots, users, alerts, ai, payments, subscriptions, telegram, admin, agents
 from core.config import settings
 from core.ratelimit import limiter
+from core.sentry import init_sentry
+
+init_sentry()
 
 
 @asynccontextmanager
