@@ -24,13 +24,13 @@ FILE="$BACKUP_DIR/sotka_$STAMP.sql.gz"
 
 mkdir -p "$BACKUP_DIR"
 
-# .env для S3-переменных (не обязателен)
-if [ -f "$APP_DIR/.env" ]; then
-    set -a
-    # shellcheck disable=SC1091
-    source "$APP_DIR/.env" 2>/dev/null || true
-    set +a
-fi
+# S3-переменные читаем точечно: source всего .env ломается на значениях
+# со пробелами/скобками (RESEND_FROM и т.п.)
+env_get() { grep -E "^$1=" "$APP_DIR/.env" 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '\r'; }
+BACKUP_S3_BUCKET="${BACKUP_S3_BUCKET:-$(env_get BACKUP_S3_BUCKET)}"
+BACKUP_S3_ENDPOINT="${BACKUP_S3_ENDPOINT:-$(env_get BACKUP_S3_ENDPOINT)}"
+BACKUP_S3_ACCESS_KEY="${BACKUP_S3_ACCESS_KEY:-$(env_get BACKUP_S3_ACCESS_KEY)}"
+BACKUP_S3_SECRET_KEY="${BACKUP_S3_SECRET_KEY:-$(env_get BACKUP_S3_SECRET_KEY)}"
 
 echo "[$(date '+%F %T')] pg_dump start"
 cd "$APP_DIR"
