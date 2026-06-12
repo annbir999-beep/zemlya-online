@@ -49,14 +49,21 @@ fi
 find "$BACKUP_DIR" -name 'sotka_*.sql.gz' -mtime +"$KEEP_DAYS" -delete
 
 # Выгрузка в S3, если настроено
+KEEP_S3=30
 if [ -n "${BACKUP_S3_BUCKET:-}" ] && command -v s3cmd >/dev/null 2>&1; then
-    s3cmd put "$FILE" "s3://$BACKUP_S3_BUCKET/db/" \
-        --host="${BACKUP_S3_ENDPOINT#https://}" \
-        --host-bucket="%(bucket)s.${BACKUP_S3_ENDPOINT#https://}" \
-        --access_key="$BACKUP_S3_ACCESS_KEY" \
-        --secret_key="$BACKUP_S3_SECRET_KEY" \
-        && echo "[$(date '+%F %T')] uploaded to s3://$BACKUP_S3_BUCKET/db/" \
-        || echo "[$(date '+%F %T')] WARN: s3 upload failed (local copy kept)" >&2
+    S3_HOST="${BACKUP_S3_ENDPOINT#https://}"
+    s3() { s3cmd --host="$S3_HOST" --host-bucket="%(bucket)s.$S3_HOST" \
+                 --access_key="$BACKUP_S3_ACCESS_KEY" --secret_key="$BACKUP_S3_SECRET_KEY" "$@"; }
+    if s3 put "$FILE" "s3://$BACKUP_S3_BUCKET/db/"; then
+        echo "[$(date '+%F %T')] uploaded to s3://$BACKUP_S3_BUCKET/db/"
+        # Ротация в S3: имена содержат timestamp, лексикографическая сортировка = хронология
+        s3 ls "s3://$BACKUP_S3_BUCKET/db/" | awk '{print $4}' | sort | head -n -"$KEEP_S3" \
+            | while read -r obj; do
+                [ -n "$obj" ] && s3 del "$obj" && echo "[$(date '+%F %T')] rotated out $obj"
+              done
+    else
+        echo "[$(date '+%F %T')] WARN: s3 upload failed (local copy kept)" >&2
+    fi
 else
     echo "[$(date '+%F %T')] s3 not configured — local backup only"
 fi
