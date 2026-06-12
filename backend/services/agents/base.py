@@ -31,12 +31,17 @@ class BaseAgent:
         """
         raise NotImplementedError
 
+    # Текущий запуск — доступен внутри execute() (например, для callback-кнопок
+    # с run.id в Telegram-уведомлении).
+    current_run: AgentRun | None = None
+
     async def run(self, db: AsyncSession) -> AgentRun:
         """Запускает агента, логирует результат в agent_runs."""
         run = AgentRun(agent_name=self.name, status="running")
         db.add(run)
         await db.commit()
         await db.refresh(run)
+        self.current_run = run
 
         try:
             output, requires_approval = await self.execute(db)

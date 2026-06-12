@@ -189,20 +189,39 @@ class ArticleWriterAgent(BaseAgent):
         return output, True  # ждёт одобрения в /admin
 
     async def _notify_admin(self, post: ContentPost) -> None:
-        admin_chat_id = getattr(settings, "ADMIN_TELEGRAM_CHAT_ID", None) or "574728046"
+        """Шлёт Анне полный текст статьи + кнопки Опубликовать/Пропустить."""
+        admin_chat_id = settings.ADMIN_TELEGRAM_CHAT_ID
         if not settings.TELEGRAM_BOT_TOKEN:
             return
-        text = (
-            "📰 Черновик статьи готов\n\n"
-            f"«{post.title}»\n\n{post.excerpt}\n\n"
-            f"TG-анонс:\n{post.tg_text}\n\n"
-            f"———\nОдобрить: {SITE}/admin (раздел «Агенты»)"
-        )
+        run_id = self.current_run.id if self.current_run else None
+
+        # Сообщение 1: статья целиком (markdown как простой текст, лимит TG 4096)
+        article_text = f"📰 «{post.title}»\n\n{post.body_md}"
+        if len(article_text) > 3900:
+            article_text = article_text[:3900] + "\n\n…(хвост обрезан, полностью — на сайте)"
+
+        # Сообщение 2: TG-анонс + кнопки одобрения
+        approval_text = f"TG-анонс:\n\n{post.tg_text}\n\n———\nПубликуем? (статья → /blog, анонс → @torgi_zemli)"
+        buttons = {
+            "inline_keyboard": [[
+                {"text": "✅ Опубликовать", "callback_data": f"agent_pub:{run_id}"},
+                {"text": "❌ Пропустить", "callback_data": f"agent_skip:{run_id}"},
+            ]]
+        } if run_id else None
+
         try:
-            async with _tg_client(timeout=10) as client:
-                await client.post(
-                    f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/sendMessage",
-                    json={"chat_id": admin_chat_id, "text": text, "disable_web_page_preview": True},
-                )
+            async with _tg_client(timeout=15) as client:
+                base = f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/sendMessage"
+                await client.post(base, json={
+                    "chat_id": admin_chat_id, "text": article_text,
+                    "disable_web_page_preview": True,
+                })
+                payload = {
+                    "chat_id": admin_chat_id, "text": approval_text,
+                    "disable_web_page_preview": True,
+                }
+                if buttons:
+                    payload["reply_markup"] = buttons
+                await client.post(base, json=payload)
         except Exception as e:
             print(f"[agent:article_writer] admin notify failed: {e}")

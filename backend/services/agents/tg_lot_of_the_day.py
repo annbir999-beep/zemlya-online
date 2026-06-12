@@ -120,25 +120,33 @@ class TgLotOfTheDayAgent(BaseAgent):
         return output, True  # requires_approval=True
 
     async def _notify_admin(self, post_text: str, lot_url: str) -> None:
-        """Отправляет черновик поста админу в Telegram."""
-        admin_chat_id = getattr(settings, "ADMIN_TELEGRAM_CHAT_ID", None) or "574728046"
+        """Отправляет черновик поста админу в Telegram с кнопками одобрения."""
+        admin_chat_id = settings.ADMIN_TELEGRAM_CHAT_ID
         if not settings.TELEGRAM_BOT_TOKEN:
             return
+        run_id = self.current_run.id if self.current_run else None
         text = (
             "📝 *Черновик «Лот дня»* готов к публикации\n\n"
-            f"{post_text}\n\n"
-            f"———\nОдобрить и опубликовать: {SITE}/admin (раздел «Агенты»)"
+            f"{post_text}"
         )
+        payload = {
+            "chat_id": admin_chat_id,
+            "text": text,
+            "parse_mode": "Markdown",
+            "disable_web_page_preview": True,
+        }
+        if run_id:
+            payload["reply_markup"] = {
+                "inline_keyboard": [[
+                    {"text": "✅ Опубликовать", "callback_data": f"agent_pub:{run_id}"},
+                    {"text": "❌ Пропустить", "callback_data": f"agent_skip:{run_id}"},
+                ]]
+            }
         try:
             async with _tg_client(timeout=10) as client:
                 await client.post(
                     f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/sendMessage",
-                    json={
-                        "chat_id": admin_chat_id,
-                        "text": text,
-                        "parse_mode": "Markdown",
-                        "disable_web_page_preview": True,
-                    },
+                    json=payload,
                 )
         except Exception as e:
             print(f"[agent:tg_lot_of_the_day] admin notify failed: {e}")

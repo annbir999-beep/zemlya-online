@@ -244,8 +244,82 @@ COMMANDS = {
 }
 
 
+async def _handle_agent_callback(db: AsyncSession, callback: dict) -> None:
+    """Inline-кнопки одобрения черновиков агентов (agent_pub:<id> / agent_skip:<id>).
+
+    Доступно только админскому чату — кнопки шлются лишь туда, но проверяем
+    отправителя на случай пересылки сообщения.
+    """
+    from core.config import settings as _settings
+
+    callback_id = callback.get("id")
+    data = callback.get("data") or ""
+    from_id = str((callback.get("from") or {}).get("id") or "")
+    msg = callback.get("message") or {}
+    chat_id = (msg.get("chat") or {}).get("id")
+    message_id = msg.get("message_id")
+
+    async def answer(text: str, alert: bool = False) -> None:
+        async with _tg_client(timeout=10) as client:
+            await client.post(
+                f"https://api.telegram.org/bot{_settings.TELEGRAM_BOT_TOKEN}/answerCallbackQuery",
+                json={"callback_query_id": callback_id, "text": text[:190], "show_alert": alert},
+            )
+
+    if from_id != str(_settings.ADMIN_TELEGRAM_CHAT_ID):
+        await answer("Кнопка доступна только администратору")
+        return
+
+    action, _, run_id_raw = data.partition(":")
+    try:
+        run_id = int(run_id_raw)
+    except ValueError:
+        await answer("Некорректные данные кнопки")
+        return
+
+    from models.agent_run import AgentRun
+    run = (await db.execute(select(AgentRun).where(AgentRun.id == run_id))).scalar_one_or_none()
+    if not run:
+        await answer(f"Запуск #{run_id} не найден")
+        return
+
+    from services.agents.publishing import PublishError, approve_and_publish, skip_run
+    try:
+        if action == "agent_pub":
+            result = await approve_and_publish(db, run)
+        else:
+            result = await skip_run(db, run)
+    except PublishError as e:
+        await answer(str(e), alert=True)
+        return
+    except Exception as e:
+        print(f"[telegram-bot] agent callback error: {type(e).__name__}: {e}")
+        await answer(f"Ошибка: {type(e).__name__}", alert=True)
+        return
+
+    await answer("Готово")
+    # Убираем кнопки и дописываем итог под сообщением
+    status_line = "✅ Опубликовано" if action == "agent_pub" else "❌ Пропущено"
+    if chat_id and message_id:
+        async with _tg_client(timeout=10) as client:
+            await client.post(
+                f"https://api.telegram.org/bot{_settings.TELEGRAM_BOT_TOKEN}/editMessageReplyMarkup",
+                json={"chat_id": chat_id, "message_id": message_id, "reply_markup": {"inline_keyboard": []}},
+            )
+            await client.post(
+                f"https://api.telegram.org/bot{_settings.TELEGRAM_BOT_TOKEN}/sendMessage",
+                json={"chat_id": chat_id, "text": f"{status_line} (run #{run_id})\n{result}",
+                      "disable_web_page_preview": True},
+            )
+
+
 async def process_update(db: AsyncSession, update: dict) -> None:
     """Точка входа для webhook. Парсит update от Telegram и вызывает обработчик команды."""
+    callback = update.get("callback_query")
+    if callback and (callback.get("data") or "").startswith(("agent_pub:", "agent_skip:")):
+        await _handle_agent_callback(db, callback)
+        return
+
     message = update.get("message") or update.get("edited_message")
     if not message:
         return

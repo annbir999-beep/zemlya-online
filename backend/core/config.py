@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     TELEGRAM_BOT_TOKEN: str = ""
     TELEGRAM_BOT_USERNAME: str = ""  # без @, например "ZemlyaOnlineBot"
     TELEGRAM_WEBHOOK_SECRET: str = ""  # для проверки X-Telegram-Bot-Api-Secret-Token
+    ADMIN_TELEGRAM_CHAT_ID: str = "574728046"  # чат Анны: черновики агентов + кнопки одобрения
 
     # ЮКасса
     YUKASSA_SHOP_ID: str = ""

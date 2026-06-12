@@ -101,46 +101,15 @@ async def publish_run(
     run = (await db.execute(select(AgentRun).where(AgentRun.id == run_id))).scalar_one_or_none()
     if not run:
         raise HTTPException(status_code=404, detail="Запуск не найден")
-    if run.status != "waiting_approval":
-        raise HTTPException(status_code=400, detail=f"Нельзя опубликовать запуск в статусе «{run.status}»")
 
-    output = run.output or {}
-
-    if run.agent_name == "tg_lot_of_the_day":
-        post_text = output.get("post_text")
-        if not post_text:
-            raise HTTPException(status_code=400, detail="В черновике нет текста поста")
-        from services.agents.tg_lot_of_the_day import publish_to_channel
-        try:
-            await publish_to_channel(post_text, output.get("channel", "@torgi_zemli"))
-        except Exception as e:
-            raise HTTPException(status_code=502, detail=f"Ошибка публикации в Telegram: {e}")
-
-    elif run.agent_name == "article_writer":
-        # Статья → /blog (status=published) + анонс → TG-канал
-        from models.content import ContentPost
-        post = (await db.execute(
-            select(ContentPost).where(ContentPost.id == output.get("content_post_id"))
-        )).scalar_one_or_none()
-        if not post:
-            raise HTTPException(status_code=400, detail="Статья из черновика не найдена в БД")
-        post.status = "published"
-        post.published_at = datetime.now(timezone.utc)
-        tg_text = f"{post.tg_text}\n\n🔗 {output.get('article_url', '')}".strip()
-        from services.agents.tg_lot_of_the_day import publish_to_channel
-        try:
-            await publish_to_channel(tg_text, "@torgi_zemli")
-        except Exception as e:
-            # Статью публикуем в любом случае, провал TG — не блокер
-            print(f"[agents:publish] TG publish failed for post {post.id}: {e}")
-
-    else:
-        raise HTTPException(status_code=400, detail="Публикация не поддерживается для этого агента")
-
-    run.status = "published"
-    run.approved_at = datetime.now(timezone.utc)
-    await db.commit()
-    return {"id": run.id, "status": run.status}
+    from services.agents.publishing import PublishError, approve_and_publish
+    try:
+        result = await approve_and_publish(db, run)
+    except PublishError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Ошибка публикации: {e}")
+    return {"id": run.id, "status": run.status, "result": result}
 
 
 @router.post("/runs/{run_id}/skip")
@@ -153,8 +122,10 @@ async def skip_run(
     run = (await db.execute(select(AgentRun).where(AgentRun.id == run_id))).scalar_one_or_none()
     if not run:
         raise HTTPException(status_code=404, detail="Запуск не найден")
-    if run.status != "waiting_approval":
-        raise HTTPException(status_code=400, detail=f"Нельзя отклонить запуск в статусе «{run.status}»")
-    run.status = "skipped"
-    await db.commit()
+
+    from services.agents.publishing import PublishError, skip_run as do_skip
+    try:
+        await do_skip(db, run)
+    except PublishError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     return {"id": run.id, "status": run.status}
