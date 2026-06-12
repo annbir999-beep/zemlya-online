@@ -50,6 +50,13 @@ ARTICLE_PROMPT = """Ты — редактор блога сервиса «Зем
 Верни СТРОГО JSON без пояснений и без markdown-обёртки:
 {{"title": "заголовок статьи до 90 знаков", "excerpt": "лид 1-2 предложения до 200 знаков", "article_md": "статья в markdown", "tg_text": "текст TG-поста"}}"""
 
+GATE_PROMPT = """Сервис «Земля.ОНЛАЙН» — агрегатор ЗЕМЕЛЬНЫХ аукционов: участки, аренда и выкуп земли, ЗК РФ, кадастр, ИЖС/СНТ/сельхоз.
+Новость:
+{title}
+{summary}
+
+Подходит ли эта новость для блога про инвестиции именно в ЗЕМЛЮ (не в здания, не в коммерческую недвижимость, не в квартиры)? Ответь одним словом: да или нет."""
+
 TRANSLIT = {
     "а": "a", "б": "b", "в": "v", "г": "g", "д": "d", "е": "e", "ё": "e",
     "ж": "zh", "з": "z", "и": "i", "й": "y", "к": "k", "л": "l", "м": "m",
@@ -88,13 +95,35 @@ class ArticleWriterAgent(BaseAgent):
     name = "article_writer"
 
     async def _pick_news(self, db: AsyncSession) -> NewsItem | None:
+        """Кандидаты по убыванию ключевого скора + AI-фильтр «именно про землю».
+
+        Ключевые слова дают ложные срабатывания (биржевые «торги», офисная
+        «недвижимость» — кейс «Макфы»), поэтому каждого кандидата прогоняем
+        через быстрый да/нет-вопрос модели. Не про землю → status=skipped.
+        """
         cutoff = datetime.now(timezone.utc) - timedelta(days=7)
-        return (await db.execute(
+        candidates = (await db.execute(
             select(NewsItem)
             .where(NewsItem.status == "new", NewsItem.fetched_at >= cutoff)
             .order_by(desc(NewsItem.relevance_score), desc(NewsItem.fetched_at))
-            .limit(1)
-        )).scalar_one_or_none()
+            .limit(10)
+        )).scalars().all()
+
+        for news in candidates:
+            message = await anthropic_client.messages.create(
+                model="claude-sonnet-4-6",
+                max_tokens=5,
+                messages=[{"role": "user", "content": GATE_PROMPT.format(
+                    title=news.title,
+                    summary=(news.summary or "")[:500],
+                )}],
+            )
+            answer = message.content[0].text.strip().lower()
+            if answer.startswith("да"):
+                return news
+            news.status = "skipped"
+            await db.commit()
+        return None
 
     async def _unique_slug(self, db: AsyncSession, base: str) -> str:
         slug = base
