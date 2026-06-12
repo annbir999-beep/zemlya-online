@@ -42,6 +42,11 @@ KEYWORDS_WEAK = [
     "аукцион", "торги", "торгов", "снт", "лпх", "сельхоз", "генплан",
     "пзз", "межеван", "недвижимост", "муниципал", "изъят",
 ]
+# Минус-слова: «участок» избирательный, «торги» биржевые — не наша тема
+KEYWORDS_NEGATIVE = [
+    "избирательн", "цик ", "выбор", "голосован", "бирж", "акци", "nasdaq",
+    "котировк", "валют", "криптовалют", "футбол", "хокке",
+]
 MIN_RELEVANCE = 2  # порог: одно сильное слово («земельн», «кадастр») достаточно
 
 
@@ -49,6 +54,7 @@ def _relevance(text: str) -> int:
     low = text.lower()
     score = sum(2 for k in KEYWORDS_STRONG if k in low)
     score += sum(1 for k in KEYWORDS_WEAK if k in low)
+    score -= sum(2 for k in KEYWORDS_NEGATIVE if k in low)
     return score
 
 
@@ -113,8 +119,13 @@ class NewsScoutAgent(BaseAgent):
                         continue
 
                     h = _url_hash(entry["link"])
+                    title_norm = entry["title"][:500].strip()
+                    # Дедуп: по URL-хешу и по заголовку (КонсультантПлюс дублирует
+                    # один документ в двух лентах с разными URL)
                     exists = (await db.execute(
-                        select(NewsItem.id).where(NewsItem.url_hash == h)
+                        select(NewsItem.id).where(
+                            (NewsItem.url_hash == h) | (NewsItem.title == title_norm)
+                        ).limit(1)
                     )).scalar_one_or_none()
                     if exists:
                         stats["duplicates"] += 1
