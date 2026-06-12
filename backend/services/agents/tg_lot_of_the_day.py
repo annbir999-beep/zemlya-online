@@ -21,9 +21,10 @@ from services.agents.base import BaseAgent
 from services.ai_assessment import client as anthropic_client
 from services.telegram_bot import _tg_client
 
-# Канонический адрес сайта. Punycode-форму ИИ не даём — он пытается её
-# «расшифровать» в кириллицу и ошибается (писал лот.online вместо земля.online).
-SITE = "https://земля.online"
+# Канонический адрес сайта (settings.SITE_URL). ИИ домен в промпт не даём —
+# с punycode-формами он ошибался (писал лот.online вместо земля.online),
+# поэтому ссылку всегда подставляем кодом отдельно.
+SITE = settings.SITE_URL
 CHANNEL = "@torgi_zemli"
 
 POST_PROMPT = """Ты — SMM-редактор Telegram-канала про земельные аукционы РФ.

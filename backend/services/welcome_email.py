@@ -12,7 +12,7 @@ from core.config import settings
 from models.user import User
 
 
-SITE = "https://xn--e1adnd0h.online"
+SITE = settings.SITE_URL
 
 
 def _build_html(user: User) -> str:

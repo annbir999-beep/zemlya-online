@@ -6,7 +6,7 @@
 Требует переменных окружения:
   TELEGRAM_BOT_TOKEN     — токен бота от @BotFather
   TELEGRAM_WEBHOOK_SECRET (опц.) — секрет для проверки подписи
-  TELEGRAM_WEBHOOK_URL   — публичный URL: https://xn--e1adnd0h.online/api/telegram/webhook
+  TELEGRAM_WEBHOOK_URL   — публичный URL: https://torgi-zemli.ru/api/telegram/webhook
 
 Скрипт также печатает getMe (проверка токена и username бота).
 """
@@ -22,7 +22,7 @@ from services.telegram_bot import _tg_client
 
 WEBHOOK_URL = os.environ.get(
     "TELEGRAM_WEBHOOK_URL",
-    "https://xn--e1adnd0h.online/api/telegram/webhook",  # punycode для земля.online
+    "https://torgi-zemli.ru/api/telegram/webhook",
 )
 
 

@@ -109,7 +109,7 @@ class BankrotFedresursScraper:
         self.client = httpx.AsyncClient(
             timeout=30,
             headers={
-                "User-Agent": "Mozilla/5.0 (compatible; ZemlyaOnline/1.0; +https://земля.online)",
+                "User-Agent": "Mozilla/5.0 (compatible; ZemlyaOnline/1.0; +https://torgi-zemli.ru)",
                 "Accept": "application/json",
                 "Content-Type": "application/json",
             },

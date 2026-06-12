@@ -29,7 +29,7 @@ _REDIS: Optional[redis_async.Redis] = None
 LINK_CODE_PREFIX = "tg_link:"
 LINK_CODE_TTL = 600  # 10 минут
 LINK_CODE_LENGTH = 8  # символов в URL-safe base64
-SITE_URL = "https://земля.online"
+SITE_URL = settings.SITE_URL
 
 
 def _tg_client(timeout: int = 10) -> httpx.AsyncClient:

@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from datetime import date, datetime, timezone
 import math
 
+from core.config import settings
 from db.database import get_db
 from models.lot import Lot, LotStatus, LandPurpose, AuctionType, LotSource, AuctionForm, DealType, AreaDiscrepancy, ResaleType
 from models.user import User, SubscriptionPlan
@@ -651,7 +652,7 @@ async def lot_pdf_report(
     pros = ai.get("pros", []) if isinstance(ai, dict) else []
     cons = ai.get("cons", []) if isinstance(ai, dict) else []
 
-    SITE = "https://xn--e1adnd0h.online"
+    SITE = settings.SITE_URL
     title = (lot.title or "Земельный участок")[:200]
 
     AUCTION_TYPE_RU = {"sale": "Продажа", "rent": "Аренда", "priv": "Приватизация"}
@@ -708,7 +709,7 @@ h1 {{ font-size: 14pt; margin: 0 0 6px; }}
 </style></head><body>
 
 <div class="header">
-  <div class="brand">земля.online</div>
+  <div class="brand">torgi-zemli.ru</div>
   <div class="brand-sub">аукционы земли РФ — отчёт по лоту</div>
 </div>
 

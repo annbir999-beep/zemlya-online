@@ -104,7 +104,7 @@ def _build_email_html(user: User, alert: Alert, lots: List[Lot]) -> str:
     <hr style="border:none;border-top:1px solid #e0e0e0;margin:20px 0;">
     <p style="font-size:12px;color:#999;">
       Вы получаете это письмо, потому что настроили алерт на Земля.ПРО.<br>
-      <a href="https://xn--e1adnd0h.online/dashboard/alerts" style="color:#2563eb;">Управление алертами</a>
+      <a href="{settings.SITE_URL}/dashboard/alerts" style="color:#2563eb;">Управление алертами</a>
     </p>
   </div>
 </body>
@@ -152,7 +152,7 @@ async def send_payment_email(user: User, plan: str, amount: float, *,
 
     if is_one_time:
         subject = f"✅ Оплата получена — {plan_label}"
-        cta_url = "https://xn--e1adnd0h.online/audit-lot"
+        cta_url = f"{settings.SITE_URL}/audit-lot"
         cta_text = "Перейти к аудиту →"
         body_inner = f"""
             <p>Спасибо за оплату <b>{plan_label}</b> на сумму <b>{_format_price(amount)}</b>.</p>
@@ -161,7 +161,7 @@ async def send_payment_email(user: User, plan: str, amount: float, *,
         """
     else:
         subject = f"✅ Подписка «{plan_label}» активирована"
-        cta_url = "https://xn--e1adnd0h.online/dashboard"
+        cta_url = f"{settings.SITE_URL}/dashboard"
         cta_text = "Открыть кабинет →"
         body_inner = f"""
             <p>Подписка <b>«{plan_label}»</b> активна на <b>{months}</b> мес.</p>
@@ -203,13 +203,13 @@ async def send_payment_telegram(user: User, plan: str, amount: float, *,
             f"✅ *Оплата получена* — {plan_label}\n"
             f"Сумма: *{_format_price(amount)}*\n"
             f"На счету: *{free_audits_total}* разовых аудитов\n\n"
-            f"[Перейти к аудиту →](https://xn--e1adnd0h.online/audit-lot)"
+            f"[Перейти к аудиту →]({settings.SITE_URL}/audit-lot)"
         )
     else:
         text = (
             f"✅ *Подписка «{plan_label}» активна*\n"
             f"Срок: {months} мес. (до {_format_expires(expires_at)})\n\n"
-            f"[Открыть кабинет →](https://xn--e1adnd0h.online/dashboard)"
+            f"[Открыть кабинет →]({settings.SITE_URL}/dashboard)"
         )
 
     try:
@@ -242,7 +242,7 @@ async def send_telegram_alert(user: User, alert: Alert, lots: List[Lot]):
     if len(lots) > 5:
         lines.append(f"\n_...и ещё {len(lots) - 5} лотов_")
 
-    lines.append(f"\n[Открыть все результаты](https://xn--e1adnd0h.online/lots?alert={alert.id})")
+    lines.append(f"\n[Открыть все результаты]({settings.SITE_URL}/lots?alert={alert.id})")
 
     text = "\n".join(lines)
     async with _tg_client(timeout=10) as client:

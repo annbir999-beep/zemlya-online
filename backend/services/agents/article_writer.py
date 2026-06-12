@@ -25,7 +25,7 @@ from services.agents.base import BaseAgent
 from services.ai_assessment import client as anthropic_client
 from services.telegram_bot import _tg_client
 
-SITE = "https://земля.online"
+SITE = settings.SITE_URL
 CHANNEL = "@torgi_zemli"
 
 ARTICLE_PROMPT = """Ты — редактор блога сервиса «Земля.ОНЛАЙН» (агрегатор земельных аукционов РФ с AI-оценкой участков).

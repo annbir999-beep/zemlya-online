@@ -15,12 +15,17 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 60
     ALGORITHM: str = "HS256"
 
+    # Канонический публичный адрес сайта
+    SITE_URL: str = "https://torgi-zemli.ru"
+
     # CORS
     ALLOWED_ORIGINS: List[str] = [
         "http://localhost:3000",
         "https://земля.online",
         "https://xn--e1adnd0h.online",
         "https://www.xn--e1adnd0h.online",
+        "https://torgi-zemli.ru",
+        "https://www.torgi-zemli.ru",
     ]
 
     # Sentry (мониторинг ошибок; пусто = выключено)

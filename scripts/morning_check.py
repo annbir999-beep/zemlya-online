@@ -34,8 +34,8 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
 # выключить — установив NO_COLOR=1 в окружении.
 USE_COLOR = os.environ.get("NO_COLOR") is None and sys.stdout.isatty()
 
-API = "https://xn--e1adnd0h.online/api"
-SITE = "https://xn--e1adnd0h.online"
+API = "https://torgi-zemli.ru/api"
+SITE = "https://torgi-zemli.ru"
 NOW = datetime.now(timezone.utc)
 
 

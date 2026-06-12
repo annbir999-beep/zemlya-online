@@ -18,7 +18,7 @@ from core.config import settings
 from models.user import User
 
 
-SITE = "https://xn--e1adnd0h.online"
+SITE = settings.SITE_URL
 
 
 def _wrap(name: str, headline: str, body_html: str, cta_text: str, cta_url: str) -> str:
@@ -38,7 +38,7 @@ def _wrap(name: str, headline: str, body_html: str, cta_text: str, cta_url: str)
     </div>
     <hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0">
     <p style="font-size:11px;color:#9ca3af;text-align:center;margin:0;line-height:1.5">
-      Получили это письмо потому что зарегистрировались на земля.online.<br>
+      Получили это письмо потому что зарегистрировались на torgi-zemli.ru.<br>
       <a href="{SITE}/dashboard" style="color:#9ca3af">Управление подписками</a>
     </p>
   </div>

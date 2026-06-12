@@ -18,7 +18,7 @@ from models.agent_run import AgentRun
 from services.agents.base import BaseAgent
 from services.telegram_bot import _tg_client
 
-SITE = "https://земля.online"
+SITE = settings.SITE_URL
 
 
 def _pct(part: int, total: int) -> str:

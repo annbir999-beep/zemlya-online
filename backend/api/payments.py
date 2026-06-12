@@ -55,7 +55,7 @@ PLAN_ENUM = {
 class CreatePaymentRequest(BaseModel):
     plan: str          # pro | buro | buro_plus | audit_lot | predd
     months: int = 1    # 1 | 3 | 12 (для разовых = 0)
-    return_url: Optional[str] = "https://xn--e1adnd0h.online/dashboard"
+    return_url: Optional[str] = None  # дефолт подставляется при создании платежа: settings.SITE_URL + "/dashboard"
     lot_id: Optional[int] = None   # для разового AI-аудита: какой лот покупаем
     promo_code: Optional[str] = None  # промокод (FIRST50, EARLY и т.п.)
 
@@ -281,7 +281,7 @@ async def create_payment(
         "amount": {"value": f"{price:.2f}", "currency": "RUB"},
         "confirmation": {
             "type": "redirect",
-            "return_url": data.return_url or "https://xn--e1adnd0h.online/dashboard",
+            "return_url": data.return_url or f"{settings.SITE_URL}/dashboard",
         },
         "capture": True,
         "description": descr[:128],  # ЮКасса лимитит 128 символов

@@ -91,7 +91,7 @@ async def _send_one_digest(user, lots):
     if not settings.SMTP_USER:
         return
 
-    SITE = "https://xn--e1adnd0h.online"
+    SITE = settings.SITE_URL
     rows_html = ""
     for i, lot in enumerate(lots, 1):
         title = (lot.title or "Земельный участок")[:80]
@@ -124,7 +124,7 @@ async def _send_one_digest(user, lots):
 <body style="font-family:Arial,sans-serif;max-width:640px;margin:0 auto;padding:20px;color:#1f2937">
   <div style="background:linear-gradient(135deg,#16a34a,#0d9488);padding:24px;border-radius:10px 10px 0 0;color:#fff">
     <h1 style="margin:0;font-size:22px">🔥 Топ участков недели</h1>
-    <p style="margin:6px 0 0;opacity:.9;font-size:14px">Самые рентабельные лоты на земля.online</p>
+    <p style="margin:6px 0 0;opacity:.9;font-size:14px">Самые рентабельные лоты на torgi-zemli.ru</p>
   </div>
   <div style="background:#f9fafb;padding:20px;border-radius:0 0 10px 10px">
     <p style="margin:0 0 16px">Привет, <b>{user.name or user.email}</b>!</p>
@@ -149,7 +149,7 @@ async def _send_one_digest(user, lots):
 </html>"""
 
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = f"🔥 Топ-{len(lots)} участков недели — земля.online"
+    msg["Subject"] = f"🔥 Топ-{len(lots)} участков недели — torgi-zemli.ru"
     msg["From"] = settings.SMTP_USER
     msg["To"] = user.email
     msg.attach(MIMEText(html, "html", "utf-8"))

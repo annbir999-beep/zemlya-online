@@ -127,7 +127,8 @@ async def _send_drop_notification(user, lot):
 
 async def _send_telegram_drop(user, lot):
     from services.telegram_bot import send_message
-    SITE = "https://xn--e1adnd0h.online"
+    from core.config import settings
+    SITE = settings.SITE_URL
     title = (lot.title or "Земельный участок")[:80]
     drop = lot.last_price_drop_pct or 0
     new_price = (lot.start_price or 0)
@@ -150,7 +151,7 @@ async def _send_email_drop(user, lot):
     if not settings.SMTP_USER:
         return
 
-    SITE = "https://xn--e1adnd0h.online"
+    SITE = settings.SITE_URL
     title = (lot.title or "Земельный участок")[:120]
     drop = lot.last_price_drop_pct or 0
     new_price = int(lot.start_price or 0)

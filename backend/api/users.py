@@ -6,6 +6,7 @@ from pydantic import BaseModel, EmailStr
 from datetime import datetime, timezone
 from typing import Optional
 
+from core.config import settings
 from db.database import get_db
 from models.user import User, SubscriptionPlan
 from core.security import hash_password, verify_password, create_access_token, create_refresh_token, decode_token, oauth2_scheme, oauth2_scheme_optional
@@ -267,7 +268,7 @@ async def my_referral(
 
     return {
         "code": user.referral_code,
-        "url": f"https://xn--e1adnd0h.online/register?ref={user.referral_code}",
+        "url": f"{settings.SITE_URL}/register?ref={user.referral_code}",
         "invited_count": invited_count,
         "invited_paying": invited_paying,
         "free_audits_left": user.free_audits_left or 0,
