@@ -23,12 +23,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from models.content import NewsItem
 from services.agents.base import BaseAgent
 
-# (имя источника, url RSS-ленты)
+# (имя источника, url RSS-ленты) — все проверены с сервера 13.06.2026
 SOURCES = [
-    ("РБК Недвижимость", "https://rssexport.rbc.ru/rbcnews/realty/20/full.rss"),
-    ("Коммерсантъ", "https://www.kommersant.ru/RSS/news.xml"),
+    ("КонсультантПлюс: документы", "https://www.consultant.ru/rss/hotdocs.xml"),
+    ("КонсультантПлюс: федеральные", "https://www.consultant.ru/rss/fd.xml"),
+    ("Ведомости Недвижимость", "https://www.vedomosti.ru/rss/rubric/realty.xml"),
+    ("Интерфакс", "https://www.interfax.ru/rss.asp"),
     ("ГАРАНТ Новости", "https://www.garant.ru/rss/news/"),
-    ("ЕРЗ.РФ", "https://erzrf.ru/rss/news"),
+    ("Коммерсантъ", "https://www.kommersant.ru/RSS/news.xml"),
 ]
 
 # Ключевые слова: вес 2 — прямая тематика, вес 1 — смежная
@@ -40,7 +42,7 @@ KEYWORDS_WEAK = [
     "аукцион", "торги", "торгов", "снт", "лпх", "сельхоз", "генплан",
     "пзз", "межеван", "недвижимост", "муниципал", "изъят",
 ]
-MIN_RELEVANCE = 3  # порог попадания в news_items
+MIN_RELEVANCE = 2  # порог: одно сильное слово («земельн», «кадастр») достаточно
 
 
 def _relevance(text: str) -> int:
