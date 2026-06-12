@@ -5,8 +5,6 @@ from pydantic import BaseModel
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 import yookassa
-import hmac
-import hashlib
 
 from db.database import get_db
 from models.user import User, SubscriptionPlan
@@ -370,16 +368,45 @@ async def create_payment(
 
 @router.post("/webhook")
 async def yukassa_webhook(request: Request, db: AsyncSession = Depends(get_db)):
-    """ЮКасса отправляет сюда уведомления об оплате"""
-    body = await request.body()
+    """ЮКасса отправляет сюда уведомления об оплате.
+
+    Телу запроса не доверяем: по payment_id из уведомления перепроверяем
+    платёж прямым GET к API ЮКассы (рекомендуемый ими паттерн) и дальше
+    работаем только с подтверждённым объектом.
+    """
     data = await request.json()
 
     event = data.get("event")
-    payment_obj = data.get("object", {})
-    payment_id = payment_obj.get("id")
+    payment_id = (data.get("object") or {}).get("id")
+
+    if event != "payment.succeeded" or not payment_id:
+        return {"status": "ignored"}
+
+    # Верификация: запрашиваем платёж у ЮКассы по id из уведомления
+    import httpx
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                f"https://api.yookassa.ru/v3/payments/{payment_id}",
+                auth=(settings.YUKASSA_SHOP_ID, settings.YUKASSA_SECRET_KEY),
+            )
+    except httpx.HTTPError as e:
+        # 500 → ЮКасса повторит доставку уведомления позже
+        raise HTTPException(status_code=500, detail=f"yookassa verify failed: {type(e).__name__}")
+
+    if resp.status_code == 404:
+        # Платёж с таким id у нас в магазине не существует — поддельное уведомление
+        print(f"[payment-webhook] unknown payment_id {payment_id} — ignored")
+        return {"status": "ignored"}
+    if resp.status_code != 200:
+        raise HTTPException(status_code=500, detail=f"yookassa verify HTTP {resp.status_code}")
+
+    # Дальше используем только подтверждённые данные из API
+    payment_obj = resp.json()
     payment_status = payment_obj.get("status")
 
-    if event != "payment.succeeded" or payment_status != "succeeded":
+    if payment_status != "succeeded":
         return {"status": "ignored"}
 
     # Платёж по Invoice API имеет свой payment_id, не совпадающий с invoice_id.

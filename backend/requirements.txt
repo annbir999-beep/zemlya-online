@@ -39,6 +39,9 @@ jinja2==3.1.4
 # Payments (ЮКасса)
 yookassa==3.5.0
 
+# Rate limiting (Redis-backed, защита auth-эндпоинтов от брутфорса)
+slowapi==0.1.9
+
 # Utils
 pydantic[email]==2.10.3
 pydantic-settings==2.7.0

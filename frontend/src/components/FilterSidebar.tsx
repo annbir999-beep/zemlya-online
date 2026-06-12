@@ -570,6 +570,16 @@ export default function FilterSidebar({ filters, onChange, onReset }: Props) {
           </div>
         </Section>
 
+        {/* Банкротное имущество */}
+        <Section title="Банкротное имущество">
+          <label className="checkbox-item">
+            <input type="checkbox"
+              checked={filters.is_bankruptcy === true}
+              onChange={e => set("is_bankruptcy", e.target.checked ? true : undefined)} />
+            Только имущество банкротов
+          </label>
+        </Section>
+
         {/* Даты подачи заявок */}
         <Section title="Даты подачи заявок">
           <div style={{ fontSize: 12, color: "var(--text-3)", marginBottom: 4 }}>Начало подачи заявок</div>

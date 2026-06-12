@@ -133,6 +133,7 @@ export interface FiltersState {
   resale_type?: string[];
   sublease_allowed?: boolean;
   assignment_allowed?: boolean;
+  is_bankruptcy?: boolean;
   // Источник
   source?: string[];
   // Поиск
@@ -198,6 +199,7 @@ export function filtersToQueryString(f: FiltersState & { per_page?: number }): s
   if (f.resale_type?.length) f.resale_type.forEach(r => params.append("resale_type", r));
   if (f.sublease_allowed != null) params.set("sublease_allowed", String(f.sublease_allowed));
   if (f.assignment_allowed != null) params.set("assignment_allowed", String(f.assignment_allowed));
+  if (f.is_bankruptcy != null) params.set("is_bankruptcy", String(f.is_bankruptcy));
   // Источник и поиск
   if (f.source?.length) f.source.forEach((s) => params.append("source", s));
   if (f.cadastral) params.set("cadastral", f.cadastral);
