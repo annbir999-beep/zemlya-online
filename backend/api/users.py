@@ -144,6 +144,17 @@ async def register(request: Request, data: RegisterRequest, db: AsyncSession = D
     await db.commit()
     await db.refresh(user)
 
+    # Если этот email был лидом воронки A — отмечаем конверсию, lead-drip остановится
+    try:
+        from models.lead import Lead
+        lead = (await db.execute(select(Lead).where(Lead.email == data.email.lower()))).scalar_one_or_none()
+        if lead and lead.converted_user_id is None:
+            lead.converted_user_id = user.id
+            lead.converted_at = datetime.now(timezone.utc)
+            await db.commit()
+    except Exception as e:
+        print(f"[lead-convert] error: {type(e).__name__}: {e}")
+
     # Welcome email — асинхронно, не блокирует регистрацию
     try:
         from services.welcome_email import send_welcome_email

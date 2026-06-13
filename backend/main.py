@@ -9,7 +9,8 @@ from db.database import engine, Base
 from models import promo  # noqa: F401
 from models import agent_run  # noqa: F401
 from models import content  # noqa: F401
-from api import lots, users, alerts, ai, payments, subscriptions, telegram, admin, agents, blog
+from models import lead  # noqa: F401
+from api import lots, users, alerts, ai, payments, subscriptions, telegram, admin, agents, blog, leads
 from core.config import settings
 from core.ratelimit import limiter
 from core.sentry import init_sentry
@@ -53,6 +54,7 @@ app.include_router(telegram.router, prefix="/api/telegram", tags=["telegram"])
 app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
 app.include_router(agents.router, prefix="/api/agents", tags=["agents"])
 app.include_router(blog.router, prefix="/api/blog", tags=["blog"])
+app.include_router(leads.router, prefix="/api/leads", tags=["leads"])
 
 
 @app.get("/health")

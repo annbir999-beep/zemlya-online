@@ -12,6 +12,7 @@ export default function Footer() {
           <Link href="/oferta">Публичная оферта</Link>
           <Link href="/privacy">Политика конфиденциальности</Link>
           <Link href="/blog">Блог</Link>
+          <Link href="/checklist">Чеклист 12 проверок</Link>
           <a href="mailto:anna@xn--e1adnd0h.online">anna@земля.online</a>
         </div>
       </div>

@@ -4,10 +4,6 @@
 Внутри: благодарность, ссылка на бесплатный AI-аудит, краткий tour
 по 3-м основным фичам, ссылка в Telegram-бот.
 """
-import aiosmtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-
 from core.config import settings
 from models.user import User
 
@@ -77,21 +73,15 @@ def _build_html(user: User) -> str:
 
 
 async def send_welcome_email(user: User) -> None:
-    if not settings.SMTP_USER or not user.email:
+    # Resend (HTTP), а не SMTP — VPS Timeweb блокирует SMTP-порты.
+    if not user.email:
         return
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = "🌍 Добро пожаловать в Земля.ОНЛАЙН — ваш первый AI-аудит бесплатно"
-    msg["From"] = settings.SMTP_USER
-    msg["To"] = user.email
-    msg.attach(MIMEText(_build_html(user), "html", "utf-8"))
+    from services.notifications import _send_via_resend
     try:
-        await aiosmtplib.send(
-            msg,
-            hostname=settings.SMTP_HOST,
-            port=settings.SMTP_PORT,
-            username=settings.SMTP_USER,
-            password=settings.SMTP_PASSWORD,
-            use_tls=True,
+        await _send_via_resend(
+            to=user.email,
+            subject="🌍 Добро пожаловать в Земля.ОНЛАЙН — ваш первый AI-аудит бесплатно",
+            html=_build_html(user),
         )
     except Exception as e:
-        print(f"[welcome] smtp error: {type(e).__name__}: {e}")
+        print(f"[welcome] resend error: {type(e).__name__}: {e}")

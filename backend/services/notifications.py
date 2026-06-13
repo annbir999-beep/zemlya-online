@@ -9,29 +9,35 @@ from models.lot import Lot
 from services.telegram_bot import _tg_client
 
 
-async def _send_via_resend(*, to: str, subject: str, html: str) -> None:
+async def _send_via_resend(*, to: str, subject: str, html: str, attachments: list | None = None) -> None:
     """Отправка письма через Resend HTTP API.
 
     Используется вместо aiosmtplib, потому что VPS Timeweb блокирует
     исходящие SMTP-порты (25/465/587). Resend ходит по HTTPS — не блокируется.
+
+    attachments — список {"filename": str, "content": base64-строка} для вложений.
     """
     if not settings.RESEND_API_KEY:
         print("[email] RESEND_API_KEY пуст — письмо не отправлено")
         return
 
-    async with httpx.AsyncClient(timeout=15) as client:
+    payload = {
+        "from": settings.RESEND_FROM,
+        "to": [to],
+        "subject": subject,
+        "html": html,
+    }
+    if attachments:
+        payload["attachments"] = attachments
+
+    async with httpx.AsyncClient(timeout=20) as client:
         resp = await client.post(
             "https://api.resend.com/emails",
             headers={
                 "Authorization": f"Bearer {settings.RESEND_API_KEY}",
                 "Content-Type": "application/json",
             },
-            json={
-                "from": settings.RESEND_FROM,
-                "to": [to],
-                "subject": subject,
-                "html": html,
-            },
+            json=payload,
         )
     if resp.status_code >= 300:
         # Не бросаем исключение — оно поймается выше и не сломает основной поток.

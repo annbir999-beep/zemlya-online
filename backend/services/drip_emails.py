@@ -10,10 +10,6 @@
   · прошло >= N дней с регистрации
   · last_drip_step < N (т.е. этот шаг ещё не отправлен)
 """
-import aiosmtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-
 from core.config import settings
 from models.user import User
 
@@ -145,29 +141,15 @@ DRIP_STEPS = {
 
 
 async def send_drip_email(user: User, step: int) -> bool:
-    if not settings.SMTP_USER or not user.email:
-        return False
-    if step not in DRIP_STEPS:
+    # Resend (HTTP), а не SMTP — VPS Timeweb блокирует SMTP-порты.
+    if not user.email or step not in DRIP_STEPS:
         return False
     subject, html_fn = DRIP_STEPS[step]
     name = user.name or user.email.split("@")[0]
-
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
-    msg["From"] = settings.SMTP_USER
-    msg["To"] = user.email
-    msg.attach(MIMEText(html_fn(name), "html", "utf-8"))
-
+    from services.notifications import _send_via_resend
     try:
-        await aiosmtplib.send(
-            msg,
-            hostname=settings.SMTP_HOST,
-            port=settings.SMTP_PORT,
-            username=settings.SMTP_USER,
-            password=settings.SMTP_PASSWORD,
-            use_tls=True,
-        )
+        await _send_via_resend(to=user.email, subject=subject, html=html_fn(name))
         return True
     except Exception as e:
-        print(f"[drip] smtp error step={step} email={user.email}: {type(e).__name__}: {e}")
+        print(f"[drip] resend error step={step} email={user.email}: {type(e).__name__}: {e}")
         return False
