@@ -444,6 +444,13 @@ def _get_tor_zone(region_code):
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
+# Премиум-фильтры — продвинутая аналитика, доступная только платным тарифам.
+# Для FREE и анонимов значения обнуляются перед фильтрацией: фильтр виден в UI
+# с замком, но через прямой API-запрос игнорируется (замок не обходится).
+def _is_paid(user) -> bool:
+    return user is not None and user.subscription_plan != SubscriptionPlan.FREE
+
+
 @router.get("", response_model=LotsResponse)
 async def get_lots(
     # Статус
@@ -524,8 +531,18 @@ async def get_lots(
     # Пагинация
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
+    user: Optional[User] = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db),
 ):
+    # Премиум-фильтры доступны только платным тарифам (см. _is_paid)
+    if not _is_paid(user):
+        pct_cadastral_min = pct_cadastral_max = None
+        area_discrepancy = None
+        sublease_allowed = assignment_allowed = None
+        is_bankruptcy = None
+        submission_start_from = submission_start_to = None
+        submission_end_from = submission_end_to = None
+
     conditions = build_filters(
         status=status, region_codes=region,
         score_min=score_min, badges_min=badges_min, discount_min=discount_min,
@@ -1333,8 +1350,16 @@ async def get_lots_for_map(
     submission_end_from: Optional[date] = Query(None),
     submission_end_to: Optional[date] = Query(None),
     has_coords: Optional[List[str]] = Query(None, alias="has_coords"),
+    user: Optional[User] = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db),
 ):
+    # Премиум-фильтры доступны только платным тарифам (см. _is_paid)
+    if not _is_paid(user):
+        pct_cadastral_min = pct_cadastral_max = None
+        sublease_allowed = assignment_allowed = None
+        is_bankruptcy = None
+        submission_end_from = submission_end_to = None
+
     conditions = build_filters(
         status=status, region_codes=region,
         score_min=score_min, badges_min=badges_min, discount_min=discount_min,

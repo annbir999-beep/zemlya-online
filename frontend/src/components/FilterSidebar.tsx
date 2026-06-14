@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import {
   AUCTION_TYPES, LOT_STATUSES, SOURCES, SORT_OPTIONS, REGIONS, FiltersState,
 } from "@/lib/filters";
+import { getMe } from "@/lib/auth";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "";
 
@@ -44,7 +45,7 @@ interface Props {
 }
 
 // Аккордеон-секция фильтров
-function Section({ title, children, defaultOpen = false }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) {
+function Section({ title, children, defaultOpen = false }: { title: React.ReactNode; children: React.ReactNode; defaultOpen?: boolean }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
     <div style={{ borderBottom: "1px solid var(--border)" }}>
@@ -57,6 +58,83 @@ function Section({ title, children, defaultOpen = false }: { title: string; chil
         <span style={{ color: "var(--text-3)", fontSize: 11 }}>{open ? "▲" : "▼"}</span>
       </button>
       {open && <div style={{ paddingBottom: 12, display: "flex", flexDirection: "column", gap: 8 }}>{children}</div>}
+    </div>
+  );
+}
+
+// Замок (inline SVG, без эмодзи)
+function LockIcon() {
+  return (
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
+      style={{ flexShrink: 0 }}>
+      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+    </svg>
+  );
+}
+
+// Премиум-секция: для не-платных показывает замок/бейдж, дизейблит контролы
+// (видны, но не кликабельны) и даёт подсказку-ссылку на /pricing.
+function PremiumSection({ title, isPaid, children, defaultOpen = false }: {
+  title: string; isPaid: boolean; children: React.ReactNode; defaultOpen?: boolean;
+}) {
+  const lockedTitle = isPaid ? title : (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+      <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{title}</span>
+      <span style={{
+        display: "inline-flex", alignItems: "center", gap: 3,
+        fontSize: 10, fontWeight: 700, lineHeight: 1,
+        color: "var(--primary)", background: "var(--primary-light)",
+        border: "1px solid var(--border)", borderRadius: 4, padding: "2px 5px",
+        flexShrink: 0, letterSpacing: "0.02em",
+      }}>
+        <LockIcon /> Pro
+      </span>
+    </span>
+  );
+  return (
+    <Section title={lockedTitle} defaultOpen={defaultOpen}>
+      {isPaid ? children : (
+        <>
+          <div style={{ pointerEvents: "none", opacity: 0.55, display: "flex", flexDirection: "column", gap: 8 }}>
+            {children}
+          </div>
+          <a href="/pricing" style={{
+            display: "inline-block", marginTop: 6, fontSize: 11,
+            color: "var(--primary)", fontWeight: 600,
+          }}>
+            Доступно на платных тарифах →
+          </a>
+        </>
+      )}
+    </Section>
+  );
+}
+
+// Премиум-обёртка для под-блока внутри обычной секции (контролы видны, но не кликабельны)
+function PremiumBlock({ isPaid, label, children }: {
+  isPaid: boolean; label: string; children: React.ReactNode;
+}) {
+  if (isPaid) return <>{children}</>;
+  return (
+    <div>
+      <div style={{
+        display: "inline-flex", alignItems: "center", gap: 4,
+        fontSize: 10, fontWeight: 700, lineHeight: 1, marginBottom: 6,
+        color: "var(--primary)", background: "var(--primary-light)",
+        border: "1px solid var(--border)", borderRadius: 4, padding: "2px 5px",
+        letterSpacing: "0.02em",
+      }}>
+        <LockIcon /> Pro · {label}
+      </div>
+      <div style={{ pointerEvents: "none", opacity: 0.55 }}>{children}</div>
+      <a href="/pricing" style={{
+        display: "inline-block", marginTop: 6, fontSize: 11,
+        color: "var(--primary)", fontWeight: 600,
+      }}>
+        Доступно на платных тарифах →
+      </a>
     </div>
   );
 }
@@ -96,6 +174,14 @@ function RangeInput({ labelMin, labelMax, min, max, onMin, onMax }: {
 }
 
 export default function FilterSidebar({ filters, onChange, onReset }: Props) {
+  // Платный = есть тариф и он не "free". Аноним (getMe вернёт null) — не платный.
+  const [isPaid, setIsPaid] = useState(false);
+  useEffect(() => {
+    getMe().then(me => {
+      setIsPaid(!!me?.subscription_plan && me.subscription_plan !== "free");
+    }).catch(() => setIsPaid(false));
+  }, []);
+
   const [regionSearch, setRegionSearch] = useState("");
   const [rubricSections, setRubricSections] = useState<RubricSection[]>([]);
   const [rubricsBySection, setRubricsBySection] = useState<Record<string, Rubric[]>>({});
@@ -340,7 +426,7 @@ export default function FilterSidebar({ filters, onChange, onReset }: Props) {
         </Section>
 
         {/* % НЦ / КС */}
-        <Section title="% НЦ / Кадастровая стоимость">
+        <PremiumSection title="% НЦ / Кадастровая стоимость" isPaid={isPaid}>
           <div style={{ fontSize: 12, color: "var(--text-3)", marginBottom: 4 }}>
             Соотношение начальной цены к кадастровой стоимости
           </div>
@@ -349,7 +435,7 @@ export default function FilterSidebar({ filters, onChange, onReset }: Props) {
             min={filters.pct_cadastral_min} max={filters.pct_cadastral_max}
             onMin={v => set("pct_cadastral_min", v)} onMax={v => set("pct_cadastral_max", v)}
           />
-        </Section>
+        </PremiumSection>
 
         {/* % КС / Рынок */}
         <Section title="% КС / Рыночная стоимость">
@@ -403,9 +489,11 @@ export default function FilterSidebar({ filters, onChange, onReset }: Props) {
             onMin={v => set("area_kn_min", v)} onMax={v => set("area_kn_max", v)}
           />
           <div style={{ marginTop: 6 }}>
-            <CheckGroup items={AREA_DISCREPANCY}
-              selected={(filters.area_discrepancy as string[]) || []}
-              onToggle={v => toggleArr("area_discrepancy", v)} />
+            <PremiumBlock isPaid={isPaid} label="Расхождение площади">
+              <CheckGroup items={AREA_DISCREPANCY}
+                selected={(filters.area_discrepancy as string[]) || []}
+                onToggle={v => toggleArr("area_discrepancy", v)} />
+            </PremiumBlock>
           </div>
         </Section>
 
@@ -549,7 +637,7 @@ export default function FilterSidebar({ filters, onChange, onReset }: Props) {
         </Section>
 
         {/* Переуступка / Субаренда — детектируется по тексту извещения и договора */}
-        <Section title="Переуступка / Субаренда">
+        <PremiumSection title="Переуступка / Субаренда" isPaid={isPaid}>
           <div style={{ fontSize: 12, color: "var(--text-3)", marginBottom: 6 }}>
             Найдено упоминание в тексте извещения или проекта договора
           </div>
@@ -568,20 +656,20 @@ export default function FilterSidebar({ filters, onChange, onReset }: Props) {
           <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 4, fontStyle: "italic" }}>
             Поиск по словам: субаренд, переуступ, уступк, цессия
           </div>
-        </Section>
+        </PremiumSection>
 
         {/* Банкротное имущество */}
-        <Section title="Банкротное имущество">
+        <PremiumSection title="Банкротное имущество" isPaid={isPaid}>
           <label className="checkbox-item">
             <input type="checkbox"
               checked={filters.is_bankruptcy === true}
               onChange={e => set("is_bankruptcy", e.target.checked ? true : undefined)} />
             Только имущество банкротов
           </label>
-        </Section>
+        </PremiumSection>
 
         {/* Даты подачи заявок */}
-        <Section title="Даты подачи заявок">
+        <PremiumSection title="Даты подачи заявок" isPaid={isPaid}>
           <div style={{ fontSize: 12, color: "var(--text-3)", marginBottom: 4 }}>Начало подачи заявок</div>
           <div className="input-range-group">
             <input className="input" type="date"
@@ -602,7 +690,7 @@ export default function FilterSidebar({ filters, onChange, onReset }: Props) {
               value={(filters.submission_end_to as string) || ""}
               onChange={e => set("submission_end_to", e.target.value || undefined)} />
           </div>
-        </Section>
+        </PremiumSection>
 
         {/* ЭТП */}
         <Section title="ЭТП">
