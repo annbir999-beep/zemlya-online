@@ -99,6 +99,7 @@ async def get_current_user_optional(
 PLAN_FILTER_LIMITS = {
     SubscriptionPlan.FREE: 1,
     SubscriptionPlan.PRO: 5,
+    SubscriptionPlan.INVESTOR: 10,
     SubscriptionPlan.BURO: 15,
     SubscriptionPlan.BURO_PLUS: 30,
     SubscriptionPlan.ENTERPRISE: 100,

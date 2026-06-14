@@ -106,6 +106,7 @@ class UserPatchRequest(BaseModel):
 PLAN_ID_TO_ENUM = {
     "free": SubscriptionPlan.FREE,
     "pro": SubscriptionPlan.PRO,
+    "investor": SubscriptionPlan.INVESTOR,
     "buro": SubscriptionPlan.BURO,
     "buro_plus": SubscriptionPlan.BURO_PLUS,
     "enterprise": SubscriptionPlan.ENTERPRISE,

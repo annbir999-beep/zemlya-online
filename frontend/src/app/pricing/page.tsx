@@ -39,6 +39,7 @@ const PLAN_COLORS: Record<string, { from: string; to: string; light: string }> =
   free:        { from: "#64748b", to: "#475569", light: "#f1f5f9" },
   audit_lot:   { from: "#0ea5e9", to: "#0284c7", light: "#e0f2fe" },
   pro:         { from: "#16a34a", to: "#0d9488", light: "#dcfce7" },
+  investor:    { from: "#0d9488", to: "#0e7490", light: "#cffafe" },
   buro:        { from: "#dc2626", to: "#ea580c", light: "#fef3c7" },
   buro_plus:   { from: "#7c3aed", to: "#9333ea", light: "#ede9fe" },
   enterprise:  { from: "#1e293b", to: "#0f172a", light: "#e2e8f0" },
@@ -50,7 +51,7 @@ export default function PricingPage() {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [extras, setExtras] = useState<Extra[]>([]);
   const [periods, setPeriods] = useState<Record<string, string>>({
-    pro: "1", buro: "3", buro_plus: "12",
+    pro: "1", investor: "1", buro: "3", buro_plus: "12",
   });
   const [loading, setLoading] = useState<string | null>(null);
   const [showEnterpriseForm, setShowEnterpriseForm] = useState(false);
@@ -287,7 +288,7 @@ export default function PricingPage() {
             icon="👤"
             title="Частное лицо"
             text="Покупаете участок для себя или инвестиции. Нужны разовые проверки или несколько фильтров."
-            recommended="Аудит лота 490 ₽ или Pro"
+            recommended="Аудит лота 490 ₽, Pro или Инвестор"
           />
           <Audience
             icon="🏢"

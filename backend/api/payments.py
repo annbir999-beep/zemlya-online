@@ -25,6 +25,10 @@ PLAN_PRICES = {
     ("pro", 1): 2900,
     ("pro", 3): 7800,           # ~10% скидка
     ("pro", 12): 27800,         # ~20% скидка
+    # Инвестор — активный частный инвестор (закрывает разрыв Pro→Бюро)
+    ("investor", 1): 7900,
+    ("investor", 3): 21000,     # ~11% скидка
+    ("investor", 12): 75000,    # ~21% скидка
     # Бюро — SMB (бывший Expert)
     ("buro", 1): 29000,
     ("buro", 3): 78000,         # ~10% скидка
@@ -40,13 +44,22 @@ PLAN_PRICES = {
 
 PLAN_FILTERS = {
     "pro": 5,
+    "investor": 10,
     "buro": 15,
     "buro_plus": 30,
+}
+
+# Сколько AI-аудитов начисляется при оплате (× кол-во месяцев). Тарифы без
+# лимита (Бюро/Бюро+/Enterprise) сюда не входят — у них безлимит в api/ai.py.
+PLAN_MONTHLY_AUDITS = {
+    "pro": 30,
+    "investor": 100,
 }
 
 # Маппинг публичных id → enum в БД (значение enum value сохраняется legacy)
 PLAN_ENUM = {
     "pro": SubscriptionPlan.PRO,
+    "investor": SubscriptionPlan.INVESTOR,
     "buro": SubscriptionPlan.BURO,
     "buro_plus": SubscriptionPlan.BURO_PLUS,
 }
@@ -125,12 +138,30 @@ async def get_plans():
                 ],
             },
             {
+                "id": "investor",
+                "name": "Инвестор",
+                "tagline": "Для активного частного инвестора",
+                "prices": {"1": 7900, "3": 21000, "12": 75000},
+                "filters_limit": 10,
+                "popular": True,
+                "audience": "physical",
+                "features": [
+                    "10 сохранённых фильтров",
+                    "100 AI-аудитов лотов в месяц",
+                    "preDD аудит договора аренды — 1 в месяц",
+                    "Мониторинг района на карте: алерты по полигону",
+                    "Приоритетный Telegram-бот",
+                    "Алерты о снижении цены повторных торгов",
+                    "Контакты администрации, калькулятор окупаемости",
+                    "Экспорт в Excel/CSV, сравнение участков",
+                ],
+            },
+            {
                 "id": "buro",
                 "name": "Бюро",
                 "tagline": "Для риелторов и малых девелоперов",
                 "prices": {"1": 29000, "3": 78000, "12": 290000},
                 "filters_limit": 15,
-                "popular": True,
                 "audience": "smb",
                 "features": [
                     "15 сохранённых фильтров",
@@ -469,10 +500,11 @@ async def yukassa_webhook(request: Request, db: AsyncSession = Depends(get_db)):
         user.subscription_plan = PLAN_ENUM[sub.plan]
         user.subscription_expires_at = base + timedelta(days=30 * sub.months)
         user.saved_filters_limit = PLAN_FILTERS.get(sub.plan, user.saved_filters_limit)
-        # Pro: пополнение разовых AI-аудитов (30/мес × кол-во месяцев).
+        # Pro/Инвестор: пополнение разовых AI-аудитов (N/мес × кол-во месяцев).
         # Бюро/Бюро+/Enterprise — без лимита (UNLIMITED_PLANS в api/ai.py), пополнение не нужно.
-        if sub.plan == "pro":
-            user.free_audits_left = (user.free_audits_left or 0) + 30 * (sub.months or 1)
+        monthly_audits = PLAN_MONTHLY_AUDITS.get(sub.plan)
+        if monthly_audits:
+            user.free_audits_left = (user.free_audits_left or 0) + monthly_audits * (sub.months or 1)
         # Бонус рефереру при первой успешной покупке
         await _credit_referrer_first_purchase(db, user, sub.id)
 

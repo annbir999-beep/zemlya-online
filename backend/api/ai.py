@@ -12,9 +12,10 @@ from services.ai_assessment import assess_lot, lot_to_ai_dict
 router = APIRouter()
 
 # AI-оценка во время beta открыта для всех залогиненных
-AI_ALLOWED_PLANS = {SubscriptionPlan.FREE, SubscriptionPlan.PRO, SubscriptionPlan.BURO, SubscriptionPlan.BURO_PLUS, SubscriptionPlan.ENTERPRISE}
+AI_ALLOWED_PLANS = {SubscriptionPlan.FREE, SubscriptionPlan.PRO, SubscriptionPlan.INVESTOR, SubscriptionPlan.BURO, SubscriptionPlan.BURO_PLUS, SubscriptionPlan.ENTERPRISE}
 
 
+# Инвестор НЕ безлимитный — у него 100 аудитов/мес через пополнение free_audits_left.
 UNLIMITED_PLANS = {SubscriptionPlan.BURO, SubscriptionPlan.BURO_PLUS, SubscriptionPlan.ENTERPRISE}
 
 

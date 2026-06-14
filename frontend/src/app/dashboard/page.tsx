@@ -8,7 +8,7 @@ import ReferralCard from "@/components/ReferralCard";
 import CreateAlertModal from "@/components/CreateAlertModal";
 
 const PLAN_LABEL: Record<string, string> = {
-  free: "Бесплатный", personal: "Личный", expert: "Эксперт", landlord: "Лендлорд",
+  free: "Бесплатный", personal: "Личный", investor: "Инвестор", expert: "Эксперт", landlord: "Лендлорд",
 };
 const CHANNEL_LABEL: Record<string, string> = { email: "Email", telegram: "Telegram", both: "Email + Telegram" };
 
@@ -254,6 +254,7 @@ export default function DashboardPage() {
               audit_lot: "AI-аудит лота",
               predd: "preDD аудит договора",
               pro: "Подписка Pro",
+              investor: "Подписка Инвестор",
               buro: "Подписка Бюро",
               buro_plus: "Подписка Бюро+",
             };
