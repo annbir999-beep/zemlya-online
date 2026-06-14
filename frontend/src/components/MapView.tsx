@@ -177,9 +177,12 @@ export default function MapView({ points, selectedId, heatmap, mode = "points" }
         zoomControl: true,
       });
 
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a>',
-        maxZoom: 19,
+      // CartoDB Voyager — современный чистый стиль с подписями, бесплатный,
+      // без API-ключа. {r} даёт ретина-плитки на HiDPI-экранах.
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+        attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a> © <a href="https://carto.com/attributions">CARTO</a>',
+        subdomains: "abcd",
+        maxZoom: 20,
       }).addTo(map);
 
       const layer = L.layerGroup().addTo(map);

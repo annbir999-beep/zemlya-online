@@ -40,14 +40,14 @@ export default function Header() {
           width: 36, height: 36, borderRadius: 10,
           background: "linear-gradient(135deg, #16a34a 0%, #0d9488 100%)",
           display: "inline-flex", alignItems: "center", justifyContent: "center",
-          color: "white", fontWeight: 800, fontSize: 18,
+          color: "white", fontWeight: 800, fontSize: 15, letterSpacing: "-0.03em",
           boxShadow: "0 2px 8px rgba(13, 148, 136, 0.3)",
         }}>
-          З
+          ТЗ
         </span>
         <span style={{ display: "flex", flexDirection: "column", lineHeight: 1 }}>
           <span style={{ fontSize: 17, fontWeight: 800, letterSpacing: "-0.02em", color: "var(--text)" }}>
-            земля<span style={{ color: "#16a34a" }}>.online</span>
+            Торги<span style={{ color: "#16a34a" }}> Земли</span>
           </span>
           <span style={{ fontSize: 10, color: "var(--text-3)", marginTop: 2, letterSpacing: "0.05em", textTransform: "uppercase" }}>
             аукционы земли РФ

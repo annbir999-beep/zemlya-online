@@ -26,7 +26,10 @@ function MiniMap({ lat, lng, title }: { lat: number; lng: number; title?: string
       const L = mod.default;
       if (!ref.current || (ref.current as unknown as Record<string,unknown>)._leaflet_id) return;
       const map = L.map(ref.current, { center: [lat, lng], zoom: 13, zoomControl: true });
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(map);
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+        subdomains: "abcd", maxZoom: 20,
+        attribution: '© OpenStreetMap © CARTO',
+      }).addTo(map);
       L.marker([lat, lng]).addTo(map).bindPopup(title || "Участок").openPopup();
     });
     return () => {
