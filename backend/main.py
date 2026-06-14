@@ -27,7 +27,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Земля.ПРО — API",
+    title="Торги Земли — API",
     description="Агрегатор земельных аукционов России",
     version="1.0.0",
     lifespan=lifespan,

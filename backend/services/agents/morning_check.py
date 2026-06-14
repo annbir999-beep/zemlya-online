@@ -105,7 +105,7 @@ class MorningCheckAgent(BaseAgent):
             warnings.append(f"⚠️ Упавших запусков агентов за сутки: {failed_agents}")
 
         report = (
-            f"☀️ *Утренний отчёт — Земля.ОНЛАЙН*\n"
+            f"☀️ *Утренний отчёт — Торги Земли*\n"
             f"{now.strftime('%d.%m.%Y')}\n\n"
             f"📊 *Лоты*\n"
             f"• Активных: {active:,}\n".replace(",", " ") +

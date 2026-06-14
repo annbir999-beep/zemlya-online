@@ -1,7 +1,7 @@
 import ArticleLayout from "@/components/ArticleLayout";
 
 export const metadata = {
-  title: "Как читать документацию лота torgi.gov.ru — Земля.ОНЛАЙН",
+  title: "Как читать документацию лота torgi.gov.ru — Торги Земли",
   description: "Извещение, проект договора, ТУ и схема расположения. Что искать в каждом документе и как не упустить риски при покупке земли с торгов.",
 };
 

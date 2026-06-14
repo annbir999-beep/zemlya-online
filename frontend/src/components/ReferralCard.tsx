@@ -31,7 +31,7 @@ export default function ReferralCard() {
   };
 
   const shareTelegram = () => {
-    const text = `Земля.ОНЛАЙН — AI-аудит земельных лотов с torgi.gov. Регистрируйся по моей ссылке, и оба получим бесплатный аудит:`;
+    const text = `Торги Земли — AI-аудит земельных лотов с torgi.gov. Регистрируйся по моей ссылке, и оба получим бесплатный аудит:`;
     const url = `https://t.me/share/url?url=${encodeURIComponent(data.url)}&text=${encodeURIComponent(text)}`;
     window.open(url, "_blank");
   };
@@ -73,7 +73,7 @@ export default function ReferralCard() {
           ✈️ Поделиться в Telegram
         </button>
         <a
-          href={`mailto:?subject=${encodeURIComponent("Земля.ОНЛАЙН — AI-аудит земельных лотов")}&body=${encodeURIComponent("Регистрируйся по моей ссылке, и оба получим бесплатный AI-аудит лота: " + data.url)}`}
+          href={`mailto:?subject=${encodeURIComponent("Торги Земли — AI-аудит земельных лотов")}&body=${encodeURIComponent("Регистрируйся по моей ссылке, и оба получим бесплатный AI-аудит лота: " + data.url)}`}
           className="btn btn-secondary btn-sm"
         >
           📧 Email

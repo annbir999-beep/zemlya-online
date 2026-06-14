@@ -29,9 +29,9 @@ async function fetchPost(slug: string): Promise<Post | null> {
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const post = await fetchPost(slug);
-  if (!post) return { title: "Статья не найдена — Земля.ОНЛАЙН" };
+  if (!post) return { title: "Статья не найдена — Торги Земли" };
   return {
-    title: `${post.title} — Земля.ОНЛАЙН`,
+    title: `${post.title} — Торги Земли`,
     description: post.excerpt || undefined,
   };
 }

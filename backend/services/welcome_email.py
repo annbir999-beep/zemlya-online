@@ -18,7 +18,7 @@ def _build_html(user: User) -> str:
 <body style="font-family:Arial,sans-serif;max-width:640px;margin:0 auto;padding:20px;color:#1f2937">
 
 <div style="background:linear-gradient(135deg,#16a34a,#0d9488);padding:28px;border-radius:14px 14px 0 0;color:white">
-  <h1 style="margin:0;font-size:26px;font-weight:800">🌍 Добро пожаловать в Земля.ОНЛАЙН!</h1>
+  <h1 style="margin:0;font-size:26px;font-weight:800">🌍 Добро пожаловать в Торги Земли!</h1>
   <p style="margin:8px 0 0;opacity:0.9;font-size:15px">
     Спасибо за регистрацию, {name}. Мы помогаем находить выгодные земельные участки на торгах с torgi.gov.
   </p>
@@ -80,7 +80,7 @@ async def send_welcome_email(user: User) -> None:
     try:
         await _send_via_resend(
             to=user.email,
-            subject="🌍 Добро пожаловать в Земля.ОНЛАЙН — ваш первый AI-аудит бесплатно",
+            subject="🌍 Добро пожаловать в Торги Земли — ваш первый AI-аудит бесплатно",
             html=_build_html(user),
         )
     except Exception as e:

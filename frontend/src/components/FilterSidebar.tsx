@@ -74,12 +74,21 @@ function LockIcon() {
   );
 }
 
-// Премиум-секция: для не-платных показывает замок/бейдж, дизейблит контролы
-// (видны, но не кликабельны) и даёт подсказку-ссылку на /pricing.
-function PremiumSection({ title, isPaid, children, defaultOpen = false }: {
-  title: string; isPaid: boolean; children: React.ReactNode; defaultOpen?: boolean;
+// Уровень замка по требуемому рангу тарифа: 1 = Pro, 2 = Инвестор.
+function _lockLabel(requiredRank: number): string {
+  return requiredRank >= 2 ? "Инвестор" : "Pro";
+}
+function _lockLink(requiredRank: number): string {
+  return requiredRank >= 2 ? "Доступно с тарифа Инвестор →" : "Доступно с тарифа Pro →";
+}
+
+// Премиум-секция: если userRank < requiredRank — показывает замок/бейдж уровня,
+// дизейблит контролы (видны, но не кликабельны) и даёт ссылку на /pricing.
+function PremiumSection({ title, requiredRank, userRank, children, defaultOpen = false }: {
+  title: string; requiredRank: number; userRank: number; children: React.ReactNode; defaultOpen?: boolean;
 }) {
-  const lockedTitle = isPaid ? title : (
+  const unlocked = userRank >= requiredRank;
+  const lockedTitle = unlocked ? title : (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 6, minWidth: 0 }}>
       <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{title}</span>
       <span style={{
@@ -89,13 +98,13 @@ function PremiumSection({ title, isPaid, children, defaultOpen = false }: {
         border: "1px solid var(--border)", borderRadius: 4, padding: "2px 5px",
         flexShrink: 0, letterSpacing: "0.02em",
       }}>
-        <LockIcon /> Pro
+        <LockIcon /> {_lockLabel(requiredRank)}
       </span>
     </span>
   );
   return (
     <Section title={lockedTitle} defaultOpen={defaultOpen}>
-      {isPaid ? children : (
+      {unlocked ? children : (
         <>
           <div style={{ pointerEvents: "none", opacity: 0.55, display: "flex", flexDirection: "column", gap: 8 }}>
             {children}
@@ -104,7 +113,7 @@ function PremiumSection({ title, isPaid, children, defaultOpen = false }: {
             display: "inline-block", marginTop: 6, fontSize: 11,
             color: "var(--primary)", fontWeight: 600,
           }}>
-            Доступно на платных тарифах →
+            {_lockLink(requiredRank)}
           </a>
         </>
       )}
@@ -113,10 +122,10 @@ function PremiumSection({ title, isPaid, children, defaultOpen = false }: {
 }
 
 // Премиум-обёртка для под-блока внутри обычной секции (контролы видны, но не кликабельны)
-function PremiumBlock({ isPaid, label, children }: {
-  isPaid: boolean; label: string; children: React.ReactNode;
+function PremiumBlock({ requiredRank, userRank, label, children }: {
+  requiredRank: number; userRank: number; label: string; children: React.ReactNode;
 }) {
-  if (isPaid) return <>{children}</>;
+  if (userRank >= requiredRank) return <>{children}</>;
   return (
     <div>
       <div style={{
@@ -126,14 +135,14 @@ function PremiumBlock({ isPaid, label, children }: {
         border: "1px solid var(--border)", borderRadius: 4, padding: "2px 5px",
         letterSpacing: "0.02em",
       }}>
-        <LockIcon /> Pro · {label}
+        <LockIcon /> {_lockLabel(requiredRank)} · {label}
       </div>
       <div style={{ pointerEvents: "none", opacity: 0.55 }}>{children}</div>
       <a href="/pricing" style={{
         display: "inline-block", marginTop: 6, fontSize: 11,
         color: "var(--primary)", fontWeight: 600,
       }}>
-        Доступно на платных тарифах →
+        {_lockLink(requiredRank)}
       </a>
     </div>
   );
@@ -173,13 +182,19 @@ function RangeInput({ labelMin, labelMax, min, max, onMin, onMax }: {
   );
 }
 
+// Ранг тарифа по значению subscription_plan (enum value). Аноним/неизвестно = 0.
+const PLAN_RANK: Record<string, number> = {
+  free: 0, personal: 1, investor: 2, expert: 3, landlord: 4, enterprise: 5,
+};
+
 export default function FilterSidebar({ filters, onChange, onReset }: Props) {
-  // Платный = есть тариф и он не "free". Аноним (getMe вернёт null) — не платный.
-  const [isPaid, setIsPaid] = useState(false);
+  // Ранг тарифа: 0 Free/аноним, 1 Pro, 2 Инвестор, 3 Бюро, 4 Бюро+, 5 Enterprise.
+  const [userRank, setUserRank] = useState(0);
   useEffect(() => {
     getMe().then(me => {
-      setIsPaid(!!me?.subscription_plan && me.subscription_plan !== "free");
-    }).catch(() => setIsPaid(false));
+      const plan = me?.subscription_plan;
+      setUserRank((plan && PLAN_RANK[plan]) || 0);
+    }).catch(() => setUserRank(0));
   }, []);
 
   const [regionSearch, setRegionSearch] = useState("");
@@ -308,8 +323,8 @@ export default function FilterSidebar({ filters, onChange, onReset }: Props) {
           </select>
         </Section>
 
-        {/* Рентабельность 🔥 */}
-        <Section title="🔥 Рентабельность" defaultOpen>
+        {/* Рентабельность 🔥 (Pro+) */}
+        <PremiumSection title="🔥 Рентабельность" requiredRank={1} userRank={userRank} defaultOpen>
           <div style={{ fontSize: 12, color: "var(--text-3)", marginBottom: 6 }}>Минимальный скор (0-100)</div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
             {[null, 40, 60, 70, 80].map(v => (
@@ -363,10 +378,10 @@ export default function FilterSidebar({ filters, onChange, onReset }: Props) {
           <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 4, fontStyle: "italic" }}>
             Лоты, у которых начальная цена снизилась — частые повторные торги.
           </div>
-        </Section>
+        </PremiumSection>
 
-        {/* Ликвидность 💧 */}
-        <Section title="💧 Ликвидность" defaultOpen>
+        {/* Ликвидность 💧 (Pro+) */}
+        <PremiumSection title="💧 Ликвидность" requiredRank={1} userRank={userRank} defaultOpen>
           <div style={{ fontSize: 12, color: "var(--text-3)", marginBottom: 6 }}>
             По близости к крупному городу
           </div>
@@ -391,7 +406,7 @@ export default function FilterSidebar({ filters, onChange, onReset }: Props) {
             Средняя: ≤100 км до города 100k+&nbsp;·&nbsp;
             Низкая: дальше 100 км или у малого города
           </div>
-        </Section>
+        </PremiumSection>
 
         {/* Статус */}
         <Section title="Статус торгов" defaultOpen>
@@ -426,7 +441,7 @@ export default function FilterSidebar({ filters, onChange, onReset }: Props) {
         </Section>
 
         {/* % НЦ / КС */}
-        <PremiumSection title="% НЦ / Кадастровая стоимость" isPaid={isPaid}>
+        <PremiumSection title="% НЦ / Кадастровая стоимость" requiredRank={2} userRank={userRank}>
           <div style={{ fontSize: 12, color: "var(--text-3)", marginBottom: 4 }}>
             Соотношение начальной цены к кадастровой стоимости
           </div>
@@ -437,8 +452,8 @@ export default function FilterSidebar({ filters, onChange, onReset }: Props) {
           />
         </PremiumSection>
 
-        {/* % КС / Рынок */}
-        <Section title="% КС / Рыночная стоимость">
+        {/* % КС / Рынок (Инвестор+) */}
+        <PremiumSection title="% КС / Рыночная стоимость" requiredRank={2} userRank={userRank}>
           <div style={{ fontSize: 12, color: "var(--text-3)", marginBottom: 4 }}>
             КС к рынку (медиана ЦИАН/Авито × площадь). &lt;100 — КС ниже рынка, &gt;100 — КС завышена.
           </div>
@@ -447,7 +462,7 @@ export default function FilterSidebar({ filters, onChange, onReset }: Props) {
             min={filters.cadastral_to_market_min} max={filters.cadastral_to_market_max}
             onMin={v => set("cadastral_to_market_min", v)} onMax={v => set("cadastral_to_market_max", v)}
           />
-        </Section>
+        </PremiumSection>
 
         {/* Кадастровая стоимость */}
         <Section title="Кадастровая стоимость, ₽">
@@ -489,7 +504,7 @@ export default function FilterSidebar({ filters, onChange, onReset }: Props) {
             onMin={v => set("area_kn_min", v)} onMax={v => set("area_kn_max", v)}
           />
           <div style={{ marginTop: 6 }}>
-            <PremiumBlock isPaid={isPaid} label="Расхождение площади">
+            <PremiumBlock requiredRank={1} userRank={userRank} label="Расхождение площади">
               <CheckGroup items={AREA_DISCREPANCY}
                 selected={(filters.area_discrepancy as string[]) || []}
                 onToggle={v => toggleArr("area_discrepancy", v)} />
@@ -637,7 +652,7 @@ export default function FilterSidebar({ filters, onChange, onReset }: Props) {
         </Section>
 
         {/* Переуступка / Субаренда — детектируется по тексту извещения и договора */}
-        <PremiumSection title="Переуступка / Субаренда" isPaid={isPaid}>
+        <PremiumSection title="Переуступка / Субаренда" requiredRank={2} userRank={userRank}>
           <div style={{ fontSize: 12, color: "var(--text-3)", marginBottom: 6 }}>
             Найдено упоминание в тексте извещения или проекта договора
           </div>
@@ -659,7 +674,7 @@ export default function FilterSidebar({ filters, onChange, onReset }: Props) {
         </PremiumSection>
 
         {/* Банкротное имущество */}
-        <PremiumSection title="Банкротное имущество" isPaid={isPaid}>
+        <PremiumSection title="Банкротное имущество" requiredRank={1} userRank={userRank}>
           <label className="checkbox-item">
             <input type="checkbox"
               checked={filters.is_bankruptcy === true}
@@ -669,7 +684,7 @@ export default function FilterSidebar({ filters, onChange, onReset }: Props) {
         </PremiumSection>
 
         {/* Даты подачи заявок */}
-        <PremiumSection title="Даты подачи заявок" isPaid={isPaid}>
+        <PremiumSection title="Даты подачи заявок" requiredRank={1} userRank={userRank}>
           <div style={{ fontSize: 12, color: "var(--text-3)", marginBottom: 4 }}>Начало подачи заявок</div>
           <div className="input-range-group">
             <input className="input" type="date"

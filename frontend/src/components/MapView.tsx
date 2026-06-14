@@ -177,13 +177,34 @@ export default function MapView({ points, selectedId, heatmap, mode = "points" }
         zoomControl: true,
       });
 
-      // CartoDB Voyager — современный чистый стиль с подписями, бесплатный,
-      // без API-ключа. {r} даёт ретина-плитки на HiDPI-экранах.
-      L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
-        attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a> © <a href="https://carto.com/attributions">CARTO</a>',
-        subdomains: "abcd",
-        maxZoom: 20,
-      }).addTo(map);
+      // Переключаемые базовые слои (как в навигаторе: схема/спутник/гибрид/топо).
+      // Схема — стандартный OSM: яркий, с русскими подписями в РФ.
+      const osmAttr = '© <a href="https://openstreetmap.org">OpenStreetMap</a>';
+      const esriAttr = '© <a href="https://www.esri.com">Esri</a>, Maxar, Earthstar Geographics';
+
+      const schema = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: osmAttr, maxZoom: 19,
+      });
+      const satellite = L.tileLayer(
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        { attribution: esriAttr, maxZoom: 19 },
+      );
+      const esriLabels = L.tileLayer(
+        "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
+        { maxZoom: 19 },
+      );
+      // Гибрид — спутник + подписи городов/границ поверх
+      const hybrid = L.layerGroup([satellite, esriLabels]);
+      const topo = L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", {
+        attribution: `${osmAttr}, SRTM | © OpenTopoMap`, maxZoom: 17,
+      });
+
+      schema.addTo(map);  // слой по умолчанию
+      L.control.layers(
+        { "Схема": schema, "Спутник": satellite, "Гибрид": hybrid, "Топо": topo },
+        {},
+        { position: "topright", collapsed: true },
+      ).addTo(map);
 
       const layer = L.layerGroup().addTo(map);
       const heatLayer = L.layerGroup();

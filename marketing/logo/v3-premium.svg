@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- V3 ПРЕМИУМ: тёмный изумруд + золотая «З» — позиционирование «инвестиции» -->
+  <defs>
+    <radialGradient id="bg3" cx="0.3" cy="0.3" r="0.9">
+      <stop offset="0%" stop-color="#0f3a1f"/>
+      <stop offset="100%" stop-color="#052010"/>
+    </radialGradient>
+    <linearGradient id="gold3" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fbbf24"/>
+      <stop offset="50%" stop-color="#d97706"/>
+      <stop offset="100%" stop-color="#92400e"/>
+    </linearGradient>
+    <filter id="glow3">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Фон -->
+  <rect width="512" height="512" rx="96" fill="url(#bg3)"/>
+
+  <!-- Тонкая золотая рамка-инкрустация -->
+  <rect x="24" y="24" width="464" height="464" rx="76" fill="none"
+        stroke="url(#gold3)" stroke-width="2" opacity="0.5"/>
+
+  <!-- Буква «З» — серифная, золотая, с свечением -->
+  <text x="256" y="370" font-family="'Playfair Display', Georgia, serif" font-size="400"
+        font-weight="700" text-anchor="middle" fill="url(#gold3)" filter="url(#glow3)">З</text>
+
+  <!-- Микро-подпись внизу -->
+  <text x="256" y="460" font-family="'Inter', Arial, sans-serif" font-size="22"
+        font-weight="600" text-anchor="middle" fill="#fbbf24" letter-spacing="6"
+        opacity="0.7">ЗЕМЛЯ.ОНЛАЙН</text>
+</svg>

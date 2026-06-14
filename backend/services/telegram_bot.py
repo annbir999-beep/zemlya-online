@@ -1,5 +1,5 @@
 """
-Telegram-бот для Земля.ОНЛАЙН.
+Telegram-бот для Торги Земли.
 
 Принимает webhook-обновления от Telegram и обрабатывает команды:
   /start              — приветствие, инструкции
@@ -111,7 +111,7 @@ async def set_webhook(url: str, secret_token: Optional[str] = None) -> dict:
 
 
 HELP_TEXT = (
-    "*Земля.ОНЛАЙН — Telegram-бот*\n\n"
+    "*Торги Земли — Telegram-бот*\n\n"
     "Я присылаю уведомления о новых земельных лотах по вашим фильтрам.\n\n"
     "*Команды:*\n"
     "/link `КОД` — привязать аккаунт (код берётся в кабинете на сайте)\n"
@@ -158,7 +158,7 @@ async def _cmd_start(db: AsyncSession, chat_id: int, args: str, user: Optional[U
 
     await send_message(
         chat_id,
-        "👋 *Земля.ОНЛАЙН* — агрегатор земельных аукционов.\n\n"
+        "👋 *Торги Земли* — агрегатор земельных аукционов.\n\n"
         f"Чтобы получать уведомления, зайди в кабинет на {SITE_URL}/dashboard, "
         "нажми *Привязать Telegram* и пришли мне код командой:\n"
         "`/link КОД`\n\n"

@@ -5,7 +5,7 @@ export default function Footer() {
     <footer className="site-footer">
       <div className="site-footer-inner">
         <div className="site-footer-copy">
-          © 2026 Земля.ОНЛАЙН · ИП Бирюкова А.И. · ИНН 753611302731
+          © 2026 Торги Земли · ИП Бирюкова А.И. · ИНН 753611302731
         </div>
         <div className="site-footer-links">
           <Link href="/faq">FAQ и контакты</Link>

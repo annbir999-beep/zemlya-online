@@ -105,7 +105,7 @@ def _build_email_html(user: User, alert: Alert, lots: List[Lot]) -> str:
 <head><meta charset="utf-8"></head>
 <body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#333;">
   <div style="background:#2563eb;padding:20px;border-radius:8px 8px 0 0;">
-    <h1 style="color:#fff;margin:0;font-size:22px;">🌍 Земля.ПРО</h1>
+    <h1 style="color:#fff;margin:0;font-size:22px;">🌍 Торги Земли</h1>
     <p style="color:#bfdbfe;margin:4px 0 0;">Новые участки по вашему фильтру</p>
   </div>
   <div style="background:#f9fafb;padding:20px;border-radius:0 0 8px 8px;">
@@ -115,7 +115,7 @@ def _build_email_html(user: User, alert: Alert, lots: List[Lot]) -> str:
     {more_html}
     <hr style="border:none;border-top:1px solid #e0e0e0;margin:20px 0;">
     <p style="font-size:12px;color:#999;">
-      Вы получаете это письмо, потому что настроили алерт на Земля.ПРО.<br>
+      Вы получаете это письмо, потому что настроили алерт на Торги Земли.<br>
       <a href="{settings.SITE_URL}/dashboard/alerts" style="color:#2563eb;">Управление алертами</a>
     </p>
   </div>
@@ -190,7 +190,7 @@ async def send_payment_email(user: User, plan: str, amount: float, *,
         <a href="{cta_url}" style="display:inline-block;padding:10px 22px;background:#0d9488;color:white;border-radius:8px;text-decoration:none;font-weight:600;">{cta_text}</a>
       </p>
       <hr style="border:none;border-top:1px solid #eee;margin:24px 0;">
-      <p style="font-size:12px;color:#888;">Земля.ОНЛАЙН — агрегатор земельных аукционов РФ.<br>
+      <p style="font-size:12px;color:#888;">Торги Земли — агрегатор земельных аукционов РФ.<br>
       Вопросы: anna@земля.online · <a href="https://t.me/ZemlyaOnlineBot">@ZemlyaOnlineBot</a></p>
     </div></body></html>"""
 

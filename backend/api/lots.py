@@ -444,11 +444,26 @@ def _get_tor_zone(region_code):
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
-# Премиум-фильтры — продвинутая аналитика, доступная только платным тарифам.
-# Для FREE и анонимов значения обнуляются перед фильтрацией: фильтр виден в UI
-# с замком, но через прямой API-запрос игнорируется (замок не обходится).
-def _is_paid(user) -> bool:
-    return user is not None and user.subscription_plan != SubscriptionPlan.FREE
+# Двухуровневый гейт премиум-фильтров. Значения обнуляются перед фильтрацией
+# по рангу тарифа: фильтр виден в UI с замком, но через прямой API игнорируется.
+#   rank>=1 (Pro+):      скор, ликвидность, дисконт, банкротные, расхождение
+#                        площадей, даты подачи, % задатка — аналитика.
+#   rank>=2 (Инвестор+): % НЦ/КС, % КС/Рынок, переуступка/субаренда —
+#                        стратегические, сразу показывают схему заработка.
+PLAN_RANK = {
+    SubscriptionPlan.FREE: 0,
+    SubscriptionPlan.PRO: 1,
+    SubscriptionPlan.INVESTOR: 2,
+    SubscriptionPlan.BURO: 3,
+    SubscriptionPlan.BURO_PLUS: 4,
+    SubscriptionPlan.ENTERPRISE: 5,
+}
+
+
+def _plan_rank(user) -> int:
+    if user is None:
+        return 0
+    return PLAN_RANK.get(user.subscription_plan, 0)
 
 
 @router.get("", response_model=LotsResponse)
@@ -534,14 +549,22 @@ async def get_lots(
     user: Optional[User] = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db),
 ):
-    # Премиум-фильтры доступны только платным тарифам (см. _is_paid)
-    if not _is_paid(user):
-        pct_cadastral_min = pct_cadastral_max = None
+    # Двухуровневый гейт премиум-фильтров (см. PLAN_RANK)
+    rank = _plan_rank(user)
+    if rank < 1:  # Pro+
+        score_min = badges_min = None
+        liquidity = None
+        discount_min = None
+        price_drop_min = None
         area_discrepancy = None
-        sublease_allowed = assignment_allowed = None
         is_bankruptcy = None
+        deposit_pct_min = deposit_pct_max = None
         submission_start_from = submission_start_to = None
         submission_end_from = submission_end_to = None
+    if rank < 2:  # Инвестор+
+        pct_cadastral_min = pct_cadastral_max = None
+        cadastral_to_market_min = cadastral_to_market_max = None
+        sublease_allowed = assignment_allowed = None
 
     conditions = build_filters(
         status=status, region_codes=region,
@@ -1353,12 +1376,19 @@ async def get_lots_for_map(
     user: Optional[User] = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db),
 ):
-    # Премиум-фильтры доступны только платным тарифам (см. _is_paid)
-    if not _is_paid(user):
-        pct_cadastral_min = pct_cadastral_max = None
-        sublease_allowed = assignment_allowed = None
+    # Двухуровневый гейт премиум-фильтров (см. PLAN_RANK)
+    rank = _plan_rank(user)
+    if rank < 1:  # Pro+
+        score_min = badges_min = None
+        liquidity = None
+        discount_min = None
+        price_drop_min = None
         is_bankruptcy = None
         submission_end_from = submission_end_to = None
+    if rank < 2:  # Инвестор+
+        pct_cadastral_min = pct_cadastral_max = None
+        cadastral_to_market_min = cadastral_to_market_max = None
+        sublease_allowed = assignment_allowed = None
 
     conditions = build_filters(
         status=status, region_codes=region,
