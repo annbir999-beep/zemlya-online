@@ -122,8 +122,14 @@ async def send_lead_email(email: str, token: str, step: int) -> bool:
         pdf_b64 = base64.b64encode(get_checklist_pdf()).decode()
         attachments = [{"filename": "Chek-list-12-proverok-uchastka.pdf", "content": pdf_b64}]
 
+    # List-Unsubscribe — Gmail/Mail показывают кнопку «Отписаться» и поднимают
+    # инбокс-репутацию рассылки. One-Click по RFC 8058.
+    headers = {
+        "List-Unsubscribe": f"<{unsub_url}>",
+        "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+    }
     try:
-        await _send_via_resend(to=email, subject=subject, html=html, attachments=attachments)
+        await _send_via_resend(to=email, subject=subject, html=html, attachments=attachments, headers=headers)
         return True
     except Exception as e:
         print(f"[lead-drip] send error step={step} email={email}: {type(e).__name__}: {e}")

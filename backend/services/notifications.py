@@ -9,13 +9,17 @@ from models.lot import Lot
 from services.telegram_bot import _tg_client
 
 
-async def _send_via_resend(*, to: str, subject: str, html: str, attachments: list | None = None) -> None:
+async def _send_via_resend(
+    *, to: str, subject: str, html: str,
+    attachments: list | None = None, headers: dict | None = None,
+) -> None:
     """Отправка письма через Resend HTTP API.
 
     Используется вместо aiosmtplib, потому что VPS Timeweb блокирует
     исходящие SMTP-порты (25/465/587). Resend ходит по HTTPS — не блокируется.
 
     attachments — список {"filename": str, "content": base64-строка} для вложений.
+    headers — доп. SMTP-заголовки (напр. List-Unsubscribe для доставляемости).
     """
     if not settings.RESEND_API_KEY:
         print("[email] RESEND_API_KEY пуст — письмо не отправлено")
@@ -29,6 +33,8 @@ async def _send_via_resend(*, to: str, subject: str, html: str, attachments: lis
     }
     if attachments:
         payload["attachments"] = attachments
+    if headers:
+        payload["headers"] = headers
 
     async with httpx.AsyncClient(timeout=20) as client:
         resp = await client.post(

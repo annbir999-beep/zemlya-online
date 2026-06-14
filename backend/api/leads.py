@@ -77,12 +77,23 @@ async def download_checklist():
     )
 
 
-@router.get("/unsubscribe", response_class=HTMLResponse)
-async def unsubscribe(token: str, db: AsyncSession = Depends(get_db)):
+async def _do_unsubscribe(token: str, db: AsyncSession) -> None:
     lead = (await db.execute(select(Lead).where(Lead.token == token))).scalar_one_or_none()
     if lead:
         lead.unsubscribed = True
         await db.commit()
+
+
+@router.post("/unsubscribe")
+async def unsubscribe_oneclick(token: str, db: AsyncSession = Depends(get_db)):
+    """One-Click отписка (RFC 8058) — Gmail/Mail шлют сюда POST."""
+    await _do_unsubscribe(token, db)
+    return {"ok": True}
+
+
+@router.get("/unsubscribe", response_class=HTMLResponse)
+async def unsubscribe(token: str, db: AsyncSession = Depends(get_db)):
+    await _do_unsubscribe(token, db)
     return HTMLResponse(
         "<html><head><meta charset='utf-8'><title>Отписка</title></head>"
         "<body style='font-family:sans-serif;text-align:center;padding:60px;color:#1f2937'>"
