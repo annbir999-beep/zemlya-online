@@ -102,6 +102,17 @@ async def _check_alerts():
                     Lot.nearest_city_distance_km > 100,
                     Lot.nearest_city_population < 100_000,
                 ))
+            # Мониторинг области: лот внутри нарисованного полигона (PostGIS)
+            if filters.get("polygon"):
+                import json as _json
+                from sqlalchemy import func as _gfunc
+                ring = list(filters["polygon"])
+                if ring and ring[0] != ring[-1]:
+                    ring.append(ring[0])  # GeoJSON-кольцо должно быть замкнуто
+                geojson = _json.dumps({"type": "Polygon", "coordinates": [ring]})
+                poly = _gfunc.ST_SetSRID(_gfunc.ST_GeomFromGeoJSON(geojson), 4326)
+                conditions.append(Lot.location.isnot(None))
+                conditions.append(_gfunc.ST_Contains(poly, Lot.location))
 
             lots_result = await db.execute(select(Lot).where(and_(*conditions)).limit(20))
             new_lots = lots_result.scalars().all()

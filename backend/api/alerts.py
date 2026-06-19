@@ -6,10 +6,16 @@ from typing import Optional, List
 
 from db.database import get_db
 from models.alert import Alert, AlertChannel
-from models.user import User
+from models.user import User, SubscriptionPlan
 from api.users import get_current_user
 
 router = APIRouter()
+
+# Мониторинг полигона на карте — фича тарифа Инвестор и выше.
+POLYGON_PLANS = {
+    SubscriptionPlan.INVESTOR, SubscriptionPlan.BURO,
+    SubscriptionPlan.BURO_PLUS, SubscriptionPlan.ENTERPRISE,
+}
 
 
 class AlertFilters(BaseModel):
@@ -40,12 +46,24 @@ class AlertFilters(BaseModel):
     deposit_pct_max: Optional[float] = None
     sublease_allowed: Optional[bool] = None
     assignment_allowed: Optional[bool] = None
+    # Мониторинг области на карте: кольцо полигона как список [lng, lat] точек.
+    # Алерт срабатывает по новым лотам, чьи координаты внутри полигона. Инвестор+.
+    polygon: Optional[List[List[float]]] = None
 
 
 class AlertCreateRequest(BaseModel):
     name: str
     filters: AlertFilters
     channel: AlertChannel = AlertChannel.EMAIL
+
+
+def _check_polygon_plan(filters_dict: dict, user: User) -> None:
+    """Полигон-мониторинг доступен только Инвестор+. Иначе — 402 с апселлом."""
+    if filters_dict.get("polygon") and user.subscription_plan not in POLYGON_PLANS:
+        raise HTTPException(
+            status_code=402,
+            detail="Мониторинг области на карте доступен с тарифа «Инвестор». Обновите подписку.",
+        )
 
 
 class AlertResponse(BaseModel):
@@ -95,10 +113,13 @@ async def create_alert(
             detail=f"Достигнут лимит фильтров для вашего тарифа ({user.saved_filters_limit}). Обновите подписку."
         )
 
+    filters_dict = data.filters.model_dump(exclude_none=True)
+    _check_polygon_plan(filters_dict, user)
+
     alert = Alert(
         user_id=user.id,
         name=data.name,
-        filters=data.filters.model_dump(exclude_none=True),
+        filters=filters_dict,
         channel=data.channel,
     )
     db.add(alert)
@@ -128,8 +149,10 @@ async def update_alert(
     if not alert:
         raise HTTPException(status_code=404, detail="Фильтр не найден")
 
+    filters_dict = data.filters.model_dump(exclude_none=True)
+    _check_polygon_plan(filters_dict, user)
     alert.name = data.name
-    alert.filters = data.filters.model_dump(exclude_none=True)
+    alert.filters = filters_dict
     alert.channel = data.channel
     await db.commit()
     await db.refresh(alert)
