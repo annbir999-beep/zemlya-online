@@ -1,8 +1,14 @@
 "use client";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import Cookies from "js-cookie";
+import { getMe } from "@/lib/auth";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "";
+
+// Ранг тарифа по subscription_plan. Мониторинг области — Инвестор+ (rank>=2).
+const PLAN_RANK: Record<string, number> = {
+  free: 0, personal: 1, investor: 2, expert: 3, landlord: 4, enterprise: 5,
+};
 
 async function toggleFavorite(lotId: number, button: HTMLButtonElement) {
   const token = Cookies.get("access_token");
@@ -121,6 +127,121 @@ export default function MapView({ points, selectedId, heatmap, mode = "points" }
   const layerRef = useRef<unknown>(null);
   const heatLayerRef = useRef<unknown>(null);
   const favoriteIdsRef = useRef<Set<number>>(new Set());
+
+  // ── Мониторинг области (рисование полигона → алерт) ──
+  const [userRank, setUserRank] = useState(0);
+  const [drawing, setDrawing] = useState(false);
+  const [drawCount, setDrawCount] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const drawPtsRef = useRef<[number, number][]>([]);   // [lat, lng]
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const drawLayerRef = useRef<any>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const clickHandlerRef = useRef<any>(null);
+
+  useEffect(() => {
+    getMe().then(me => {
+      const plan = me?.subscription_plan;
+      setUserRank((plan && PLAN_RANK[plan]) || 0);
+    }).catch(() => setUserRank(0));
+  }, []);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function getMap(): { map: any; L: any } | null {
+    const ref = layerRef.current as { L: unknown } | null;
+    const map = mapInstanceRef.current;
+    if (!ref || !map) return null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return { map: map as any, L: ref.L as any };
+  }
+
+  function redrawPolygon() {
+    const ctx = getMap();
+    if (!ctx) return;
+    const { map, L } = ctx;
+    if (!drawLayerRef.current) drawLayerRef.current = L.layerGroup().addTo(map);
+    drawLayerRef.current.clearLayers();
+    const pts = drawPtsRef.current;
+    if (pts.length >= 2) {
+      L.polygon(pts, { color: "#0d9488", weight: 2, fillColor: "#16a34a", fillOpacity: 0.15 })
+        .addTo(drawLayerRef.current);
+    }
+    pts.forEach((pt) => L.circleMarker(pt, {
+      radius: 4, color: "#fff", weight: 1.5, fillColor: "#0d9488", fillOpacity: 1,
+    }).addTo(drawLayerRef.current));
+  }
+
+  function startDraw() {
+    if (userRank < 2) {
+      alert("Мониторинг области на карте доступен с тарифа «Инвестор». Откройте раздел Тарифы.");
+      return;
+    }
+    const ctx = getMap();
+    if (!ctx) return;
+    const { map } = ctx;
+    drawPtsRef.current = [];
+    setDrawCount(0);
+    setDrawing(true);
+    map.getContainer().style.cursor = "crosshair";
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const handler = (e: any) => {
+      drawPtsRef.current.push([e.latlng.lat, e.latlng.lng]);
+      setDrawCount(drawPtsRef.current.length);
+      redrawPolygon();
+    };
+    clickHandlerRef.current = handler;
+    map.on("click", handler);
+  }
+
+  function cleanupDraw() {
+    const ctx = getMap();
+    if (ctx) {
+      const { map } = ctx;
+      if (clickHandlerRef.current) map.off("click", clickHandlerRef.current);
+      map.getContainer().style.cursor = "";
+      if (drawLayerRef.current) { map.removeLayer(drawLayerRef.current); drawLayerRef.current = null; }
+    }
+    clickHandlerRef.current = null;
+    drawPtsRef.current = [];
+    setDrawCount(0);
+    setDrawing(false);
+  }
+
+  async function finishDraw() {
+    const pts = drawPtsRef.current;
+    if (pts.length < 3) {
+      alert("Отметьте минимум 3 точки, чтобы задать область.");
+      return;
+    }
+    const token = Cookies.get("access_token");
+    if (!token) {
+      alert("Войдите в аккаунт, чтобы создать мониторинг области.");
+      return;
+    }
+    const name = window.prompt("Название мониторинга области:", "Моя область") || "Моя область";
+    // API ждёт кольцо как [lng, lat]
+    const ring = pts.map(([lat, lng]) => [lng, lat]);
+    setSaving(true);
+    try {
+      const r = await fetch(`${API}/api/alerts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ name, channel: "both", filters: { polygon: ring } }),
+      });
+      if (r.status === 402) {
+        alert("Мониторинг области доступен с тарифа «Инвестор». Откройте раздел Тарифы.");
+        return;
+      }
+      if (!r.ok) throw new Error(await r.text());
+      alert("Готово! Будем присылать уведомления о новых лотах в этой области (в кабинете → Алерты).");
+      cleanupDraw();
+    } catch (e) {
+      console.error(e);
+      alert("Не удалось сохранить мониторинг области. Попробуйте ещё раз.");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   // Загружаем избранные лоты пользователя при монтировании, чтобы звёздочки
   // в попапах были в правильном состоянии (★ если уже в избранном).
@@ -375,6 +496,55 @@ export default function MapView({ points, selectedId, heatmap, mode = "points" }
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
       <div ref={mapRef} style={{ width: "100%", height: "100%" }} />
+
+      {/* Мониторинг области — рисование полигона (только режим точек) */}
+      {mode !== "heatmap" && (
+        <div style={{
+          position: "absolute", top: 78, left: 10, zIndex: 1000,
+          display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-start",
+        }}>
+          {!drawing ? (
+            <button
+              onClick={startDraw}
+              title={userRank >= 2 ? "Нарисуйте область — будем уведомлять о новых лотах внутри неё" : "Доступно с тарифа Инвестор"}
+              style={{
+                background: "rgba(255,255,255,0.95)", border: "1px solid var(--border, #e2e8f0)",
+                borderRadius: 8, padding: "7px 11px", cursor: "pointer",
+                fontSize: 13, fontWeight: 600, color: "#0d9488",
+                boxShadow: "0 1px 6px rgba(0,0,0,.2)", display: "flex", alignItems: "center", gap: 6,
+              }}
+            >
+              ✏️ Мониторить область{userRank < 2 ? " 🔒" : ""}
+            </button>
+          ) : (
+            <div style={{
+              background: "rgba(255,255,255,0.97)", border: "1px solid #0d9488",
+              borderRadius: 8, padding: "8px 10px", boxShadow: "0 1px 6px rgba(0,0,0,.25)",
+              fontSize: 12, color: "#334155", maxWidth: 230,
+            }}>
+              <div style={{ marginBottom: 6, lineHeight: 1.4 }}>
+                Кликайте по карте, отмечая углы области. Точек: <b>{drawCount}</b>
+              </div>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button onClick={finishDraw} disabled={saving || drawCount < 3} style={{
+                  flex: 1, background: drawCount < 3 ? "#94a3b8" : "#16a34a", color: "#fff",
+                  border: "none", borderRadius: 6, padding: "6px 8px", fontSize: 12, fontWeight: 600,
+                  cursor: drawCount < 3 ? "default" : "pointer",
+                }}>
+                  {saving ? "Сохраняю…" : "Создать алерт"}
+                </button>
+                <button onClick={cleanupDraw} style={{
+                  background: "#f1f5f9", color: "#475569", border: "none",
+                  borderRadius: 6, padding: "6px 8px", fontSize: 12, cursor: "pointer",
+                }}>
+                  Отмена
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Легенда */}
       <div style={{
         position: "absolute", bottom: 28, right: 10, zIndex: 1000,
