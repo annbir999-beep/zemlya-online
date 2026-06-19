@@ -43,7 +43,7 @@ class Settings(BaseSettings):
 
     # Resend (HTTP API для email; VPS-провайдер блокирует SMTP-порты)
     RESEND_API_KEY: str = ""
-    RESEND_FROM: str = "Торги Земли <noreply@xn--e1adnd0h.online>"
+    RESEND_FROM: str = "Торги Земли <noreply@torgi-zemli.ru>"
 
     # Telegram
     TELEGRAM_BOT_TOKEN: str = ""
