@@ -138,6 +138,7 @@ PLAN_LABELS_RU = {
     "audit_lot": "AI-аудит лота",
     "predd": "preDD аудит договора",
     "pro": "Pro",
+    "investor": "Инвестор",
     "buro": "Бюро",
     "buro_plus": "Бюро+",
 }
@@ -156,7 +157,9 @@ async def send_payment_email(user: User, plan: str, amount: float, *,
                              months: int = 0, free_audits_total: int = 0,
                              expires_at=None) -> None:
     """Письмо пользователю после успешной оплаты."""
-    if not settings.SMTP_USER or not user.email:
+    # Шлём через Resend (HTTP) — SMTP на VPS заблокирован. Раньше тут стояла
+    # проверка SMTP_USER (всегда пустой) и письма об оплате молча не уходили.
+    if not user.email:
         return
 
     plan_label = PLAN_LABELS_RU.get(plan, plan)
