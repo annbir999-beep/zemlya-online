@@ -321,10 +321,12 @@ export default function MapView({ points, selectedId, heatmap, mode = "points" }
       });
 
       schema.addTo(map);  // слой по умолчанию
+      // Контрол слоёв — внизу слева: вверху-справа он налезал на кастомные
+      // контролы «Точки/Плотность» и пресет дедлайна.
       L.control.layers(
         { "Схема": schema, "Спутник": satellite, "Гибрид": hybrid, "Топо": topo },
         {},
-        { position: "topright", collapsed: true },
+        { position: "bottomleft", collapsed: true },
       ).addTo(map);
 
       const layer = L.layerGroup().addTo(map);
