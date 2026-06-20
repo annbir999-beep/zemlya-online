@@ -3,7 +3,9 @@ import type { MetadataRoute } from "next";
 const SITE = "https://torgi-zemli.ru";
 const BACKEND_URL = process.env.BACKEND_URL || "http://backend:8000";
 
-export const revalidate = 3600;
+// Генерим на запрос, а не на билде: при сборке контейнер не видит backend,
+// и регионы/блог не попали бы в карту. Краулеры дёргают sitemap редко.
+export const dynamic = "force-dynamic";
 
 async function safeGet(path: string): Promise<{ items?: unknown[] } | null> {
   try {
