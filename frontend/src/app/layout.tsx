@@ -13,6 +13,7 @@ export const metadata: Metadata = {
   // Подтверждение владения для поисковиков (мета-тег в <head>)
   verification: {
     yandex: "4fbf65c871dcd342",
+    google: "4yVGqOhtVT0NwKeg5Umj3cx3hVd95POKTFKKqi83VcE",
   },
 };
 
