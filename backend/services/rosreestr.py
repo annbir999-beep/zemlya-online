@@ -85,12 +85,15 @@ class RosreestrClient:
             except Exception:
                 pass
 
-        # Если координаты в метрах (EPSG:3857) — конвертируем в WGS84
+        # Если координаты в метрах (EPSG:3857) — конвертируем в WGS84.
+        # Формулой обратного сферического Меркатора, без pyproj (его нет в образе,
+        # и из-за этого геокодинг молча обнулял координаты — карта стояла на 258).
         if lat and lng and (abs(lat) > 90 or abs(lng) > 180):
             try:
-                from pyproj import Transformer
-                transformer = Transformer.from_crs("EPSG:3857", "EPSG:4326", always_xy=True)
-                lng, lat = transformer.transform(lng, lat)
+                import math
+                R = 6378137.0
+                lng = math.degrees(lng / R)
+                lat = math.degrees(2 * math.atan(math.exp(lat / R)) - math.pi / 2)
             except Exception:
                 lat, lng = None, None
 
