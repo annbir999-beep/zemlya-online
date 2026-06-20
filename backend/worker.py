@@ -31,9 +31,11 @@ celery_app.conf.update(
     # Расписание периодических задач
     beat_schedule={
         # Парсинг torgi.gov — каждые 2 часа
+        # Парсинг torgi.gov — только ночью (01:00 и 04:00 МСК), чтобы тяжёлый
+        # скрейпинг не конкурировал с живым сайтом за память на 2GB VPS.
         "scrape-torgi-gov": {
             "task": "tasks.scrape_tasks.scrape_torgi_gov",
-            "schedule": crontab(minute=0, hour="*/2"),
+            "schedule": crontab(minute=0, hour="1,4"),
         },
         # Парсинг bankrot.fedresurs.ru — каждые 6 часов со сдвигом :40
         # (чтобы не пересекаться с torgi.gov на чётных часах).
@@ -66,10 +68,10 @@ celery_app.conf.update(
             "schedule": crontab(minute=30, hour="*"),
             "args": (1000,),
         },
-        # Подтягивание даты торгов из детального API torgi — каждые 3 часа
+        # Подтягивание даты торгов из детального API torgi — ночью, после скрейпа
         "enrich-torgi-details": {
             "task": "tasks.scrape_tasks.enrich_torgi_details",
-            "schedule": crontab(minute=45, hour="*/3"),
+            "schedule": crontab(minute=30, hour="2,5"),
         },
         # Проверка алертов и отправка уведомлений — каждые 30 минут
         "check-alerts": {
