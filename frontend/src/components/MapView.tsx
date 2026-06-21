@@ -455,7 +455,23 @@ export default function MapView({ points, selectedId, heatmap, mode = "points" }
       };
 
       const marker = L.marker([p.lat, p.lng], { icon });
-      marker.bindPopup(buildPopup, { maxWidth: 310 });
+      // Поля попапа /map не присылает (тонкий payload) — подгружаем по клику
+      // и дописываем в точку, после чего buildPopup() работает как раньше.
+      marker.bindPopup('<div style="padding:10px 14px;color:#64748b;font-size:13px">Загрузка…</div>', { maxWidth: 310 });
+      marker.on("popupopen", () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if ((p as any)._full) { marker.setPopupContent(buildPopup()); return; }
+        fetch(`${API}/api/lots/${p.id}/map-popup`)
+          .then((r: Response) => (r.ok ? r.json() : null))
+          .then((d: Record<string, unknown> | null) => {
+            if (!d) return;
+            Object.assign(p, d);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (p as any)._full = true;
+            marker.setPopupContent(buildPopup());
+          })
+          .catch(() => {});
+      });
       return marker;
     });
     layer.addLayers(markers);

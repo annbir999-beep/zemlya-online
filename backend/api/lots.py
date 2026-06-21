@@ -1413,58 +1413,74 @@ async def get_lots_for_map(
         has_coords=has_coords,
     )
 
+    # Тонкий payload: только то, что нужно для маркера/кластера. Остальные поля
+    # попапа подгружаются лениво по клику через /lots/{id}/map-popup — иначе
+    # ответ на 20k точек раздувался до ~9 МБ (тяжёлые строки: КН, URL, ВРИ).
     q = select(
-        Lot.id, Lot.start_price, Lot.area_sqm, Lot.area_sqm_kn,
-        Lot.land_purpose, Lot.rubric_tg, Lot.pct_price_to_cadastral,
-        Lot.cadastral_cost, Lot.cadastral_number, Lot.location,
-        Lot.auction_form, Lot.deal_type, Lot.resale_type, Lot.etp,
-        Lot.category_kn, Lot.vri_kn, Lot.category_tg, Lot.vri_tg,
-        Lot.submission_end, Lot.auction_start_date, Lot.auction_end_date, Lot.lot_url,
-        Lot.region_name, Lot.notice_number,
-        Lot.score, Lot.discount_to_market_pct, Lot.score_badges,
+        Lot.id, Lot.land_purpose, Lot.location,
     ).where(and_(*conditions, Lot.location.isnot(None))).limit(20000)
 
     rows = (await db.execute(q)).all()
     points = []
+    from shapely import wkb
     for row in rows:
         if row.location:
             try:
-                from shapely import wkb
                 point = wkb.loads(bytes(row.location.data))
                 points.append({
                     "id": row.id,
                     "lat": point.y,
                     "lng": point.x,
-                    "price": row.start_price,
-                    "area": row.area_sqm,
-                    "area_kn": row.area_sqm_kn,
                     "purpose": row.land_purpose.value if row.land_purpose else None,
-                    "rubric_tg": row.rubric_tg,
-                    "pct": row.pct_price_to_cadastral,
-                    "cadastral_cost": row.cadastral_cost,
-                    "cadastral_number": row.cadastral_number,
-                    "auction_form": row.auction_form.value if row.auction_form else None,
-                    "deal_type": row.deal_type.value if row.deal_type else None,
-                    "resale_type": row.resale_type.value if row.resale_type else None,
-                    "etp": row.etp,
-                    "category_kn": row.category_kn,
-                    "vri_kn": row.vri_kn,
-                    "category_tg": row.category_tg,
-                    "vri_tg": row.vri_tg,
-                    "submission_end": row.submission_end.isoformat() if row.submission_end else None,
-                    "auction_start_date": row.auction_start_date.isoformat() if row.auction_start_date else None,
-                    "auction_end_date": row.auction_end_date.isoformat() if row.auction_end_date else None,
-                    "lot_url": row.lot_url,
-                    "region_name": row.region_name,
-                    "notice_number": row.notice_number,
-                    "score": row.score,
-                    "discount_to_market_pct": row.discount_to_market_pct,
-                    "score_badges": row.score_badges if isinstance(row.score_badges, list) else None,
                 })
             except Exception:
                 pass
 
     return {"points": points, "total": len(points)}
+
+
+@router.get("/{lot_id}/map-popup")
+async def get_lot_map_popup(lot_id: int, db: AsyncSession = Depends(get_db)):
+    """Поля для попапа карты по одному лоту — подгружаются лениво по клику,
+    чтобы /map отдавал только тонкий payload (десятки тысяч точек)."""
+    row = (await db.execute(
+        select(
+            Lot.id, Lot.start_price, Lot.area_sqm, Lot.area_sqm_kn,
+            Lot.land_purpose, Lot.pct_price_to_cadastral,
+            Lot.cadastral_cost, Lot.cadastral_number,
+            Lot.auction_form, Lot.deal_type, Lot.resale_type, Lot.etp,
+            Lot.category_kn, Lot.vri_kn, Lot.category_tg, Lot.vri_tg,
+            Lot.submission_end, Lot.auction_start_date, Lot.lot_url,
+            Lot.region_name, Lot.score, Lot.discount_to_market_pct, Lot.score_badges,
+        ).where(Lot.id == lot_id)
+    )).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Лот не найден")
+    return {
+        "id": row.id,
+        "price": row.start_price,
+        "area": row.area_sqm,
+        "area_kn": row.area_sqm_kn,
+        "purpose": row.land_purpose.value if row.land_purpose else None,
+        "pct": row.pct_price_to_cadastral,
+        "cadastral_cost": row.cadastral_cost,
+        "cadastral_number": row.cadastral_number,
+        "auction_form": row.auction_form.value if row.auction_form else None,
+        "deal_type": row.deal_type.value if row.deal_type else None,
+        "resale_type": row.resale_type.value if row.resale_type else None,
+        "etp": row.etp,
+        "category_kn": row.category_kn,
+        "vri_kn": row.vri_kn,
+        "category_tg": row.category_tg,
+        "vri_tg": row.vri_tg,
+        "submission_end": row.submission_end.isoformat() if row.submission_end else None,
+        "auction_start_date": row.auction_start_date.isoformat() if row.auction_start_date else None,
+        "lot_url": row.lot_url,
+        "region_name": row.region_name,
+        "score": row.score,
+        "discount_to_market_pct": row.discount_to_market_pct,
+        "score_badges": row.score_badges if isinstance(row.score_badges, list) else None,
+    }
 
 
 @router.get("/etps")
