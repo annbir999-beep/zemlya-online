@@ -286,8 +286,15 @@ export default function MapView({ points, selectedId, heatmap, mode = "points" }
 
     loadCss("https://unpkg.com/leaflet@1.9.4/dist/leaflet.css", "leaflet-css");
 
-    import("leaflet").then((mod) => {
+    import("leaflet").then(async (mod) => {
       const L = mod.default;
+
+      // markercluster — расширяет глобальный L. Без него 10k+ маркеров кидаются
+      // в DOM напрямую и вешают браузер (ноль точек). С кластеризацией тянет 13к+.
+      (window as unknown as { L: unknown }).L = L;
+      loadCss("https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css", "mc-css");
+      loadCss("https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css", "mc-css-default");
+      await import("leaflet.markercluster");
 
       if (!mapRef.current) return;
       if ((mapRef.current as unknown as Record<string, unknown>)._leaflet_id) return;
@@ -329,7 +336,13 @@ export default function MapView({ points, selectedId, heatmap, mode = "points" }
         { position: "bottomleft", collapsed: true },
       ).addTo(map);
 
-      const layer = L.layerGroup().addTo(map);
+      const layer = L.markerClusterGroup({
+        chunkedLoading: true,        // не блокировать UI при добавлении тысяч маркеров
+        maxClusterRadius: 55,
+        showCoverageOnHover: false,
+        spiderfyOnMaxZoom: true,
+        disableClusteringAtZoom: 13, // на близком зуме показываем отдельные точки
+      }).addTo(map);
       const heatLayer = L.layerGroup();
       mapInstanceRef.current = map;
       layerRef.current = { L, layer };
@@ -356,7 +369,7 @@ export default function MapView({ points, selectedId, heatmap, mode = "points" }
 
     layer.clearLayers();
 
-    points.forEach((p) => {
+    const markers = points.map((p) => {
       const isSelected = p.id === selectedId;
       const { color, emoji } = getPurposeStyle(p.purpose);
       const size = isSelected ? 22 : 16;
@@ -367,6 +380,8 @@ export default function MapView({ points, selectedId, heatmap, mode = "points" }
         iconAnchor: [size / 2, size / 2],
       });
 
+      // Контент попапа строим лениво — только при клике, не для всех 13к разом.
+      const buildPopup = () => {
       const fmt = (v?: number) => v ? (v >= 1_000_000 ? `${(v/1_000_000).toFixed(2)} млн ₽` : `${(v/1_000).toFixed(0)} тыс. ₽`) : "—";
       const fmtArea = (v?: number) => v ? (v >= 10_000 ? `${(v/10_000).toFixed(2)} га` : `${v.toLocaleString("ru")} кв.м`) : "—";
       const fmtDate = (s?: string) => s ? new Date(s).toLocaleDateString("ru", {day:"2-digit",month:"2-digit",year:"numeric"}) : "—";
@@ -405,7 +420,7 @@ export default function MapView({ points, selectedId, heatmap, mode = "points" }
       const favColor = isFav ? "#facc15" : "#cbd5e1";
       const favData = isFav ? "1" : "0";
 
-      L.marker([p.lat, p.lng], { icon }).bindPopup(`
+      return `
         <div style="min-width:240px;max-width:300px;font-family:system-ui,sans-serif">
           <div style="display:flex;align-items:center;margin-bottom:2px;gap:6px">
             ${scoreBlock}
@@ -436,8 +451,14 @@ export default function MapView({ points, selectedId, heatmap, mode = "points" }
             ${p.lot_url ? `<a href="${p.lot_url}" target="_blank" rel="noopener" style="flex:1;padding:5px 8px;background:#f1f5f9;color:#475569;border-radius:6px;font-size:12px;text-align:center;text-decoration:none">Оригинал ↗</a>` : ""}
           </div>
         </div>
-      `, { maxWidth: 310 }).addTo(layer);
+      `;
+      };
+
+      const marker = L.marker([p.lat, p.lng], { icon });
+      marker.bindPopup(buildPopup, { maxWidth: 310 });
+      return marker;
     });
+    layer.addLayers(markers);
   }, [points, selectedId]);
 
   // Heatmap layer — отрисовка кругов по регионам

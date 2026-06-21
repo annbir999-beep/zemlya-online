@@ -367,7 +367,12 @@ html, body { overflow-x: hidden; max-width: 100vw; }
   .sidebar { display: none; }
   /* В мобильном drawer боковую панель надо показывать */
   .mobile-drawer .sidebar { display: block !important; width: 100% !important; height: 100%; padding-top: 36px; }
-  .catalog-panel { width: 100%; }
+  /* Главная: на мобильном раскладка вертикальная — карта сверху, список снизу.
+     Иначе catalog-panel (width:100%) в flex-row схлопывал карту в ноль —
+     на телефоне карты не было видно вообще, только список. */
+  .main-content { flex-direction: column; }
+  .map-container { flex: none; height: 48vh; min-height: 300px; }
+  .catalog-panel { width: 100%; border-left: none; border-top: 1px solid var(--border); flex: 1; min-height: 0; }
   /* Двухколоночный лейаут на странице лота схлопывается в одну колонку */
   .lot-detail-cols { grid-template-columns: 1fr !important; }
   .lot-detail-aside { order: 2; position: static !important; max-width: 100% !important; }
