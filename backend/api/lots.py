@@ -1422,7 +1422,7 @@ async def get_lots_for_map(
         Lot.submission_end, Lot.auction_start_date, Lot.auction_end_date, Lot.lot_url,
         Lot.region_name, Lot.notice_number,
         Lot.score, Lot.discount_to_market_pct, Lot.score_badges,
-    ).where(and_(*conditions, Lot.location.isnot(None))).limit(20000)
+    ).where(and_(*conditions, Lot.location.isnot(None))).limit(5000)
 
     rows = (await db.execute(q)).all()
     points = []
