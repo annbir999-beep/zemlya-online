@@ -14,6 +14,15 @@ from core.config import settings
 _OPENAI_BASE = "https://api.proxyapi.ru/openai/v1"
 
 
+# Защита бренда: без текста и БЕЗ иностранных флагов/символов (был US-флаг на
+# «госаукцион»). Российский или нейтральный контекст, фотореализм.
+_SAFETY = (
+    ", photorealistic cinematic, no text, no captions, no watermark, "
+    "no american flag, no foreign flags, no foreign government symbols, "
+    "neutral or Russian setting"
+)
+
+
 async def generate_image(
     prompt: str,
     size: str = "1024x1536",   # вертикаль 2:3 под 9:16
@@ -23,7 +32,7 @@ async def generate_image(
     headers = {"Authorization": f"Bearer {settings.ANTHROPIC_API_KEY}"}
     payload = {
         "model": "gpt-image-2",
-        "prompt": prompt,
+        "prompt": prompt + _SAFETY,
         "size": size,
         "quality": quality,
         "n": 1,

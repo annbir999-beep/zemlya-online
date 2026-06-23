@@ -1,8 +1,7 @@
-"""Озвучка и синхрон субтитров.
+"""Озвучка и синхрон субтитров — всё через ProxyAPI (надёжный РФ-эндпоинт).
 
-TTS — edge_tts (бесплатно, нативный русский голос ru-RU-DmitryNeural, тот же,
-что одобрила Анна в GoldWork). Синхрон субтитров — Whisper STT через ProxyAPI:
-транскрибируем сгенерённую озвучку и берём пословные тайминги -> идеальный синхрон.
+TTS — OpenAI tts-1-hd (edge_tts отпал: bing недоступен из РФ-контейнера, DNS-фейл).
+Синхрон — Whisper STT: транскрибируем озвучку, берём пословные тайминги.
 """
 from __future__ import annotations
 
@@ -11,15 +10,18 @@ import httpx
 from core.config import settings
 
 _OPENAI_BASE = "https://api.proxyapi.ru/openai/v1"
-VOICE = "ru-RU-DmitryNeural"
+VOICE = "onyx"  # глубокий мужской; альтернативы: ash, echo, sage
 
 
 async def generate_tts(text: str, out_path: str, voice: str = VOICE) -> str:
-    """Озвучивает текст в mp3 (edge_tts, бесплатно)."""
-    import edge_tts
-
-    communicate = edge_tts.Communicate(text, voice)
-    await communicate.save(out_path)
+    """Озвучивает текст в mp3 через ProxyAPI (OpenAI tts-1-hd)."""
+    headers = {"Authorization": f"Bearer {settings.ANTHROPIC_API_KEY}"}
+    payload = {"model": "tts-1-hd", "input": text, "voice": voice, "response_format": "mp3"}
+    async with httpx.AsyncClient(timeout=120) as c:
+        r = await c.post(f"{_OPENAI_BASE}/audio/speech", headers=headers, json=payload)
+        r.raise_for_status()
+        with open(out_path, "wb") as f:
+            f.write(r.content)
     return out_path
 
 
