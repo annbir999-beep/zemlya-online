@@ -10,13 +10,18 @@ import httpx
 from core.config import settings
 
 _OPENAI_BASE = "https://api.proxyapi.ru/openai/v1"
-VOICE = "onyx"  # глубокий мужской; альтернативы: ash, echo, sage
+VOICE = "ash"  # натуральный мужской; альтернативы: onyx, echo, sage, ballad
+# gpt-4o-mini-tts звучит живее tts-1-hd (был «металлический» оттенок).
+_INSTRUCTIONS = "Говори естественно и уверенно, как русский диктор-эксперт, спокойно, без роботизации."
 
 
 async def generate_tts(text: str, out_path: str, voice: str = VOICE) -> str:
-    """Озвучивает текст в mp3 через ProxyAPI (OpenAI tts-1-hd)."""
+    """Озвучивает текст в mp3 через ProxyAPI (gpt-4o-mini-tts)."""
     headers = {"Authorization": f"Bearer {settings.ANTHROPIC_API_KEY}"}
-    payload = {"model": "tts-1-hd", "input": text, "voice": voice, "response_format": "mp3"}
+    payload = {
+        "model": "gpt-4o-mini-tts", "input": text, "voice": voice,
+        "response_format": "mp3", "instructions": _INSTRUCTIONS,
+    }
     async with httpx.AsyncClient(timeout=120) as c:
         r = await c.post(f"{_OPENAI_BASE}/audio/speech", headers=headers, json=payload)
         r.raise_for_status()

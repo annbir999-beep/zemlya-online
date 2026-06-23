@@ -33,10 +33,11 @@ def audio_duration(path: str) -> float:
 def ken_burns(image_path: str, duration: float, out_path: str) -> str:
     """Плавный наезд камеры по картинке на нужную длительность -> mp4-клип."""
     frames = max(1, int(round(duration * FPS)))
+    # Предмасштаб 2x + lanczos -> плавный зум без джиттера (zoompan по статике дёргается).
     vf = (
-        f"scale={int(W*1.3)}:{int(H*1.3)}:force_original_aspect_ratio=increase,"
-        f"crop={int(W*1.3)}:{int(H*1.3)},"
-        f"zoompan=z='min(zoom+0.0009,1.18)':d={frames}"
+        f"scale={W*2}:{H*2}:force_original_aspect_ratio=increase:flags=lanczos,"
+        f"crop={W*2}:{H*2},"
+        f"zoompan=z='min(zoom+0.0006,1.12)':d={frames}"
         f":x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={W}x{H}:fps={FPS}"
     )
     _run([FF, "-y", "-loglevel", "error", "-loop", "1", "-i", image_path,
@@ -59,28 +60,45 @@ def _ts(t: float) -> str:
     return f"{h}:{m:02d}:{s:05.2f}"
 
 
-def build_ass(words: list[dict], ass_path: str, per_line: int = 3) -> str:
-    """Строит .ass из пословных таймингов Whisper. Группирует по per_line слов."""
-    header = (
-        "[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\nWrapStyle: 0\n\n"
-        "[V4+ Styles]\n"
-        "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, "
-        "BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, "
-        "BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n"
-        "Style: Default,Bahnschrift,70,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,"
-        "-1,0,0,0,100,100,1,0,1,2.5,1,2,90,90,235,1\n\n"
-        "[Events]\n"
-        "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
-    )
+_ASS_HEADER = (
+    "[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\nWrapStyle: 0\n\n"
+    "[V4+ Styles]\n"
+    "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, "
+    "BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, "
+    "BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n"
+    "Style: Default,Bahnschrift,70,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,"
+    "-1,0,0,0,100,100,1,0,1,2.5,1,2,90,90,235,1\n\n"
+    "[Events]\n"
+    "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
+)
+
+
+def _clean(word: str) -> str:
+    return word.strip().strip(",.;:!?—-").upper()
+
+
+def build_ass_from_scenes(scenes: list[dict], ass_path: str, per_line: int = 3) -> str:
+    """Субтитры из ТЕКСТА сценария (точный текст, без ошибок Whisper).
+
+    scenes: [{text, start, end}] — текст реплики и её окно в общей озвучке.
+    Слова реплики режутся по per_line и раскладываются внутри окна пропорционально.
+    """
     rows = []
-    for i in range(0, len(words), per_line):
-        chunk = words[i:i + per_line]
-        start = float(chunk[0]["start"])
-        end = float(chunk[-1]["end"])
-        text = " ".join(w["word"].strip().upper() for w in chunk)
-        rows.append(f"Dialogue: 0,{_ts(start)},{_ts(end)},Default,,0,0,0,,{text}")
+    for sc in scenes:
+        words = [w for w in sc["text"].split() if w.strip()]
+        if not words:
+            continue
+        total = len(words)
+        span = max(0.1, float(sc["end"]) - float(sc["start"]))
+        t = float(sc["start"])
+        for i in range(0, total, per_line):
+            chunk = words[i:i + per_line]
+            dur = span * (len(chunk) / total)
+            text = " ".join(_clean(w) for w in chunk)
+            rows.append(f"Dialogue: 0,{_ts(t)},{_ts(t + dur)},Default,,0,0,0,,{text}")
+            t += dur
     with open(ass_path, "w", encoding="utf-8") as f:
-        f.write(header + "\n".join(rows) + "\n")
+        f.write(_ASS_HEADER + "\n".join(rows) + "\n")
     return ass_path
 
 

@@ -11,7 +11,7 @@ from typing import Any
 from services.video_factory import assemble as A
 from services.video_factory.media import generate_image
 from services.video_factory.script_writer import generate_script
-from services.video_factory.voice import generate_tts, transcribe_words
+from services.video_factory.voice import generate_tts
 
 
 async def make_video(channel: str, data: str, work_dir: str,
@@ -21,6 +21,8 @@ async def make_video(channel: str, data: str, work_dir: str,
 
     clips: list[str] = []
     audio_parts: list[str] = []
+    scene_subs: list[dict] = []   # текст реплики + её окно в озвучке
+    cum = 0.0
     for i, scene in enumerate(script["scenes"]):
         img_p = os.path.join(work_dir, f"img{i}.png")
         with open(img_p, "wb") as f:
@@ -32,14 +34,15 @@ async def make_video(channel: str, data: str, work_dir: str,
         A.ken_burns(img_p, dur, clip_p)
         clips.append(clip_p)
         audio_parts.append(vo_p)
+        scene_subs.append({"text": scene["narration"], "start": cum, "end": cum + dur})
+        cum += dur
 
     full_audio = os.path.join(work_dir, "audio.mp3")
     A.concat_audio(audio_parts, full_audio, work_dir)
 
-    # синхрон субтитров: транскрибируем итоговую озвучку
-    words = await transcribe_words(full_audio)
+    # субтитры из ТЕКСТА сценария (точно, без ошибок Whisper), тайминг по сценам
     ass_p = os.path.join(work_dir, "subs.ass")
-    A.build_ass(words, ass_p)
+    A.build_ass_from_scenes(scene_subs, ass_p)
 
     out = os.path.join(work_dir, "final.mp4")
     A.assemble(clips, full_audio, ass_p, out, work_dir)
