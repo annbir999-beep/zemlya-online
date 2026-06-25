@@ -1,12 +1,14 @@
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, update
 from datetime import datetime, timezone
 
 from db.database import get_db
 from models.lot import Lot
 from models.user import User, SubscriptionPlan
-from api.users import get_current_user
+from api.users import get_current_user, get_current_user_optional
 from services.ai_assessment import assess_lot, lot_to_ai_dict
 
 router = APIRouter()
@@ -49,15 +51,21 @@ async def request_assessment(
             is_cached = True
             return {"lot_id": lot_id, "assessment": lot.ai_assessment, "cached": True}
 
-    # Лимиты: Free/Pro расходуют free_audits_left на аналитику; Бюро+ — без лимита.
+    # Лимиты: Free/Pro расходуют free_audits_left; Бюро+ — без лимита.
+    # Списание АТОМАРНОЕ (UPDATE ... WHERE free_audits_left > 0): иначе параллельные
+    # запросы проходят проверку до декремента и жгут больше платных AI-вызовов, чем лимит.
     if user.subscription_plan not in UNLIMITED_PLANS:
-        if (user.free_audits_left or 0) <= 0:
+        res = await db.execute(
+            update(User)
+            .where(User.id == user.id, User.free_audits_left > 0)
+            .values(free_audits_left=User.free_audits_left - 1)
+            .returning(User.free_audits_left)
+        )
+        if res.first() is None:
             raise HTTPException(
                 status_code=402,
                 detail="Лимит бесплатных AI-аудитов исчерпан. Купите разовый аудит за 490 ₽ или подключите тариф Бюро.",
             )
-        # Списываем — для рестрикций, чтобы не зацикливалось на одной активной транзакции
-        user.free_audits_left = (user.free_audits_left or 0) - 1
         await db.commit()
 
     # Если AI-провайдер недоступен (нет баланса / rate limit / упал сервер) —
@@ -65,9 +73,13 @@ async def request_assessment(
     try:
         assessment = await assess_lot(lot_to_ai_dict(lot))
     except Exception as e:
-        # Откат списанного free-аудита, чтобы пользователь не терял его при сбое AI
+        # Откат списанного free-аудита при сбое AI (атомарно, без гонки).
         if user.subscription_plan not in UNLIMITED_PLANS:
-            user.free_audits_left = (user.free_audits_left or 0) + 1
+            await db.execute(
+                update(User)
+                .where(User.id == user.id)
+                .values(free_audits_left=User.free_audits_left + 1)
+            )
             await db.commit()
         err_text = str(e)
         if "402" in err_text or "Insufficient balance" in err_text or "credit" in err_text.lower():
@@ -94,8 +106,15 @@ async def request_assessment(
 
 
 @router.get("/assess/{lot_id}")
-async def get_assessment(lot_id: int, db: AsyncSession = Depends(get_db)):
-    """Получить уже готовую оценку (без авторизации — для отображения на карточке)"""
+async def get_assessment(
+    lot_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: Optional[User] = Depends(get_current_user_optional),
+):
+    """Получить готовую AI-оценку. Только залогиненным — AI-оценка по тарифу,
+    не для анонимного просмотра. Аноним → assessment=None (фронт зовёт войти)."""
+    if user is None:
+        return {"lot_id": lot_id, "assessment": None}
     result = await db.execute(select(Lot).where(Lot.id == lot_id))
     lot = result.scalar_one_or_none()
     if not lot:

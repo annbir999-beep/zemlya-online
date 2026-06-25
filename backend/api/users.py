@@ -9,7 +9,7 @@ from typing import Optional
 from core.config import settings
 from db.database import get_db
 from models.user import User, SubscriptionPlan
-from core.security import hash_password, verify_password, create_access_token, create_refresh_token, decode_token, oauth2_scheme, oauth2_scheme_optional
+from core.security import hash_password, verify_password, create_access_token, create_refresh_token, decode_token, decode_refresh_token, oauth2_scheme, oauth2_scheme_optional
 from core.ratelimit import limiter
 
 router = APIRouter()
@@ -192,7 +192,7 @@ async def login(request: Request, form: OAuth2PasswordRequestForm = Depends(), d
 
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh_token(refresh_token: str, db: AsyncSession = Depends(get_db)):
-    user_id = decode_token(refresh_token)
+    user_id = decode_refresh_token(refresh_token)
     if not user_id:
         raise HTTPException(status_code=401, detail="Невалидный refresh токен")
     return TokenResponse(
