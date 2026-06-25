@@ -11,6 +11,8 @@ import { ContractTerms, FullDescription } from "@/components/ContractTerms";
 import NearbyFeaturesCard, { type NearbyFeatures } from "@/components/NearbyFeatures";
 import OrganizerContactsCard, { type OrganizerContacts } from "@/components/OrganizerContacts";
 import RoiCalculator from "@/components/RoiCalculator";
+import LockedBlock from "@/components/LockedBlock";
+import { planRank, RANK_PRO, RANK_INVESTOR } from "@/lib/plan";
 import { compare } from "@/lib/compare";
 import { useCompareIds } from "@/lib/useCompare";
 
@@ -260,11 +262,14 @@ export default function LotDetailPage({ params }: { params: Promise<{ id: string
       setUser(u);
       // Логируем просмотр для авторизованных (бэк сам дедуплицирует за 60 мин)
       if (u) api.post(`/api/users/views/${id}`, {}).catch(() => {});
-      api.get<MarketLot[]>(`/api/lots/${id}/market`).then(setMarket).catch(() => {});
-      // Региональные особенности — выкуп / стройка КФХ / перераспределение
-      const regionCode = (l as { region_code?: string }).region_code || "";
-      if (regionCode) {
-        api.get<RegionData>(`/api/lots/region-data/${regionCode}`).then(setRegionData).catch(() => {});
+      // Премиум-данные (рынок, регион) тянем только для Pro+ — free не получает их
+      // ни на экране, ни в Network. Заглушку рисуем по рангу ниже.
+      if (planRank(u?.subscription_plan) >= RANK_PRO) {
+        api.get<MarketLot[]>(`/api/lots/${id}/market`).then(setMarket).catch(() => {});
+        const regionCode = (l as { region_code?: string }).region_code || "";
+        if (regionCode) {
+          api.get<RegionData>(`/api/lots/region-data/${regionCode}`).then(setRegionData).catch(() => {});
+        }
       }
     }).catch(() => router.push("/lots"))
     .finally(() => setLoading(false));
@@ -281,6 +286,7 @@ export default function LotDetailPage({ params }: { params: Promise<{ id: string
   };
 
   const isPaid = !!user && user.subscription_plan !== "free";
+  const rank = planRank(user?.subscription_plan);
 
   const downloadPdf = async () => {
     if (!isPaid) { router.push("/pricing"); return; }
@@ -514,7 +520,7 @@ export default function LotDetailPage({ params }: { params: Promise<{ id: string
             <NearbyFeaturesCard data={(lot as unknown as { nearby_features?: NearbyFeatures }).nearby_features} />
 
             {/* Контакты организатора (отдел земельных отношений) */}
-            {user && user.subscription_plan !== "free" ? (
+            {rank >= RANK_PRO ? (
               <OrganizerContactsCard
                 organizerName={lot.organizer_name}
                 contacts={(lot as unknown as { organizer_contacts?: OrganizerContacts }).organizer_contacts}
@@ -536,7 +542,15 @@ export default function LotDetailPage({ params }: { params: Promise<{ id: string
             )}
 
             {/* Калькулятор окупаемости — каркасный дом */}
-            <RoiCalculator lotId={Number(id)} />
+            {rank >= RANK_PRO ? (
+              <RoiCalculator lotId={Number(id)} />
+            ) : (
+              <LockedBlock
+                title="Калькулятор окупаемости"
+                planLabel="Pro"
+                description="Расчёт ROI каркасного дома на участке: вложения, выручка от продажи, прибыль и срок окупаемости — под площадь и уровень отделки."
+              />
+            )}
 
             {/* Баннер снижения цены */}
             {(() => {
@@ -561,13 +575,29 @@ export default function LotDetailPage({ params }: { params: Promise<{ id: string
             })()}
 
             {/* История похожих лотов */}
-            <SimilarHistoryCard lotId={Number(id)} />
+            {rank >= RANK_PRO ? (
+              <SimilarHistoryCard lotId={Number(id)} />
+            ) : (
+              <LockedBlock
+                title="История похожих лотов в регионе"
+                planLabel="Pro"
+                description="Завершённые торги по похожим участкам: медиана цены и стоимость за м² — реальный ориентир, за сколько уходят такие лоты."
+              />
+            )}
 
             {/* Региональные особенности (выкуп, КФХ-дом, перераспределение) */}
-            <RegionInfo data={regionData} regionName={lot.region_name} cadastralCost={lot.cadastral_cost} />
+            {rank >= RANK_PRO ? (
+              <RegionInfo data={regionData} regionName={lot.region_name} cadastralCost={lot.cadastral_cost} />
+            ) : (
+              <LockedBlock
+                title="Региональные особенности"
+                planLabel="Pro"
+                description="Цена выкупа участка (ст. 39.18/39.20 ЗК), дом КФХ на сельхозземле, перераспределение площади — расчёт по вашему региону."
+              />
+            )}
 
             {/* ТОР/СЭЗ — налоговые льготы для резидентов */}
-            {lot.tor_zone && (
+            {lot.tor_zone && (rank >= RANK_INVESTOR ? (
               <div style={{
                 background: "var(--surface)", border: "1px solid var(--border)",
                 borderRadius: 12, padding: 16,
@@ -592,10 +622,26 @@ export default function LotDetailPage({ params }: { params: Promise<{ id: string
                   или местную администрацию. Срок проверки заявки — до 30 дней.
                 </p>
               </div>
-            )}
+            ) : (
+              <LockedBlock
+                title="Зона налоговых льгот (ТОР/СЭЗ)"
+                planLabel="Инвестор"
+                description="Участок в зоне с льготами для резидентов: налог на прибыль и имущество 0%, пониженные страховые, земля без торгов. Условия и порядок регистрации — на тарифе Инвестор."
+              />
+            ))}
 
             {/* Условия договора (из PDF) */}
-            <ContractTerms data={lot.contract_terms} />
+            {lot.contract_terms ? (
+              rank >= RANK_INVESTOR ? (
+                <ContractTerms data={lot.contract_terms} />
+              ) : (
+                <LockedBlock
+                  title="Условия договора (preDD)"
+                  planLabel="Инвестор"
+                  description="Разбор договора аренды из извещения: переуступка, субаренда, право выкупа, штрафы и обязательства арендатора — 11 проверок preDD."
+                />
+              )
+            ) : null}
 
             {/* Полное описание из извещения (PDF) */}
             <FullDescription text={lot.full_description} />
@@ -611,7 +657,8 @@ export default function LotDetailPage({ params }: { params: Promise<{ id: string
             )}
 
             {/* Сравнение с рынком */}
-            {market.length > 0 && (
+            {rank >= RANK_PRO ? (
+              market.length > 0 && (
               <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
                 <div style={{ padding: "14px 16px", fontWeight: 700, fontSize: 15, borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 8 }}>
                   Рыночные предложения
@@ -638,6 +685,13 @@ export default function LotDetailPage({ params }: { params: Promise<{ id: string
                   ))}
                 </div>
               </div>
+              )
+            ) : (
+              <LockedBlock
+                title="Рыночные предложения"
+                planLabel="Pro"
+                description="Похожие участки в регионе на ЦИАН и Авито — прямое сравнение цены лота с рынком, чтобы увидеть реальный дисконт."
+              />
             )}
           </div>
 

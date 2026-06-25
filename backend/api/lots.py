@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi import APIRouter, Depends, Query, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, func, case
 from geoalchemy2.functions import ST_DWithin, ST_MakePoint, ST_SetSRID
@@ -12,6 +12,8 @@ from db.database import get_db
 from models.lot import Lot, LotStatus, LandPurpose, AuctionType, LotSource, AuctionForm, DealType, AreaDiscrepancy, ResaleType
 from models.user import User, SubscriptionPlan
 from api.users import get_current_user, get_current_user_optional
+from core.plans import plan_rank, RANK_PRO, RANK_INVESTOR
+from core.ratelimit import limiter
 from services.rubrics import get_all_rubrics, get_rubrics_by_section, get_sections
 
 router = APIRouter()
@@ -831,13 +833,19 @@ async def calculate_roi(
     sell_price_per_sqm: float = Query(80000, ge=10000, le=500000),
     finish_level: str = Query("mid", pattern="^(rough|mid|premium)$"),
     db: AsyncSession = Depends(get_db),
+    user: Optional[User] = Depends(get_current_user_optional),
 ):
-    """Калькулятор окупаемости для лота — каркасный дом фиксированной площади.
+    """Калькулятор окупаемости для лота — каркасный дом фиксированной площади. Pro+.
 
     Оценивает: вложения = цена_лота + стоимость_постройки;
     выручка_от_продажи = площадь_дома × цена_за_м²;
     ROI = (выручка - вложения) / вложения × 100%.
     """
+    if plan_rank(user) < RANK_PRO:
+        raise HTTPException(
+            status_code=402,
+            detail="Калькулятор окупаемости доступен с тарифа Pro",
+        )
     from services.build_costs import get_build_cost
 
     result = await db.execute(select(Lot).where(Lot.id == lot_id))
@@ -871,22 +879,33 @@ async def calculate_roi(
 
 
 @router.get("/by-external/{external_id}")
+@limiter.limit("30/hour")
 async def get_lot_by_external(
+    request: Request,
     external_id: str,
     fetch: bool = Query(False, description="Если true и лота нет в БД — скачать с torgi.gov на лету"),
     db: AsyncSession = Depends(get_db),
+    user: Optional[User] = Depends(get_current_user_optional),
 ):
     """Поиск лота по external_id (например 'torgi_22000175410000000063_1').
 
     Если ?fetch=true и лота нет в нашей БД — пробуем скачать с torgi.gov
     напрямую через детальный API и сохранить. Это позволяет покупать AI-аудит
     на любой лот torgi.gov, даже если он закрыт или ещё не попал в наш скрап.
+
+    fetch=true — только для залогиненных + rate-limit: иначе аноним гоняет
+    torgi.gov через наш сервер (расход прокси, риск бана IP).
     """
     eid = external_id if external_id.startswith("torgi_") else f"torgi_{external_id}"
     result = await db.execute(select(Lot).where(Lot.external_id == eid))
     lot = result.scalar_one_or_none()
 
     if not lot and fetch:
+        if user is None:
+            raise HTTPException(
+                status_code=401,
+                detail="Войдите в аккаунт, чтобы загрузить лот по ссылке с torgi.gov",
+            )
         # On-demand: тянем лот напрямую с torgi.gov
         from services.scraper_torgi import TorgiGovScraper
         torgi_id = eid.removeprefix("torgi_")
@@ -1090,8 +1109,13 @@ async def export_lots_csv(
 
 
 @router.get("/analytics")
-async def get_analytics(db: AsyncSession = Depends(get_db)):
+async def get_analytics(
+    db: AsyncSession = Depends(get_db),
+    user: Optional[User] = Depends(get_current_user_optional),
+):
     """Сводная аналитика рынка для публичной страницы /analytics.
+
+    Агрегаты публичны; «топ-лоты по score» (премиум best-finds) — только Pro+.
 
     Кэшируется в Redis на 5 минут — расчёт тяжёлый (5+ агрегатов по
     всей таблице lots), а данные обновляются медленно (раз в 30 мин по cron).
@@ -1105,7 +1129,10 @@ async def get_analytics(db: AsyncSession = Depends(get_db)):
     try:
         cached = await redis.get(cache_key)
         if cached:
-            return _json.loads(cached)
+            payload = _json.loads(cached)
+            if plan_rank(user) < RANK_PRO:
+                payload["top_lots"] = []  # best-finds по score — только Pro+
+            return payload
     except Exception:
         pass  # Redis недоступен — считаем заново
 
@@ -1274,6 +1301,8 @@ async def get_analytics(db: AsyncSession = Depends(get_db)):
     except Exception:
         pass
 
+    if plan_rank(user) < RANK_PRO:
+        payload = {**payload, "top_lots": []}  # best-finds по score — только Pro+
     return payload
 
 
@@ -1282,14 +1311,17 @@ async def get_ai_picks(
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=50),
     db: AsyncSession = Depends(get_db),
+    user: Optional[User] = Depends(get_current_user_optional),
 ):
-    """Витрина лотов с готовым ИИ-анализом (ночной батч).
+    """Витрина лотов с готовым ИИ-анализом (ночной батч). Pro+ — не публично.
 
     Возвращает только ACTIVE лоты, у которых есть `ai_assessment` и
     свежесть < 14 дней, отсортированные по score лота. Сам ИИ-вердикт
     включён в каждый item — фронт может отрисовать карточку без
     дополнительных запросов.
     """
+    if plan_rank(user) < RANK_PRO:
+        return {"items": [], "total": 0, "page": page, "pages": 0, "locked": True}
     from datetime import datetime, timezone, timedelta
     cutoff = datetime.now(timezone.utc) - timedelta(days=14)
     conditions = [
@@ -1562,8 +1594,14 @@ class MarketLot(BaseModel):
 
 
 @router.get("/{lot_id}/market", response_model=List[MarketLot])
-async def get_market_comparison(lot_id: int, db: AsyncSession = Depends(get_db)):
-    """Похожие рыночные лоты из ЦИАН в том же регионе."""
+async def get_market_comparison(
+    lot_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: Optional[User] = Depends(get_current_user_optional),
+):
+    """Похожие рыночные лоты из ЦИАН/Авито в том же регионе. Pro+ (защита данных)."""
+    if plan_rank(user) < RANK_PRO:
+        return []
     result = await db.execute(select(Lot).where(Lot.id == lot_id))
     lot = result.scalar_one_or_none()
     if not lot:
@@ -1606,8 +1644,14 @@ async def get_market_comparison(lot_id: int, db: AsyncSession = Depends(get_db))
 
 
 @router.get("/{lot_id}/similar-history")
-async def get_similar_history(lot_id: int, db: AsyncSession = Depends(get_db)):
-    """Похожие завершённые лоты в том же регионе/назначении/площади (для оценки реальных цен)."""
+async def get_similar_history(
+    lot_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: Optional[User] = Depends(get_current_user_optional),
+):
+    """Похожие завершённые лоты (медианы реальных цен). Pro+ (защита данных)."""
+    if plan_rank(user) < RANK_PRO:
+        return {"items": [], "stats": {"count": 0}, "locked": True}
     result = await db.execute(select(Lot).where(Lot.id == lot_id))
     lot = result.scalar_one_or_none()
     if not lot:
@@ -1660,8 +1704,16 @@ async def get_similar_history(lot_id: int, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/region-data/{region_code}")
-async def get_region_data(region_code: str):
-    """Региональные особенности: % выкупа сельхозки, разрешение строить КФХ, % перераспределения."""
+async def get_region_data(
+    region_code: str,
+    user: Optional[User] = Depends(get_current_user_optional),
+):
+    """Региональные особенности: % выкупа сельхозки, дом КФХ, % перераспределения. Pro+."""
+    if plan_rank(user) < RANK_PRO:
+        raise HTTPException(
+            status_code=402,
+            detail="Региональные особенности доступны с тарифа Pro",
+        )
     from services.regional_data import get_regional_data
     return get_regional_data(region_code)
 
@@ -1677,28 +1729,38 @@ async def get_lot(
     if not lot:
         raise HTTPException(status_code=404, detail="Лот не найден")
 
-    # Контакты администрации — только для Pro+. Free и неавторизованным отдаём None,
-    # фронт показывает upsell-плашку «🔒 Доступно с тарифа Pro».
-    is_paid = user is not None and user.subscription_plan != SubscriptionPlan.FREE
+    # Гейтинг премиум-данных по тарифу (защита на уровне ответа API, не только UI):
+    #   Pro+      → контакты администрации
+    #   Инвестор+ → условия договора (preDD), ТОР/СЭЗ налоговые льготы
+    # Ниже порога — поля физически не уходят клиенту (None), фронт показывает upsell.
+    rank = plan_rank(user)
     contacts = (
         lot.organizer_contacts
-        if (is_paid and isinstance(lot.organizer_contacts, dict))
+        if (rank >= RANK_PRO and isinstance(lot.organizer_contacts, dict))
+        else None
+    )
+    contract = (
+        lot.contract_terms
+        if (rank >= RANK_INVESTOR and isinstance(lot.contract_terms, dict))
         else None
     )
 
     item = _lot_to_item(lot)
+    data = item.model_dump()
+    if rank < RANK_INVESTOR:
+        data["tor_zone"] = None  # ТОР/СЭЗ-льготы — только Инвестор+
     return LotDetail(
-        **item.model_dump(),
+        **data,
         description=lot.description,
         final_price=lot.final_price,
         price_per_sqm=lot.price_per_sqm,
         organizer_name=lot.organizer_name,
         auction_start_date=lot.auction_start_date.isoformat() if lot.auction_start_date else None,
         rosreestr_data=lot.rosreestr_data,
-        ai_assessment=lot.ai_assessment,
+        ai_assessment=lot.ai_assessment if user is not None else None,
         full_description=lot.full_description,
         technical_conditions=lot.technical_conditions,
-        contract_terms=lot.contract_terms if isinstance(lot.contract_terms, dict) else None,
+        contract_terms=contract,
         nearby_features=lot.nearby_features if isinstance(lot.nearby_features, dict) else None,
         organizer_contacts=contacts,
     )

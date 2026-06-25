@@ -12,8 +12,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select, func, and_, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from typing import Optional
+
 from db.database import get_db
 from models.lot import Lot, LotStatus, LotSource
+from models.user import User
+from api.users import get_current_user_optional
+from core.plans import plan_rank, RANK_PRO
 
 router = APIRouter()
 
@@ -88,7 +93,11 @@ async def list_regions(db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/regions/{slug}")
-async def region_page(slug: str, db: AsyncSession = Depends(get_db)):
+async def region_page(
+    slug: str,
+    db: AsyncSession = Depends(get_db),
+    user: Optional[User] = Depends(get_current_user_optional),
+):
     rows = await _region_rows(db)
     match = next((r for r in rows if region_slug(r.region_name) == slug), None)
     if not match:
@@ -118,12 +127,15 @@ async def region_page(slug: str, db: AsyncSession = Depends(get_db)):
         "submission_end": l.submission_end.isoformat() if l.submission_end else None,
     } for l in top]
 
-    # Справка по региону (коэффициенты выкупа и т.п.)
-    try:
-        from services.regional_data import get_regional_data
-        regional = get_regional_data(match.region_code) or {}
-    except Exception:
-        regional = {}
+    # Справка по региону (коэффициенты выкупа ст. 39.18/39.20, КФХ, перераспределение) —
+    # премиум-модуль, только Pro+ (зеркалит гейт lots.py /region-data). Аноним/Free → {}.
+    regional = {}
+    if plan_rank(user) >= RANK_PRO:
+        try:
+            from services.regional_data import get_regional_data
+            regional = get_regional_data(match.region_code) or {}
+        except Exception:
+            regional = {}
 
     return {
         "slug": slug,

@@ -70,3 +70,19 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+# Защита: дефолтный SECRET_KEY = любой может подделать JWT (HS256, ключ известен)
+# и стать любым пользователем, включая is_admin. В проде запуск с дефолтом запрещён.
+if settings.SECRET_KEY in ("", "change_me"):
+    import os
+    if os.getenv("ENVIRONMENT", "").lower() in ("production", "prod"):
+        raise RuntimeError(
+            "SECRET_KEY не задан в проде (дефолт 'change_me') — отказ запуска: риск подделки JWT."
+        )
+    import warnings
+    warnings.warn(
+        "SECRET_KEY = дефолт 'change_me' — допустимо только локально. "
+        "В проде задайте сильный SECRET_KEY в .env.",
+        stacklevel=2,
+    )

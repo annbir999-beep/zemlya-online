@@ -31,8 +31,24 @@ def create_refresh_token(user_id: int) -> str:
 
 
 def decode_token(token: str) -> Optional[int]:
+    """Декодирует ACCESS-токен. Refresh-токен (type=refresh) сюда НЕ пройдёт —
+    его нельзя использовать как access (иначе долгоживущий refresh = вечный доступ)."""
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        if payload.get("type") == "refresh":
+            return None
+        return int(payload["sub"])
+    except (JWTError, KeyError, ValueError):
+        return None
+
+
+def decode_refresh_token(token: str) -> Optional[int]:
+    """Декодирует ТОЛЬКО refresh-токен (type=refresh). Access-токен сюда не пройдёт —
+    защита от обмена украденного access на новую пару через /refresh."""
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        if payload.get("type") != "refresh":
+            return None
         return int(payload["sub"])
     except (JWTError, KeyError, ValueError):
         return None
