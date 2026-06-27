@@ -38,4 +38,4 @@
 - Все коммуникации — от вашего имени, не от безличного «Земля.ОНЛАЙН»
 - Логи касаний веди в Notion / Битрикс — иначе через месяц всё забудется
 - UTM-метки в каждой ссылке: `?utm_source=tg&utm_medium=post&utm_campaign=<имя_канала>`
-- Email с домена `@xn--e1adnd0h.online` или `@земля.online` — не Gmail
+- Email с домена `@torgi-zemli.ru` или `@torgi-zemli.ru` — не Gmail

@@ -194,7 +194,7 @@ async def send_payment_email(user: User, plan: str, amount: float, *,
       </p>
       <hr style="border:none;border-top:1px solid #eee;margin:24px 0;">
       <p style="font-size:12px;color:#888;">Торги Земли — агрегатор земельных аукционов РФ.<br>
-      Вопросы: anna@земля.online · <a href="https://t.me/ZemlyaOnlineBot">@ZemlyaOnlineBot</a></p>
+      Вопросы: info@torgi-zemli.ru · <a href="https://t.me/ZemlyaOnlineBot">@ZemlyaOnlineBot</a></p>
     </div></body></html>"""
 
     try:

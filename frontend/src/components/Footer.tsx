@@ -14,7 +14,7 @@ export default function Footer() {
           <Link href="/blog">Блог</Link>
           <Link href="/zemelnye-torgi">Торги по регионам</Link>
           <Link href="/checklist">Чеклист 12 проверок</Link>
-          <a href="mailto:anna@xn--e1adnd0h.online">anna@земля.online</a>
+          <a href="mailto:info@torgi-zemli.ru">info@torgi-zemli.ru</a>
         </div>
       </div>
     </footer>

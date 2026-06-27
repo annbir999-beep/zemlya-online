@@ -1,6 +1,6 @@
 # Sotka / Земля.ОНЛАЙН — правила и база проекта
 
-SaaS-агрегатор земельных аукционов РФ. Прод: **земля.online** (punycode: `xn--e1adnd0h.online`).
+SaaS-агрегатор земельных аукционов РФ. Прод: **torgi-zemli.ru** (punycode: `torgi-zemli.ru`).
 
 ## Стек
 
@@ -96,7 +96,7 @@ docker compose exec celery_worker celery -A worker call tasks.scrape_tasks.<task
 
 ## Платежи
 
-- **ЮКасса** (`yookassa-webhook` на `земля.online`)
+- **ЮКасса** (`yookassa-webhook` на `torgi-zemli.ru`)
 - `shop_id` и `YOOKASSA_SECRET_KEY` — в `.env` на сервере
 - Кабинет: `console.yookassa.ru` → Настройки → API
 - Подписки: разовый AI-аудит, тариф месяц/год — поля `saved_filters_limit`, `free_audits_left` на `User`
