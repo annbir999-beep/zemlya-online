@@ -21,7 +21,7 @@ export default function PrivacyPage() {
         <h2 style={{ fontSize: 18, fontWeight: 700, marginTop: 22, marginBottom: 8 }}>1. Оператор</h2>
         <p>
           Индивидуальный предприниматель Бирюкова Анна Ильинична, ИНН 753611302731.
-          Контакт по вопросам обработки ПДн: anna@xn--e1adnd0h.online
+          Контакт по вопросам обработки ПДн: info@torgi-zemli.ru
         </p>
 
         <h2 style={{ fontSize: 18, fontWeight: 700, marginTop: 22, marginBottom: 8 }}>2. Какие данные мы собираем</h2>
@@ -107,7 +107,7 @@ export default function PrivacyPage() {
         <p>
           ИП Бирюкова Анна Ильинична<br />
           ИНН: 753611302731<br />
-          Email для запросов по ПДн: anna@xn--e1adnd0h.online
+          Email для запросов по ПДн: info@torgi-zemli.ru
         </p>
       </article>
     </div>

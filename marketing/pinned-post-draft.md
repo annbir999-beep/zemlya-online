@@ -20,20 +20,20 @@
 🗺 Региональная разведка — где сейчас выгодно
 📰 Новости законодательства — изменения ЗК РФ и ПЗЗ
 
-Платформа: https://xn--e1adnd0h.online — агрегатор лотов с torgi.gov + AI-аудит каждого участка за 5 минут (риски, ВРИ, ЗОУИТ, оценка дисконта к рынку).
+Платформа: https://torgi-zemli.ru — агрегатор лотов с torgi.gov + AI-аудит каждого участка за 5 минут (риски, ВРИ, ЗОУИТ, оценка дисконта к рынку).
 
 🎁 Промокод для первых подписчиков канала: TG_FRIEND-25 — −25% на разовый AI-аудит.
 
-→ Перейти: https://xn--e1adnd0h.online/?utm_source=tg_torgi_zemli&utm_medium=channel&utm_campaign=pinned
+→ Перейти: https://torgi-zemli.ru/?utm_source=tg_torgi_zemli&utm_medium=channel&utm_campaign=pinned
 
 ---
 
-## Почему punycode `xn--e1adnd0h.online`, а не «земля.online»
+## Почему punycode `torgi-zemli.ru`, а не «torgi-zemli.ru»
 
 - Кириллический домен в Telegram **иногда не превращается в ссылку** автоматически
-- Punycode `xn--e1adnd0h.online` — это техническое представление того же самого домена «земля.online», работает гарантированно
+- Punycode `torgi-zemli.ru` — это техническое представление того же самого домена «torgi-zemli.ru», работает гарантированно
 - При клике браузер сам покажет красивую кириллическую версию в адресной строке
-- Альтернатива: прислать просто `земля.online` — Telegram скорее всего подсветит, но без 100% гарантии
+- Альтернатива: прислать просто `torgi-zemli.ru` — Telegram скорее всего подсветит, но без 100% гарантии
 
 ## Как починить уже опубликованный пост
 
@@ -52,7 +52,7 @@
 Через @ControllerBot или @LivegramBot можно прикрепить inline-кнопку:
 
 - Текст: `Получить AI-аудит участка →`
-- URL: `https://xn--e1adnd0h.online/?utm_source=tg_torgi_zemli&utm_medium=channel&utm_campaign=pinned_btn`
+- URL: `https://torgi-zemli.ru/?utm_source=tg_torgi_zemli&utm_medium=channel&utm_campaign=pinned_btn`
 
 ## Чек-лист
 

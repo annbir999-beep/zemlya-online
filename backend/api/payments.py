@@ -323,7 +323,7 @@ async def create_payment(
             "lot_id": str(data.lot_id or ""),
         },
         "receipt": {
-            "customer": receipt_customer or {"email": "noreply@xn--e1adnd0h.online"},
+            "customer": receipt_customer or {"email": "noreply@torgi-zemli.ru"},
             "items": [{
                 "description": descr[:128],
                 "quantity": "1.00",

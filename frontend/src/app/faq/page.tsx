@@ -131,10 +131,10 @@ export default function FaqPage() {
               Поддержка
             </div>
             <a
-              href="mailto:anna@xn--e1adnd0h.online"
+              href="mailto:info@torgi-zemli.ru"
               style={{ fontSize: 15, fontWeight: 600, color: "var(--primary)", textDecoration: "none" }}
             >
-              anna@земля.online
+              info@torgi-zemli.ru
             </a>
             <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 4 }}>
               Отвечаем в течение рабочего дня

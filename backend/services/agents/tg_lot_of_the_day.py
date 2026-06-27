@@ -22,7 +22,7 @@ from services.ai_assessment import client as anthropic_client
 from services.telegram_bot import _tg_client
 
 # Канонический адрес сайта (settings.SITE_URL). ИИ домен в промпт не даём —
-# с punycode-формами он ошибался (писал лот.online вместо земля.online),
+# с punycode-формами он ошибался (писал лот.online вместо torgi-zemli.ru),
 # поэтому ссылку всегда подставляем кодом отдельно.
 SITE = settings.SITE_URL
 CHANNEL = "@torgi_zemli"

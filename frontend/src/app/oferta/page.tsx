@@ -21,10 +21,10 @@ export default function OfertaPage() {
         <h2 style={{ fontSize: 18, fontWeight: 700, marginTop: 22, marginBottom: 8 }}>1. Стороны и предмет договора</h2>
         <p>
           <strong>Исполнитель:</strong> Индивидуальный предприниматель Бирюкова Анна Ильинична,
-          ИНН 753611302731, ОГРНИП см. в реестре ФНС, контактный email: anna@xn--e1adnd0h.online
+          ИНН 753611302731, ОГРНИП см. в реестре ФНС, контактный email: info@torgi-zemli.ru
         </p>
         <p>
-          <strong>Сайт:</strong> земля.online (xn--e1adnd0h.online)
+          <strong>Сайт:</strong> torgi-zemli.ru (torgi-zemli.ru)
         </p>
         <p>
           <strong>Предмет договора:</strong> Исполнитель предоставляет Пользователю информационно-аналитические услуги
@@ -47,12 +47,12 @@ export default function OfertaPage() {
           <li><strong>Аудит договора (preDD)</strong> — 8 000 ₽ разово.</li>
         </ul>
         <p>
-          Полный актуальный прайс публикуется на странице <a href="/pricing">земля.online/pricing</a>.
+          Полный актуальный прайс публикуется на странице <a href="/pricing">torgi-zemli.ru/pricing</a>.
         </p>
 
         <h2 style={{ fontSize: 18, fontWeight: 700, marginTop: 22, marginBottom: 8 }}>3. Порядок оказания услуг</h2>
         <p>
-          3.1. Услуги оказываются в электронном виде через сайт земля.online после оплаты.
+          3.1. Услуги оказываются в электронном виде через сайт torgi-zemli.ru после оплаты.
         </p>
         <p>
           3.2. AI-аудит лота — мгновенно после оплаты, доступ через личный кабинет на сайте.
@@ -79,7 +79,7 @@ export default function OfertaPage() {
         <p>
           5.1. По разовому AI-аудиту: возврат возможен в течение 14 дней с момента оплаты,
           если Услуга не была фактически оказана (отчёт не сформирован) или содержит существенные
-          ошибки. Запрос на возврат — на email anna@xn--e1adnd0h.online.
+          ошибки. Запрос на возврат — на email info@torgi-zemli.ru.
         </p>
         <p>
           5.2. По подписочным тарифам: возврат пропорционально неиспользованному периоду
@@ -136,8 +136,8 @@ export default function OfertaPage() {
         <p>
           ИП Бирюкова Анна Ильинична<br />
           ИНН: 753611302731<br />
-          Контакты: anna@xn--e1adnd0h.online · Telegram: @anna_zemlya · @ZemlyaOnlineBot<br />
-          Сайт: земля.online (xn--e1adnd0h.online)
+          Контакты: info@torgi-zemli.ru · Telegram: @anna_zemlya · @ZemlyaOnlineBot<br />
+          Сайт: torgi-zemli.ru (torgi-zemli.ru)
         </p>
       </article>
     </div>

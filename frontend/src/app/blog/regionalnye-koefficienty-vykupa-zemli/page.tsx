@@ -110,7 +110,7 @@ export default function Page() {
         <li><strong>Поиск в правовой базе</strong>: <code>"коэффициент" "ст. 39.3" site:zakon-region.ru</code>
           в Google. Ищите постановления районной/городской администрации.
         </li>
-        <li><strong>На <a href="/audit-lot">земля.online/audit-lot</a></strong> — наш AI-аудит
+        <li><strong>На <a href="/audit-lot">torgi-zemli.ru/audit-lot</a></strong> — наш AI-аудит
           подтягивает актуальные коэффициенты по муниципалитету конкретного лота
           и сразу считает финальную цену выкупа в рублях.
         </li>
