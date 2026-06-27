@@ -18,7 +18,7 @@ celery_app = Celery(
     "sotka",
     broker=settings.REDIS_URL,
     backend=settings.REDIS_URL,
-    include=["tasks.scrape_tasks", "tasks.alert_tasks", "tasks.ai_batch_tasks", "tasks.digest_tasks", "tasks.price_drop_tasks", "tasks.drip_tasks", "tasks.lead_drip_tasks", "tasks.agent_tasks"],
+    include=["tasks.scrape_tasks", "tasks.alert_tasks", "tasks.ai_batch_tasks", "tasks.digest_tasks", "tasks.price_drop_tasks", "tasks.drip_tasks", "tasks.lead_drip_tasks", "tasks.agent_tasks", "tasks.mail_tasks"],
 )
 
 celery_app.conf.update(
@@ -176,6 +176,12 @@ celery_app.conf.update(
         "agent-morning-check": {
             "task": "tasks.agent_tasks.agent_morning_check",
             "schedule": crontab(minute=0, hour=7),
+        },
+        # Почта info@torgi-zemli.ru — проверка новых писем каждые 5 минут,
+        # уведомление владельцу в Telegram.
+        "check-mail-notify": {
+            "task": "tasks.mail_tasks.check_mail_notify",
+            "schedule": crontab(minute="*/5"),
         },
     },
 )

@@ -51,6 +51,11 @@ class Settings(BaseSettings):
     TELEGRAM_WEBHOOK_SECRET: str = ""  # для проверки X-Telegram-Bot-Api-Secret-Token
     ADMIN_TELEGRAM_CHAT_ID: str = "574728046"  # чат Анны: черновики агентов + кнопки одобрения
 
+    # Почта info@torgi-zemli.ru (IMAP, Timeweb) — уведомления о новых письмах в Telegram.
+    IMAP_HOST: str = "imap.timeweb.ru"
+    IMAP_USER: str = ""
+    IMAP_PASSWORD_B64: str = ""  # base64 пароля — спецсимволы ломают .env как есть
+
     # ЮКасса
     YUKASSA_SHOP_ID: str = ""
     YUKASSA_SECRET_KEY: str = ""
