@@ -369,7 +369,11 @@ def build_filters(
     return conditions
 
 
-def _lot_to_item(lot: Lot) -> LotListItem:
+def _lot_to_item(lot: Lot, rank: int = 99) -> LotListItem:
+    """Сериализация лота. rank — ранг тарифа (core/plans.py): премиум-поля,
+    чьи фильтры под замком, зануляются ниже порога и в СПИСКЕ тоже —
+    иначе GET /api/lots отдаёт анониму всё, что деталь прячет за 🔒.
+    Дефолт 99 — только для внутренних/уже загейченных вызовов."""
     lat_val = lng_val = None
     if lot.location:
         try:
@@ -380,7 +384,7 @@ def _lot_to_item(lot: Lot) -> LotListItem:
         except Exception:
             pass
 
-    return LotListItem(
+    item = LotListItem(
         id=lot.id,
         external_id=lot.external_id,
         title=lot.title,
@@ -432,6 +436,18 @@ def _lot_to_item(lot: Lot) -> LotListItem:
         last_price_drop_at=lot.last_price_drop_at.isoformat() if lot.last_price_drop_at else None,
         tor_zone=_get_tor_zone(lot.region_code),
     )
+    # Зеркало пейволла детальной карточки (get_lot) — единые пороги.
+    if rank < RANK_PRO:
+        item.nearest_city_name = None
+        item.nearest_city_distance_km = None
+        item.nearest_city_population = None
+    if rank < RANK_INVESTOR:
+        item.pct_price_to_cadastral = None
+        item.market_price_sqm = None
+        item.sublease_allowed = None
+        item.assignment_allowed = None
+        item.tor_zone = None
+    return item
 
 
 def _get_tor_zone(region_code):
@@ -628,7 +644,7 @@ async def get_lots(
     lots = (await db.execute(q)).scalars().all()
 
     return LotsResponse(
-        items=[_lot_to_item(l) for l in lots],
+        items=[_lot_to_item(l, rank=rank) for l in lots],
         total=total,
         page=page,
         pages=math.ceil(total / per_page) if total else 0,
@@ -768,7 +784,7 @@ h1 {{ font-size: 14pt; margin: 0 0 6px; }}
   </div>
   <div class="kpi-row">
     <div class="kpi-cell"><div class="label">Кадастровая стоимость</div>{fmt_p(lot.cadastral_cost)}</div>
-    <div class="kpi-cell"><div class="label">% НЦ от КС</div>{lot.pct_price_to_cadastral:.1f}%{"" if lot.pct_price_to_cadastral else ""}</div>
+    <div class="kpi-cell"><div class="label">% НЦ от КС</div>{f"{lot.pct_price_to_cadastral:.1f}%" if lot.pct_price_to_cadastral is not None else "—"}</div>
   </div>
   <div class="kpi-row">
     <div class="kpi-cell"><div class="label">Дисконт к рынку</div>{f"{int(lot.discount_to_market_pct)}%" if lot.discount_to_market_pct else "—"}</div>
@@ -1092,7 +1108,8 @@ async def export_lots_csv(
             f"{l.area_sqm:.0f}" if l.area_sqm else "",
             f"{l.start_price:.0f}" if l.start_price else "",
             f"{l.cadastral_cost:.0f}" if l.cadastral_cost else "",
-            f"{l.pct_price_to_cadastral:.1f}" if l.pct_price_to_cadastral is not None else "",
+            # % НЦ/КС — Инвестор+ (в CSV тоже, зеркало фильтра)
+            f"{l.pct_price_to_cadastral:.1f}" if (l.pct_price_to_cadastral is not None and plan_rank(user) >= RANK_INVESTOR) else "",
             f"{l.discount_to_market_pct:.1f}" if l.discount_to_market_pct is not None else "",
             l.score if l.score is not None else "",
             l.submission_end.strftime("%d.%m.%Y %H:%M") if l.submission_end else "",
@@ -1344,7 +1361,7 @@ async def get_ai_picks(
 
     items = []
     for l in lots:
-        base = _lot_to_item(l).model_dump()
+        base = _lot_to_item(l, rank=plan_rank(user)).model_dump()
         a = l.ai_assessment or {}
         base["ai"] = {
             "score": a.get("score"),
@@ -1472,7 +1489,11 @@ async def get_lots_for_map(
 
 
 @router.get("/{lot_id}/map-popup")
-async def get_lot_map_popup(lot_id: int, db: AsyncSession = Depends(get_db)):
+async def get_lot_map_popup(
+    lot_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: Optional[User] = Depends(get_current_user_optional),
+):
     """Поля для попапа карты по одному лоту — подгружаются лениво по клику,
     чтобы /map отдавал только тонкий payload (десятки тысяч точек)."""
     row = (await db.execute(
@@ -1494,7 +1515,8 @@ async def get_lot_map_popup(lot_id: int, db: AsyncSession = Depends(get_db)):
         "area": row.area_sqm,
         "area_kn": row.area_sqm_kn,
         "purpose": row.land_purpose.value if row.land_purpose else None,
-        "pct": row.pct_price_to_cadastral,
+        # % НЦ/КС — Инвестор+ (зеркало гейта фильтров)
+        "pct": row.pct_price_to_cadastral if plan_rank(user) >= RANK_INVESTOR else None,
         "cadastral_cost": row.cadastral_cost,
         "cadastral_number": row.cadastral_number,
         "auction_form": row.auction_form.value if row.auction_form else None,
@@ -1745,10 +1767,9 @@ async def get_lot(
         else None
     )
 
-    item = _lot_to_item(lot)
+    # Пейволл премиум-полей — внутри _lot_to_item (единая точка для списка и детали).
+    item = _lot_to_item(lot, rank=rank)
     data = item.model_dump()
-    if rank < RANK_INVESTOR:
-        data["tor_zone"] = None  # ТОР/СЭЗ-льготы — только Инвестор+
     return LotDetail(
         **data,
         description=lot.description,

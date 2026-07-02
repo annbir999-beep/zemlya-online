@@ -66,6 +66,40 @@ def _check_polygon_plan(filters_dict: dict, user: User) -> None:
         )
 
 
+# Премиум-ключи фильтров алертов — зеркало гейта GET /api/lots (api/lots.py).
+# Free-юзер не должен получать премиум-скрининг почтой, сохранив фильтр в алерт.
+_PRO_FILTER_KEYS = (
+    "score_min", "badges_min", "discount_min", "price_drop_min",
+    "liquidity", "deposit_pct_min", "deposit_pct_max",
+)
+_INVESTOR_FILTER_KEYS = (
+    "pct_cadastral_max", "cadastral_to_market_min", "cadastral_to_market_max",
+    "sublease_allowed", "assignment_allowed",
+)
+
+
+def _strip_premium_filters(filters_dict: dict, user: User) -> dict:
+    """Вырезает премиум-фильтры выше тарифа пользователя (402 — чтобы юзер понял,
+    а не молча получил не то, что настроил)."""
+    from core.plans import plan_rank, RANK_PRO, RANK_INVESTOR
+    rank = plan_rank(user)
+    blocked = []
+    if rank < RANK_PRO:
+        blocked += [k for k in _PRO_FILTER_KEYS if filters_dict.get(k) is not None]
+    if rank < RANK_INVESTOR:
+        blocked += [k for k in _INVESTOR_FILTER_KEYS if filters_dict.get(k) is not None]
+    if blocked:
+        raise HTTPException(
+            status_code=402,
+            detail=(
+                "Фильтры "
+                + ", ".join(blocked)
+                + " доступны с тарифа Pro/Инвестор. Уберите их или обновите подписку."
+            ),
+        )
+    return filters_dict
+
+
 class AlertResponse(BaseModel):
     id: int
     name: str
@@ -115,6 +149,7 @@ async def create_alert(
 
     filters_dict = data.filters.model_dump(exclude_none=True)
     _check_polygon_plan(filters_dict, user)
+    _strip_premium_filters(filters_dict, user)
 
     alert = Alert(
         user_id=user.id,
@@ -151,6 +186,7 @@ async def update_alert(
 
     filters_dict = data.filters.model_dump(exclude_none=True)
     _check_polygon_plan(filters_dict, user)
+    _strip_premium_filters(filters_dict, user)
     alert.name = data.name
     alert.filters = filters_dict
     alert.channel = data.channel

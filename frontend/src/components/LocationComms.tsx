@@ -33,13 +33,13 @@ export function LocationCard({ city, distance, population }: {
     population >= 1000 ? `${Math.round(population / 1000)} тыс` :
     `${population}`
   ) : "";
+  // Пороги = зеркало серверного фильтра liquidity (backend/api/lots.py build_filters):
+  // high: ≤30 км и ≥500 тыс; medium: ≤100 км и ≥100 тыс; иначе low.
   const liquidity = distance == null ? null :
     distance <= 30 && (population || 0) >= 500_000 ? "Высокая" :
-    distance <= 50 && (population || 0) >= 200_000 ? "Хорошая" :
     distance <= 100 && (population || 0) >= 100_000 ? "Средняя" :
-    distance > 200 ? "Низкая" : "Средняя";
+    "Низкая";
   const liquidityColor = liquidity === "Высокая" ? "#16a34a" :
-                          liquidity === "Хорошая" ? "#65a30d" :
                           liquidity === "Низкая" ? "#dc2626" : "#ca8a04";
   return (
     <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: 16, marginBottom: 16 }}>

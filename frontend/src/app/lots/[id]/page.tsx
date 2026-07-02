@@ -421,12 +421,19 @@ export default function LotDetailPage({ params }: { params: Promise<{ id: string
             { label: "Площадь [КН]", value: fmtArea(lot.area_sqm_kn) },
             { label: "Задаток", value: lot.deposit ? `${fmtPrice(lot.deposit)}${lot.deposit_pct ? ` (${lot.deposit_pct}%)` : ""}` : "—" },
             { label: "Кадастровая стоимость", value: fmtPrice(lot.cadastral_cost) },
-            { label: "% НЦ / КС", value: lot.pct_price_to_cadastral ? `${lot.pct_price_to_cadastral.toFixed(1)}%` : "—" },
+            {
+              label: "% НЦ / КС",
+              value: rank >= RANK_INVESTOR
+                ? (lot.pct_price_to_cadastral ? `${lot.pct_price_to_cadastral.toFixed(1)}%` : "—")
+                : <a href="/pricing" style={{ fontSize: 13, color: "var(--text-3)", textDecoration: "none" }} title="Доступно с тарифа Инвестор">🔒 Инвестор</a>,
+            },
             {
               label: "% КС / Рынок",
-              value: (lot.cadastral_cost && lot.market_price_sqm && lot.area_sqm)
-                ? `${((lot.cadastral_cost / (lot.market_price_sqm * lot.area_sqm)) * 100).toFixed(1)}%`
-                : "—",
+              value: rank >= RANK_INVESTOR
+                ? ((lot.cadastral_cost && lot.market_price_sqm && lot.area_sqm)
+                  ? `${((lot.cadastral_cost / (lot.market_price_sqm * lot.area_sqm)) * 100).toFixed(1)}%`
+                  : "—")
+                : <a href="/pricing" style={{ fontSize: 13, color: "var(--text-3)", textDecoration: "none" }} title="Доступно с тарифа Инвестор">🔒 Инвестор</a>,
             },
           ].map(m => (
             <div key={m.label} style={{
@@ -506,12 +513,20 @@ export default function LotDetailPage({ params }: { params: Promise<{ id: string
               </table>
             </div>
 
-            {/* Локация и ликвидность */}
-            <LocationCard
-              city={lot.nearest_city_name}
-              distance={lot.nearest_city_distance_km}
-              population={lot.nearest_city_population}
-            />
+            {/* Локация и ликвидность — Pro+ (зеркало замка фильтра на главной) */}
+            {rank >= RANK_PRO ? (
+              <LocationCard
+                city={lot.nearest_city_name}
+                distance={lot.nearest_city_distance_km}
+                population={lot.nearest_city_population}
+              />
+            ) : (
+              <LockedBlock
+                title="Локация и ликвидность"
+                planLabel="Pro"
+                description="Ближайший город, расстояние до него и оценка ликвидности участка — сразу видно, легко ли будет продать или сдать землю."
+              />
+            )}
 
             {/* Коммуникации */}
             <CommsCard comms={lot.communications} />
@@ -744,7 +759,7 @@ export default function LotDetailPage({ params }: { params: Promise<{ id: string
                   { label: "Начальная цена", value: fmtPrice(lot.start_price) },
                   { label: "Цена за кв.м", value: lot.price_per_sqm ? `${fmtPrice(lot.price_per_sqm)}/м²` : "—" },
                   { label: "Кадастровая стоимость", value: fmtPrice(lot.cadastral_cost) },
-                  { label: "НЦ / КС", value: lot.pct_price_to_cadastral ? `${lot.pct_price_to_cadastral.toFixed(1)}%` : "—", highlight: true },
+                  { label: "НЦ / КС", value: rank >= RANK_INVESTOR ? (lot.pct_price_to_cadastral ? `${lot.pct_price_to_cadastral.toFixed(1)}%` : "—") : "🔒 Инвестор", highlight: true },
                   { label: "Задаток", value: lot.deposit ? fmtPrice(lot.deposit) : "—" },
                 ].map(item => (
                   <div key={item.label} style={{

@@ -116,14 +116,17 @@ async def region_page(
         .limit(10)
     )).scalars().all()
 
+    # Список лотов публичен (SEO-воронка, решение 25.06.2026), но score/дисконт —
+    # Pro-аналитика: ниже ранга поля не отдаём (иначе обход гейта /api/lots/analytics).
+    _is_pro = plan_rank(user) >= RANK_PRO
     top_lots = [{
         "id": l.id,
         "title": l.title,
         "start_price": float(l.start_price) if l.start_price else None,
         "area_sqm": float(l.area_sqm) if l.area_sqm else None,
         "land_purpose": l.land_purpose.value if l.land_purpose else None,
-        "score": l.score,
-        "discount_to_market_pct": round(float(l.discount_to_market_pct)) if l.discount_to_market_pct else None,
+        "score": l.score if _is_pro else None,
+        "discount_to_market_pct": (round(float(l.discount_to_market_pct)) if l.discount_to_market_pct else None) if _is_pro else None,
         "submission_end": l.submission_end.isoformat() if l.submission_end else None,
     } for l in top]
 

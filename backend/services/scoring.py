@@ -78,11 +78,19 @@ def compute_score_and_badges(lot: Lot, market_psqm: Optional[float]) -> tuple[in
     discount_to_market = None
 
     # ── 1. Дисконт к рынку (max +35) ──
+    # Санитизация: техническая цена-заглушка (1-10 ₽ в извещении) даёт фейковый
+    # «дисконт 99.9%», бейдж 💎 и топ выдачи — такие лоты дисконт не получают.
     lot_psqm = None
-    if lot.start_price and lot.area_sqm and lot.area_sqm > 0:
+    if lot.start_price and lot.start_price > 10 and lot.area_sqm and lot.area_sqm > 0:
         lot_psqm = lot.start_price / lot.area_sqm
     if lot_psqm and market_psqm and market_psqm > 0:
         discount_to_market = round((1 - lot_psqm / market_psqm) * 100, 1)
+        # Кламп: >95% почти всегда мусор данных (кривая площадь/цена или медиана
+        # из выбросов) — не тащим «алмазы из мусора» на витрину.
+        if discount_to_market > 95:
+            discount_to_market = None
+            lot_psqm = None
+    if lot_psqm and market_psqm and market_psqm > 0 and discount_to_market is not None:
         if discount_to_market >= 50:
             score += 35
             badges.append(BADGE_DIAMOND)
