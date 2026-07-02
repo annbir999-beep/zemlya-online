@@ -8,9 +8,24 @@ def _run(coro):
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:
-        return loop.run_until_complete(coro)
+        return loop.run_until_complete(_with_engine_cleanup(coro))
     finally:
         loop.close()
+
+
+async def _with_engine_cleanup(coro):
+    """Глобальный async-engine держит пул соединений, привязанный к лупу.
+    Каждый _run создаёт НОВЫЙ луп → соединения из пула предыдущего лупа дают
+    «Event loop is closed» / «attached to a different loop» (news_scout ретраился
+    вечно). Диспозим пул в конце работы в ТОМ ЖЕ лупе."""
+    from db.database import engine
+    try:
+        return await coro
+    finally:
+        try:
+            await engine.dispose()
+        except Exception:
+            pass
 
 
 @celery_app.task(bind=True, max_retries=1, default_retry_delay=600)

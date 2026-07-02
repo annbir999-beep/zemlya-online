@@ -37,7 +37,20 @@ async def _check_alerts():
                 Lot.published_at > (alert.last_triggered_at or alert.created_at),
             ]
 
-            filters = alert.filters or {}
+            filters = dict(alert.filters or {})
+            # Подстраховка пейволла: у существующих алертов (созданных до гейта
+            # или после даунгрейда тарифа) вырезаем премиум-фильтры по рангу владельца.
+            from core.plans import plan_rank, RANK_PRO, RANK_INVESTOR
+            _rank = plan_rank(user)
+            if _rank < RANK_PRO:
+                for _k in ("score_min", "badges_min", "discount_min", "price_drop_min",
+                           "liquidity", "deposit_pct_min", "deposit_pct_max"):
+                    filters.pop(_k, None)
+            if _rank < RANK_INVESTOR:
+                for _k in ("pct_cadastral_max", "cadastral_to_market_min",
+                           "cadastral_to_market_max", "sublease_allowed",
+                           "assignment_allowed", "polygon"):
+                    filters.pop(_k, None)
             if filters.get("region_codes"):
                 conditions.append(Lot.region_code.in_(filters["region_codes"]))
             if filters.get("price_min") is not None:
@@ -60,9 +73,12 @@ async def _check_alerts():
             if filters.get("score_min") is not None:
                 conditions.append(Lot.score >= filters["score_min"])
             if filters.get("badges_min") is not None:
-                # PostgreSQL array length: jsonb_array_length(score_badges) >= N
-                from sqlalchemy import func
-                conditions.append(func.jsonb_array_length(Lot.score_badges) >= filters["badges_min"])
+                # score_badges имеет тип JSON (не JSONB!) — используем json_array_length,
+                # как в api/lots.py build_filters. jsonb_array_length падал с UndefinedFunctionError
+                # и валил весь check_and_notify.
+                from sqlalchemy import func, cast
+                from sqlalchemy.dialects.postgresql import JSON
+                conditions.append(func.json_array_length(cast(Lot.score_badges, JSON)) >= filters["badges_min"])
             if filters.get("discount_min") is not None:
                 conditions.append(Lot.discount_to_market_pct >= filters["discount_min"])
             if filters.get("price_drop_min") is not None:

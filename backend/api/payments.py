@@ -379,10 +379,10 @@ async def create_payment(
     await db.commit()
     await db.refresh(sub)
 
-    # Зафиксировать использование промокода (даже если оплата пока pending)
+    # Запись об использовании промокода. used_count инкрементится в вебхуке
+    # payment.succeeded — иначе брошенные корзины выжигают лимит max_uses.
     if promo_obj:
         from models.promo import PromoUsage
-        promo_obj.used_count = (promo_obj.used_count or 0) + 1
         db.add(PromoUsage(
             promo_code_id=promo_obj.id,
             user_id=user.id,
@@ -410,7 +410,53 @@ async def yukassa_webhook(request: Request, db: AsyncSession = Depends(get_db)):
     event = data.get("event")
     payment_id = (data.get("object") or {}).get("id")
 
-    if event != "payment.succeeded" or not payment_id:
+    if not payment_id:
+        return {"status": "ignored"}
+
+    # Отмена платежа: помечаем pending-подписку, чтобы она не активировалась позже
+    if event == "payment.canceled":
+        result = await db.execute(
+            select(Subscription).where(
+                Subscription.yukassa_payment_id == payment_id,
+                Subscription.status == "pending",
+            )
+        )
+        sub_c = result.scalar_one_or_none()
+        if sub_c:
+            sub_c.status = "canceled"
+            await db.commit()
+        return {"status": "canceled_handled"}
+
+    # Возврат средств: сами подписку не режем (частичные возвраты, споры) —
+    # помечаем и уведомляем в TG для ручного даунгрейда.
+    if event == "refund.succeeded":
+        refund_payment_id = (data.get("object") or {}).get("payment_id") or payment_id
+        result = await db.execute(
+            select(Subscription).where(Subscription.yukassa_payment_id == refund_payment_id)
+        )
+        sub_r = result.scalar_one_or_none()
+        if sub_r:
+            sub_r.status = "refunded"
+            await db.commit()
+            # Уведомление Анне в TG для ручного даунгрейда
+            try:
+                import httpx as _hx
+                admin_chat = getattr(settings, "ADMIN_TELEGRAM_CHAT_ID", None) or "574728046"
+                if settings.TELEGRAM_BOT_TOKEN:
+                    async with _hx.AsyncClient(timeout=10) as _c:
+                        await _c.post(
+                            f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/sendMessage",
+                            json={"chat_id": admin_chat, "text": (
+                                f"💸 Возврат по платежу {refund_payment_id}: подписка #{sub_r.id} "
+                                f"(user {sub_r.user_id}, план {sub_r.plan}) помечена refunded — "
+                                f"проверь и даунгрейдни вручную."
+                            )},
+                        )
+            except Exception as e:
+                print(f"[payment-webhook] refund notify error: {type(e).__name__}: {e}")
+        return {"status": "refund_handled"}
+
+    if event != "payment.succeeded":
         return {"status": "ignored"}
 
     # Верификация: запрашиваем платёж у ЮКассы по id из уведомления
@@ -440,37 +486,68 @@ async def yukassa_webhook(request: Request, db: AsyncSession = Depends(get_db)):
     if payment_status != "succeeded":
         return {"status": "ignored"}
 
-    # Платёж по Invoice API имеет свой payment_id, не совпадающий с invoice_id.
-    # Subscription создаётся с invoice_id, поэтому ищем сначала по metadata
-    # (user_id + plan), затем — fallback на payment_id для прямых платежей.
-    md = payment_obj.get("metadata") or {}
-    md_user_id = md.get("user_id")
-    md_plan = md.get("plan")
+    # Сначала ТОЧНЫЙ матч по yukassa_payment_id (Subscription создаётся сразу после
+    # POST /v3/payments с этим id — прямые платежи находятся всегда). Metadata —
+    # только fallback для legacy Invoice-платежей: «последний pending по user+plan»
+    # может активировать НЕ ту подписку, если у юзера несколько брошенных корзин.
+    result = await db.execute(
+        select(Subscription).where(Subscription.yukassa_payment_id == payment_id)
+    )
+    sub = result.scalar_one_or_none()
 
-    sub = None
-    if md_user_id and md_plan:
-        result = await db.execute(
-            select(Subscription)
-            .where(
-                Subscription.user_id == int(md_user_id),
-                Subscription.plan == md_plan,
-                Subscription.status == "pending",
-            )
-            .order_by(Subscription.id.desc())
-            .limit(1)
-        )
-        sub = result.scalar_one_or_none()
-
-    # fallback: прямой поиск по yookassa id (если metadata пуст)
     if not sub:
-        result = await db.execute(select(Subscription).where(Subscription.yukassa_payment_id == payment_id))
-        sub = result.scalar_one_or_none()
+        md = payment_obj.get("metadata") or {}
+        try:
+            md_user_id = int(md.get("user_id") or 0)
+        except (TypeError, ValueError):
+            md_user_id = 0
+        md_plan = md.get("plan")
+        if md_user_id and md_plan:
+            result = await db.execute(
+                select(Subscription)
+                .where(
+                    Subscription.user_id == md_user_id,
+                    Subscription.plan == md_plan,
+                    Subscription.status == "pending",
+                )
+                .order_by(Subscription.id.desc())
+                .limit(1)
+            )
+            sub = result.scalar_one_or_none()
 
-    if not sub or sub.status == "succeeded":
+    if not sub:
         return {"status": "already_processed"}
 
-    sub.status = "succeeded"
-    sub.paid_at = datetime.now(timezone.utc)
+    # Атомарный переход pending→succeeded: защита от двойной доставки вебхука
+    # (два параллельных запроса не активируют подписку дважды).
+    from sqlalchemy import update as _update
+    claim = await db.execute(
+        _update(Subscription)
+        .where(Subscription.id == sub.id, Subscription.status == "pending")
+        .values(status="succeeded", paid_at=datetime.now(timezone.utc))
+        .returning(Subscription.id)
+    )
+    if claim.scalar_one_or_none() is None:
+        return {"status": "already_processed"}
+    await db.refresh(sub)
+
+    # Промокод: списываем использование только при УСПЕШНОЙ оплате
+    # (created-инкремент выжигал лимит на брошенных корзинах).
+    try:
+        from models.promo import PromoCode, PromoUsage
+        # Атомарный claim выше гарантирует, что сюда доходит ровно один вебхук —
+        # двойного инкремента не будет.
+        pu = (await db.execute(
+            select(PromoUsage).where(PromoUsage.subscription_id == sub.id)
+        )).scalar_one_or_none()
+        if pu:
+            promo = (await db.execute(
+                select(PromoCode).where(PromoCode.id == pu.promo_code_id)
+            )).scalar_one_or_none()
+            if promo is not None:
+                promo.used_count = (promo.used_count or 0) + 1
+    except Exception as e:
+        print(f"[payment-webhook] promo count error: {type(e).__name__}: {e}")
 
     from services.notifications import send_payment_email, send_payment_telegram
 
