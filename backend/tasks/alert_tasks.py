@@ -2,10 +2,33 @@ import asyncio
 from worker import celery_app
 
 
+def _run(coro):
+    """Новый луп + dispose глобального engine в ТОМ ЖЕ лупе (см. agent_tasks._run):
+    иначе пул соединений переживает луп и следующий прогон падает с
+    «attached to a different loop» / «Event loop is closed»."""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        return loop.run_until_complete(_with_engine_cleanup(coro))
+    finally:
+        loop.close()
+
+
+async def _with_engine_cleanup(coro):
+    from db.database import engine
+    try:
+        return await coro
+    finally:
+        try:
+            await engine.dispose()
+        except Exception:
+            pass
+
+
 @celery_app.task
 def check_and_notify():
     """Проверяем все активные алерты и шлём уведомления о новых лотах"""
-    asyncio.run(_check_alerts())
+    _run(_check_alerts())
 
 
 async def _check_alerts():
