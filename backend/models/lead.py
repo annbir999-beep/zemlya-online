@@ -37,3 +37,19 @@ class Lead(Base):
     converted_at = Column(DateTime(timezone=True))
 
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+
+class ServiceLead(Base):
+    """Заявки на услуги сопровождения (/services и кнопка «Участвовать с нами»
+    на странице лота). Высокомаржинальная воронка: под ключ / ДВГ-АГ / инвесторы."""
+    __tablename__ = "service_leads"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(200), nullable=False)
+    contact = Column(String(255), nullable=False)   # телефон или @telegram
+    package = Column(String(40))                    # turnkey / hectare / investor / lot
+    lot_id = Column(Integer, ForeignKey("lots.id"))
+    comment = Column(String(2000))
+    user_id = Column(Integer, ForeignKey("users.id"))  # если был залогинен
+    status = Column(String(20), default="new")      # new / contacted / won / lost
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
