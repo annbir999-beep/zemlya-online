@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum, ForeignKey, JSON
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum, ForeignKey, JSON, UniqueConstraint
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 import enum
@@ -88,3 +88,19 @@ class LotView(Base):
 
     user = relationship("User", back_populates="views")
     lot = relationship("Lot", back_populates="viewed_by")
+
+
+class AiAuditPurchase(Base):
+    """История AI-аудитов пользователя: какие лоты он аудировал (потратил квоту
+    free_audits_left или получил кэш-результат). Даёт постоянный доступ к оценке
+    этого лота независимо от тарифа + таблицу «Мои AI-аудиты» в кабинете."""
+    __tablename__ = "ai_audit_purchases"
+    __table_args__ = (UniqueConstraint("user_id", "lot_id", name="uq_ai_audit_user_lot"),)
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    lot_id = Column(Integer, ForeignKey("lots.id"), nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    user = relationship("User")
+    lot = relationship("Lot")

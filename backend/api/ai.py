@@ -49,6 +49,7 @@ async def request_assessment(
         age_days = (datetime.now(timezone.utc) - lot.ai_assessed_at).total_seconds() / 86400
         if age_days < 30:
             is_cached = True
+            await _record_audit_purchase(db, user.id, lot_id)
             return {"lot_id": lot_id, "assessment": lot.ai_assessment, "cached": True}
 
     # Лимиты: Free/Pro расходуют free_audits_left; Бюро+ — без лимита.
@@ -101,8 +102,26 @@ async def request_assessment(
     lot.ai_assessed_at = datetime.now(timezone.utc)
     lot.ai_assessment_hash = current_fp
     await db.commit()
+    await _record_audit_purchase(db, user.id, lot_id)
 
     return {"lot_id": lot_id, "assessment": assessment, "cached": False}
+
+
+async def _record_audit_purchase(db: AsyncSession, user_id: int, lot_id: int) -> None:
+    """Фиксируем аудит в истории пользователя (идемпотентно, ON CONFLICT DO NOTHING).
+    Запись даёт постоянный доступ к оценке лота (независимо от тарифа) и строит
+    таблицу «Мои AI-аудиты» в кабинете."""
+    try:
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+        from models.user import AiAuditPurchase
+        stmt = pg_insert(AiAuditPurchase).values(
+            user_id=user_id, lot_id=lot_id, created_at=datetime.now(timezone.utc)
+        ).on_conflict_do_nothing(constraint="uq_ai_audit_user_lot")
+        await db.execute(stmt)
+        await db.commit()
+    except Exception as e:
+        # История — не повод ронять сам аудит
+        print(f"[ai-audit] purchase record error: {type(e).__name__}: {e}")
 
 
 @router.get("/assess/{lot_id}")
@@ -111,8 +130,9 @@ async def get_assessment(
     db: AsyncSession = Depends(get_db),
     user: Optional[User] = Depends(get_current_user_optional),
 ):
-    """Получить готовую AI-оценку. Только залогиненным — AI-оценка по тарифу,
-    не для анонимного просмотра. Аноним → assessment=None (фронт зовёт войти)."""
+    """Получить готовую AI-оценку. Pro+ видит батч-оценку по тарифу; Free —
+    только лоты из своей истории аудитов (потратил квоту/купил разово).
+    Аноним → assessment=None (фронт зовёт войти)."""
     if user is None:
         return {"lot_id": lot_id, "assessment": None}
     result = await db.execute(select(Lot).where(Lot.id == lot_id))
@@ -121,4 +141,46 @@ async def get_assessment(
         raise HTTPException(status_code=404, detail="Лот не найден")
     if not lot.ai_assessment:
         return {"lot_id": lot_id, "assessment": None}
+    from core.plans import plan_rank, RANK_PRO
+    if plan_rank(user) < RANK_PRO:
+        from models.user import AiAuditPurchase
+        purchased = (await db.execute(
+            select(AiAuditPurchase.id).where(
+                AiAuditPurchase.user_id == user.id,
+                AiAuditPurchase.lot_id == lot_id,
+            )
+        )).scalar_one_or_none()
+        if purchased is None:
+            # locked=true — фронт показывает CTA «потратить аудит / купить Pro»
+            return {"lot_id": lot_id, "assessment": None, "locked": True}
     return {"lot_id": lot_id, "assessment": lot.ai_assessment}
+
+
+@router.get("/my-audits")
+async def my_audits(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Таблица «Мои AI-аудиты» в кабинете: какие лоты аудировал пользователь."""
+    from models.user import AiAuditPurchase
+    rows = (await db.execute(
+        select(AiAuditPurchase, Lot)
+        .join(Lot, Lot.id == AiAuditPurchase.lot_id)
+        .where(AiAuditPurchase.user_id == user.id)
+        .order_by(AiAuditPurchase.created_at.desc())
+        .limit(200)
+    )).all()
+    items = []
+    for p, lot in rows:
+        a = lot.ai_assessment if isinstance(lot.ai_assessment, dict) else {}
+        items.append({
+            "lot_id": lot.id,
+            "title": lot.title,
+            "region_name": lot.region_name,
+            "start_price": float(lot.start_price) if lot.start_price else None,
+            "status": lot.status.value if lot.status else None,
+            "audited_at": p.created_at.isoformat() if p.created_at else None,
+            "ai_score": a.get("score"),
+            "ai_strategy": a.get("best_strategy"),
+        })
+    return {"items": items, "total": len(items), "audits_left": user.free_audits_left or 0}
