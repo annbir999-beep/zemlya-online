@@ -72,7 +72,10 @@ async def _send_weekly_digest():
     sent = 0
     for u in users:
         try:
-            await _send_one_digest(u, top_lots)
+            # Free получает лоты без премиум-аналитики (score/дисконт → 🔒 + апселл),
+            # Pro+ — полную версию. Сами лоты видны всем — это крючок дайджеста.
+            from core.plans import plan_rank, RANK_PRO
+            await _send_one_digest(u, top_lots, is_pro=plan_rank(u) >= RANK_PRO)
             sent += 1
         except Exception as e:
             print(f"[digest] Ошибка для {u.email}: {type(e).__name__}: {e}")
@@ -80,8 +83,11 @@ async def _send_weekly_digest():
     print(f"[digest] Отправлено: {sent}/{len(users)}")
 
 
-async def _send_one_digest(user, lots):
-    """Отправляет одно письмо с топ-N лотами."""
+async def _send_one_digest(user, lots, is_pro: bool = True):
+    """Отправляет одно письмо с топ-N лотами.
+
+    is_pro=False (тариф ниже Pro): score и дисконт заменяются на 🔒-плейсхолдер
+    с апселлом — премиум-аналитика не уходит почтой в обход пейволла."""
     import aiosmtplib
     from email.mime.multipart import MIMEMultipart
     from email.mime.text import MIMEText
@@ -98,16 +104,21 @@ async def _send_one_digest(user, lots):
         price = _format_price(lot.start_price)
         area = _format_area(lot.area_sqm)
         region = lot.region_name or ""
-        score = lot.score or 0
-        discount = lot.discount_to_market_pct
-        discount_html = (
-            f'<span style="background:#dcfce7;color:#16a34a;padding:2px 6px;border-radius:4px;font-size:12px;font-weight:700">−{int(discount)}%</span>'
-            if discount and discount >= 10 else ""
-        )
+        if is_pro:
+            score = lot.score or 0
+            score_html = f'<div style="font-weight:700;color:#dc2626;font-size:18px;display:inline-block;width:42px">{score}</div>'
+            discount = lot.discount_to_market_pct
+            discount_html = (
+                f'<span style="background:#dcfce7;color:#16a34a;padding:2px 6px;border-radius:4px;font-size:12px;font-weight:700">−{int(discount)}%</span>'
+                if discount and discount >= 10 else ""
+            )
+        else:
+            score_html = f'<a href="{SITE}/pricing" style="font-weight:700;color:#9ca3af;font-size:15px;display:inline-block;width:42px;text-decoration:none" title="Скор лота — в тарифе Pro">🔒</a>'
+            discount_html = ""
         rows_html += f"""
         <tr>
           <td style="padding:14px 0;border-bottom:1px solid #e5e7eb">
-            <div style="font-weight:700;color:#dc2626;font-size:18px;display:inline-block;width:42px">{score}</div>
+            {score_html}
             <a href="{SITE}/lots/{lot.id}" style="color:#1f2937;text-decoration:none;font-weight:500;font-size:14px">
               {title}
             </a>
@@ -117,6 +128,13 @@ async def _send_one_digest(user, lots):
             </div>
           </td>
         </tr>"""
+    if not is_pro:
+        rows_html += f"""
+        <tr><td style="padding:14px 0">
+          <a href="{SITE}/pricing" style="display:inline-block;background:#2563eb;color:#ffffff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600;font-size:13px">
+            ⚡ Скор, дисконт к рынку и умные фильтры — в тарифе Pro →
+          </a>
+        </td></tr>"""
 
     html = f"""<!DOCTYPE html>
 <html>

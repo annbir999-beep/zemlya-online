@@ -1767,6 +1767,21 @@ async def get_lot(
         else None
     )
 
+    # AI-оценка: Pro+ по тарифу; Free — только если лот в его истории аудитов
+    # (AiAuditPurchase). Аноним — None.
+    ai_visible = False
+    if user is not None:
+        if rank >= RANK_PRO:
+            ai_visible = True
+        else:
+            from models.user import AiAuditPurchase
+            ai_visible = (await db.execute(
+                select(AiAuditPurchase.id).where(
+                    AiAuditPurchase.user_id == user.id,
+                    AiAuditPurchase.lot_id == lot_id,
+                )
+            )).scalar_one_or_none() is not None
+
     # Пейволл премиум-полей — внутри _lot_to_item (единая точка для списка и детали).
     item = _lot_to_item(lot, rank=rank)
     data = item.model_dump()
@@ -1778,7 +1793,7 @@ async def get_lot(
         organizer_name=lot.organizer_name,
         auction_start_date=lot.auction_start_date.isoformat() if lot.auction_start_date else None,
         rosreestr_data=lot.rosreestr_data,
-        ai_assessment=lot.ai_assessment if user is not None else None,
+        ai_assessment=lot.ai_assessment if ai_visible else None,
         full_description=lot.full_description,
         technical_conditions=lot.technical_conditions,
         contract_terms=contract,

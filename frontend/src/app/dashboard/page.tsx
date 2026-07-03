@@ -16,10 +16,12 @@ export default function DashboardPage() {
   const router = useRouter();
   const [user, setUser] = useState<UserProfile | null>(null);
   const [alerts, setAlerts] = useState<Alert[]>([]);
-  const [tab, setTab] = useState<"profile" | "alerts" | "history" | "views" | "purchases">("profile");
+  const [tab, setTab] = useState<"profile" | "alerts" | "history" | "views" | "purchases" | "audits">("profile");
   const [savedLots, setSavedLots] = useState<{ id: number; title: string; start_price?: number; status: string }[]>([]);
   const [views, setViews] = useState<{ id: number; title: string; region_name?: string; start_price?: number; area_sqm?: number; status?: string; score?: number; viewed_at?: string }[]>([]);
   const [purchases, setPurchases] = useState<{ id: number; plan: string; amount: number; currency?: string; months?: number; status: string; created_at?: string; paid_at?: string }[]>([]);
+  const [audits, setAudits] = useState<{ lot_id: number; title: string; region_name?: string; start_price?: number; status?: string; audited_at?: string; ai_score?: number; ai_strategy?: string }[]>([]);
+  const [auditsLeft, setAuditsLeft] = useState<number>(0);
   const [showCreateAlert, setShowCreateAlert] = useState(false);
 
   const reloadAlerts = () =>
@@ -36,6 +38,9 @@ export default function DashboardPage() {
     api.get<typeof savedLots | { items: typeof savedLots }>("/api/users/saved-lots").then((d) => setSavedLots(Array.isArray(d) ? d : (d?.items ?? [])));
     api.get<{ items: typeof views }>("/api/users/views").then((d) => setViews(d?.items ?? []));
     api.get<{ items: typeof purchases }>("/api/users/subscriptions").then((d) => setPurchases(d?.items ?? []));
+    api.get<{ items: typeof audits; audits_left: number }>("/api/ai/my-audits")
+      .then((d) => { setAudits(d?.items ?? []); setAuditsLeft(d?.audits_left ?? 0); })
+      .catch(() => {});
   }, [router]);
 
   const toggleAlert = async (id: number) => {
@@ -72,7 +77,7 @@ export default function DashboardPage() {
 
       {/* Tabs */}
       <div style={{ display: "flex", gap: 4, borderBottom: "1px solid var(--border)", marginBottom: 24 }}>
-        {(["profile", "alerts", "history", "views", "purchases"] as const).map((t) => (
+        {(["profile", "alerts", "history", "views", "purchases", "audits"] as const).map((t) => (
           <button
             key={t}
             className="btn btn-ghost"
@@ -84,7 +89,7 @@ export default function DashboardPage() {
             }}
             onClick={() => setTab(t)}
           >
-            {{ profile: "Профиль", alerts: `Фильтры (${alerts.length})`, history: `Избранное (${savedLots.length})`, views: `История (${views.length})`, purchases: `Покупки (${purchases.length})` }[t]}
+            {{ profile: "Профиль", alerts: `Фильтры (${alerts.length})`, history: `Избранное (${savedLots.length})`, views: `История (${views.length})`, purchases: `Покупки (${purchases.length})`, audits: `AI-аудиты (${audits.length})` }[t]}
           </button>
         ))}
       </div>
@@ -293,6 +298,59 @@ export default function DashboardPage() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* AI audits tab */}
+      {tab === "audits" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+            <span style={{ fontSize: 13, color: "var(--text-2)" }}>
+              Осталось аудитов: <b style={{ color: "var(--primary)" }}>{auditsLeft}</b>
+            </span>
+            <a href="/pricing" className="btn btn-ghost btn-sm">Пополнить</a>
+          </div>
+          {audits.length === 0 && (
+            <div style={{ padding: 32, textAlign: "center", color: "var(--text-3)", background: "var(--surface)", borderRadius: 10, border: "1px solid var(--border)" }}>
+              Здесь появятся лоты, которые вы проверили AI-аудитом.<br />
+              Оценка каждого проверенного лота остаётся доступной вам навсегда.
+            </div>
+          )}
+          {audits.map((a) => (
+            <a key={a.lot_id} href={`/lots/${a.lot_id}`} style={{
+              background: "var(--surface)", border: "1px solid var(--border)",
+              borderRadius: 10, padding: 14, textDecoration: "none", color: "var(--text)",
+              display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap",
+            }}>
+              <div style={{ flex: 1, minWidth: 200 }}>
+                <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 420 }}>
+                  {a.title || `Лот #${a.lot_id}`}
+                </div>
+                <div style={{ fontSize: 12, color: "var(--text-3)" }}>
+                  {a.region_name || ""}
+                  {a.audited_at && ` · аудит ${new Date(a.audited_at).toLocaleDateString("ru")}`}
+                  {a.status === "completed" && " · торги завершены"}
+                </div>
+              </div>
+              {a.start_price != null && (
+                <div style={{ fontWeight: 700, fontSize: 14 }}>
+                  {a.start_price >= 1_000_000 ? `${(a.start_price / 1_000_000).toFixed(2)} млн ₽` : `${Math.round(a.start_price / 1000)} тыс ₽`}
+                </div>
+              )}
+              {a.ai_score != null && (
+                <span style={{
+                  fontSize: 12, fontWeight: 700, padding: "4px 10px", borderRadius: 12, flexShrink: 0,
+                  background: a.ai_score >= 70 ? "#dcfce7" : a.ai_score >= 40 ? "#fef9c3" : "#fee2e2",
+                  color: a.ai_score >= 70 ? "#166534" : a.ai_score >= 40 ? "#854d0e" : "#991b1b",
+                }}>
+                  AI: {a.ai_score}
+                </span>
+              )}
+              {a.ai_strategy && (
+                <span style={{ fontSize: 11, color: "var(--text-3)", flexShrink: 0 }}>{a.ai_strategy}</span>
+              )}
+            </a>
+          ))}
         </div>
       )}
 
