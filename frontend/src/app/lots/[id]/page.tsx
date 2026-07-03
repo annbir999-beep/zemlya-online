@@ -734,6 +734,13 @@ export default function LotDetailPage({ params }: { params: Promise<{ id: string
                   Подать заявку ↗
                 </a>
               )}
+              <a href={`/services?lot=${id}`} className="btn btn-secondary" style={{
+                width: "100%",
+                background: "linear-gradient(135deg, #f59e0b15, #f59e0b25)",
+                border: "1px solid #f59e0b66", color: "var(--text)",
+              }} title="Сопровождение торгов под ключ: проверим лот, подготовим документы, выиграем аукцион">
+                🤝 Участвовать с нами
+              </a>
               <button className={`btn ${saved ? "btn-secondary" : "btn-secondary"}`} style={{ width: "100%" }} onClick={toggleSave}>
                 {saved ? "★ Убрать из избранного" : "☆ Добавить в избранное"}
               </button>

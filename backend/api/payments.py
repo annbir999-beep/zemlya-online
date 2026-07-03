@@ -237,6 +237,30 @@ async def create_payment(
     if not price:
         raise HTTPException(status_code=400, detail="Неверный тариф или период")
 
+    # Запрет «молчаливого даунгрейда»: покупка тарифа НИЖЕ активного затирала бы
+    # оплаченный план (вебхук перезаписывает subscription_plan). Пока активная
+    # подписка не истекла — можно только продлить свой план или апгрейдиться.
+    if not is_one_time and data.plan in PLAN_ENUM:
+        from core.plans import PLAN_RANK as _PR
+        now_ = datetime.now(timezone.utc)
+        active = (
+            user.subscription_expires_at is not None
+            and user.subscription_expires_at > now_
+            and user.subscription_plan != SubscriptionPlan.FREE
+        )
+        if active and _PR.get(PLAN_ENUM[data.plan], 0) < _PR.get(user.subscription_plan, 0):
+            cur_label = {"personal": "Pro", "investor": "Инвестор", "expert": "Бюро", "landlord": "Бюро+"}.get(
+                user.subscription_plan.value, user.subscription_plan.value)
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"У вас активен тариф «{cur_label}» до "
+                    f"{user.subscription_expires_at.strftime('%d.%m.%Y')}. "
+                    "Переход на более дешёвый тариф возможен после окончания текущего — "
+                    "иначе оплаченные месяцы сгорят. Продлить текущий или повысить тариф можно сейчас."
+                ),
+            )
+
     # Применение промокода (опционально)
     promo_obj = None
     promo_discount = 0

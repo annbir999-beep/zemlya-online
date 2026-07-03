@@ -18,7 +18,7 @@ celery_app = Celery(
     "sotka",
     broker=settings.REDIS_URL,
     backend=settings.REDIS_URL,
-    include=["tasks.scrape_tasks", "tasks.alert_tasks", "tasks.ai_batch_tasks", "tasks.digest_tasks", "tasks.price_drop_tasks", "tasks.drip_tasks", "tasks.lead_drip_tasks", "tasks.agent_tasks", "tasks.mail_tasks"],
+    include=["tasks.scrape_tasks", "tasks.alert_tasks", "tasks.ai_batch_tasks", "tasks.digest_tasks", "tasks.price_drop_tasks", "tasks.drip_tasks", "tasks.lead_drip_tasks", "tasks.agent_tasks", "tasks.mail_tasks", "tasks.subscription_tasks"],
 )
 
 celery_app.conf.update(
@@ -43,6 +43,11 @@ celery_app.conf.update(
         "scrape-bankrot": {
             "task": "tasks.scrape_tasks.scrape_bankrot_fedresurs",
             "schedule": crontab(minute=40, hour="*/6"),
+        },
+        # Напоминания об истечении подписки (за 7 дней и за 1 день) — 11:00 МСК
+        "notify-expiring-subscriptions": {
+            "task": "tasks.subscription_tasks.notify_expiring_subscriptions",
+            "schedule": crontab(minute=0, hour=11),
         },
         # Ежедневный re-parse PDF договоров обновлёнными regex'ами contract_parser.
         # Берёт лоты, у которых contract_terms ещё пуст / неполный — повторно скачивает
