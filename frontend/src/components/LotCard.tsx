@@ -3,6 +3,7 @@ import type { LotListItem } from "@/lib/api";
 import { ScoreCircle, ScoreBadges, DiscountTag } from "./ScoreBadge";
 import { compare } from "@/lib/compare";
 import { useCompareIds } from "@/lib/useCompare";
+import { hectareProgram, HECTARE_LABEL, HECTARE_TITLE } from "@/lib/hectare";
 
 const PURPOSE_LABEL: Record<string, string> = {
   izhs: "ИЖС", snt: "СНТ", lpkh: "ЛПХ", agricultural: "Сельхоз",
@@ -88,6 +89,19 @@ export default function LotCard({ lot, selected, compareIds, onSelect, onToggleC
           <span className="badge badge-gray">{PURPOSE_LABEL[lot.land_purpose] || lot.land_purpose}</span>
         )}
         {lot.auction_type === "rent" && <span className="badge badge-orange">Аренда</span>}
+        {(() => {
+          const hp = hectareProgram(lot.region_code);
+          if (!hp) return null;
+          return (
+            <span
+              className="badge"
+              style={{ background: "#effbf7", color: "#0f766e", border: "1px solid rgba(13,148,136,0.25)" }}
+              title={HECTARE_TITLE[hp]}
+            >
+              🎁 {HECTARE_LABEL[hp]}
+            </span>
+          );
+        })()}
       </div>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6, gap: 8, flexWrap: "wrap" }}>
