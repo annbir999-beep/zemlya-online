@@ -47,10 +47,10 @@ export default function Header() {
           ТЗ
         </span>
         <span style={{ display: "flex", flexDirection: "column", lineHeight: 1 }}>
-          <span style={{ fontSize: 17, fontWeight: 800, letterSpacing: "-0.02em", color: "var(--text)" }}>
-            Торги<span style={{ color: "#16a34a" }}> Земли</span>
+          <span style={{ fontSize: 17, fontWeight: 800, letterSpacing: "-0.02em", color: "#f1f5f9" }}>
+            Торги<span style={{ color: "#2dd4bf" }}> Земли</span>
           </span>
-          <span style={{ fontSize: 10, color: "var(--text-3)", marginTop: 2, letterSpacing: "0.05em", textTransform: "uppercase" }}>
+          <span style={{ fontSize: 10, color: "rgba(148,163,184,0.85)", marginTop: 2, letterSpacing: "0.05em", textTransform: "uppercase" }}>
             аукционы земли РФ
           </span>
         </span>
@@ -101,7 +101,7 @@ export default function Header() {
         style={{
           display: "none", border: "none", background: "transparent",
           fontSize: 22, padding: "4px 10px", cursor: "pointer",
-          color: "var(--text-2)",
+          color: "rgba(226,232,240,0.85)",
         }}
       >
         {mobileOpen ? "✕" : "☰"}
