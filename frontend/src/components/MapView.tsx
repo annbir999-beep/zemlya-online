@@ -139,6 +139,13 @@ export default function MapView({ points, selectedId, heatmap, mode = "points" }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const clickHandlerRef = useRef<any>(null);
 
+  // ── Подсветка территорий «бесплатного гектара» (ДВ ФЗ-119, Арктика ФЗ-247) ──
+  const [hectareOn, setHectareOn] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const hectareLayerRef = useRef<any>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const hectareGeoRef = useRef<any>(null); // кэш geojson, чтобы не тянуть повторно
+
   useEffect(() => {
     getMe().then(me => {
       const plan = me?.subscription_plan;
@@ -532,6 +539,74 @@ export default function MapView({ points, selectedId, heatmap, mode = "points" }
     }
   }, [heatmap, mode]);
 
+  // ── Слой «бесплатный гектар»: полигоны регионов ДВГ/АГ поверх карты ──
+  useEffect(() => {
+    const ctx = getMap();
+    if (!ctx) return;
+    const { map, L } = ctx;
+
+    if (!hectareOn) {
+      if (hectareLayerRef.current) {
+        map.removeLayer(hectareLayerRef.current);
+        hectareLayerRef.current = null;
+      }
+      return;
+    }
+
+    let cancelled = false;
+    const PROGRAM_LABEL: Record<string, string> = {
+      dv: "Дальневосточный гектар (ФЗ-119)",
+      arctic: "Арктический гектар (ФЗ-247)",
+      both: "ДВ + Арктический гектар",
+    };
+    const styleFor = (program: string) => {
+      if (program === "arctic") return { color: "#0284c7", weight: 1.5, fillColor: "#0284c7", fillOpacity: 0.14 };
+      if (program === "both") return { color: "#0284c7", weight: 1.5, dashArray: "5 4", fillColor: "#0d9488", fillOpacity: 0.16 };
+      return { color: "#0d9488", weight: 1.5, fillColor: "#0d9488", fillOpacity: 0.16 };
+    };
+
+    (async () => {
+      try {
+        if (!hectareGeoRef.current) {
+          const r = await fetch("/geo/hectare-regions.json");
+          if (!r.ok) throw new Error(`geo ${r.status}`);
+          hectareGeoRef.current = await r.json();
+        }
+        if (cancelled) return;
+        const layer = L.geoJSON(hectareGeoRef.current, {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          style: (f: any) => styleFor(f?.properties?.program),
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          onEachFeature: (f: any, lyr: any) => {
+            const p = f?.properties || {};
+            const label = PROGRAM_LABEL[p.program] || "Бесплатный гектар";
+            lyr.bindTooltip(`<b>${p.name}</b><br>${label}`, { sticky: true });
+            lyr.bindPopup(`
+              <div style="min-width:210px;font-family:system-ui,sans-serif">
+                <div style="font-weight:700;font-size:14px;margin-bottom:4px">${p.name}</div>
+                <div style="font-size:12px;color:#334155;margin-bottom:6px">${label}</div>
+                <div style="font-size:12px;color:#64748b;line-height:1.5">
+                  До 1 га бесплатно каждому гражданину РФ.<br>
+                  5 лет освоения → в собственность.
+                </div>
+                <a href="/lots?region=${p.code}" style="display:block;margin-top:8px;padding:5px 8px;background:#0d9488;color:#fff;border-radius:6px;font-size:12px;text-align:center;text-decoration:none">Лоты региона →</a>
+              </div>
+            `, { maxWidth: 260 });
+          },
+        });
+        if (hectareLayerRef.current) map.removeLayer(hectareLayerRef.current);
+        hectareLayerRef.current = layer;
+        layer.addTo(map);
+      } catch (e) {
+        console.error("hectare overlay:", e);
+        if (!cancelled) setHectareOn(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hectareOn]);
+
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
       <div ref={mapRef} style={{ width: "100%", height: "100%" }} />
@@ -581,6 +656,19 @@ export default function MapView({ points, selectedId, heatmap, mode = "points" }
               </div>
             </div>
           )}
+          <button
+            onClick={() => setHectareOn(v => !v)}
+            title="Подсветить регионы программ «Дальневосточный гектар» (ФЗ-119) и «Арктический гектар» (ФЗ-247)"
+            style={{
+              background: hectareOn ? "#0d9488" : "rgba(255,255,255,0.95)",
+              border: `1px solid ${hectareOn ? "#0d9488" : "var(--border, #e2e8f0)"}`,
+              borderRadius: 8, padding: "7px 11px", cursor: "pointer",
+              fontSize: 13, fontWeight: 600, color: hectareOn ? "#fff" : "#0d9488",
+              boxShadow: "0 1px 6px rgba(0,0,0,.2)", display: "flex", alignItems: "center", gap: 6,
+            }}
+          >
+            🎁 Бесплатный гектар
+          </button>
         </div>
       )}
 
@@ -607,6 +695,10 @@ export default function MapView({ points, selectedId, heatmap, mode = "points" }
           { emoji: "🌲", color: "#047857", label: "Лесной фонд" },
           { emoji: "💧", color: "#0284c7", label: "Водный фонд" },
           { emoji: "📍", color: "#94a3b8", label: "Иное" },
+          ...(hectareOn ? [
+            { emoji: "▦", color: "#0d9488", label: "ДВ-гектар (ФЗ-119)" },
+            { emoji: "▦", color: "#0284c7", label: "Арктический гектар (ФЗ-247)" },
+          ] : []),
         ]).map(item => (
           <div key={item.label} style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <div style={{ width: 14, height: 14, borderRadius: "50%", background: item.color, border: "2px solid #fff", boxShadow: "0 1px 3px rgba(0,0,0,.2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8, flexShrink: 0 }}>
