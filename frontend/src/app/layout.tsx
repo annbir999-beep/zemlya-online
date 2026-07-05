@@ -1,5 +1,14 @@
 import type { Metadata } from "next";
+import localFont from "next/font/local";
 import "./globals.css";
+
+// Manrope (variable, latin+cyrillic) — self-hosted, чтобы билд не зависел от Google Fonts
+const manrope = localFont({
+  src: "../fonts/Manrope-Variable.ttf",
+  weight: "200 800",
+  display: "swap",
+  variable: "--font-sans",
+});
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import UtmCapture from "@/components/UtmCapture";
@@ -19,8 +28,8 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ru">
-      <body>
+    <html lang="ru" className={manrope.variable}>
+      <body className={manrope.className}>
         <div className="app-layout">
           <UtmCapture />
           <HeroBar />

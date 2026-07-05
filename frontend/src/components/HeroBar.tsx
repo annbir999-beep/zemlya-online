@@ -32,7 +32,8 @@ export default function HeroBar() {
 
   return (
     <div style={{
-      background: "linear-gradient(135deg, #16a34a 0%, #0d9488 100%)",
+      background: "radial-gradient(800px 120px at 70% 0%, rgba(45,212,191,0.16), transparent 70%), linear-gradient(90deg, #0a1120 0%, #0d1b2e 100%)",
+      borderBottom: "1px solid rgba(45,212,191,0.18)",
       color: "white",
       padding: "9px 16px",
       display: "flex",
@@ -45,21 +46,22 @@ export default function HeroBar() {
     }}>
       <span style={{ fontWeight: 600, lineHeight: 1.4 }}>
         💎 Сформируйте земельный портфель.
-        <span style={{ opacity: 0.9, fontWeight: 400, marginLeft: 8 }}>
+        <span style={{ opacity: 0.75, fontWeight: 400, marginLeft: 8 }}>
           Дисконты до 80%, AI-аудит каждого лота, региональная аналитика.
         </span>
       </span>
       <Link
         href="/audit-lot"
         style={{
-          background: "white",
-          color: "#0d9488",
+          background: "linear-gradient(135deg, #059669 0%, #0d9488 55%, #0ea5b7 100%)",
+          color: "#fff",
           padding: "6px 16px",
-          borderRadius: 8,
+          borderRadius: 10,
           textDecoration: "none",
           fontWeight: 700,
           fontSize: 13,
           whiteSpace: "nowrap",
+          boxShadow: "0 2px 14px rgba(13,148,136,0.45)",
         }}
       >
         Бесплатный аудит →
