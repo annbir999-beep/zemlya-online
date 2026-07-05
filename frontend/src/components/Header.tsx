@@ -39,18 +39,17 @@ export default function Header() {
         {/* Modern logo: gradient square with letter "З" + clean wordmark */}
         <span style={{
           width: 36, height: 36, borderRadius: 10,
-          background: "linear-gradient(135deg, #16a34a 0%, #0d9488 100%)",
+          background: "#0d9488",
           display: "inline-flex", alignItems: "center", justifyContent: "center",
           color: "white", fontWeight: 800, fontSize: 15, letterSpacing: "-0.03em",
-          boxShadow: "0 2px 8px rgba(13, 148, 136, 0.3)",
         }}>
           ТЗ
         </span>
         <span style={{ display: "flex", flexDirection: "column", lineHeight: 1 }}>
-          <span style={{ fontSize: 17, fontWeight: 800, letterSpacing: "-0.02em", color: "#f1f5f9" }}>
-            Торги<span style={{ color: "#2dd4bf" }}> Земли</span>
+          <span style={{ fontSize: 17, fontWeight: 800, letterSpacing: "-0.02em", color: "var(--text)" }}>
+            Торги<span style={{ color: "#0d9488" }}> Земли</span>
           </span>
-          <span style={{ fontSize: 10, color: "rgba(148,163,184,0.85)", marginTop: 2, letterSpacing: "0.05em", textTransform: "uppercase" }}>
+          <span style={{ fontSize: 10, color: "var(--text-3)", marginTop: 2, letterSpacing: "0.05em", textTransform: "uppercase" }}>
             аукционы земли РФ
           </span>
         </span>
@@ -64,7 +63,7 @@ export default function Header() {
                 key={n.href}
                 href={n.href}
                 style={{
-                  background: "linear-gradient(135deg, #16a34a 0%, #0d9488 100%)",
+                  background: "#0d9488",
                   color: "white",
                   borderRadius: 10,
                   padding: "6px 14px",
@@ -76,7 +75,6 @@ export default function Header() {
                   alignItems: "center",
                   lineHeight: 1.1,
                   gap: 2,
-                  boxShadow: "0 2px 6px rgba(13, 148, 136, 0.3)",
                   whiteSpace: "nowrap",
                 }}
               >
@@ -101,7 +99,7 @@ export default function Header() {
         style={{
           display: "none", border: "none", background: "transparent",
           fontSize: 22, padding: "4px 10px", cursor: "pointer",
-          color: "rgba(226,232,240,0.85)",
+          color: "var(--text-2)",
         }}
       >
         {mobileOpen ? "✕" : "☰"}
