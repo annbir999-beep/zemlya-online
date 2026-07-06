@@ -1,0 +1,8 @@
+{
+  "Блок3-20 Травинка и фундамент": {
+    "autoInstructions": "",
+    "scriptText": "Здесь будет твой двор.\n\nРоса на траве, солнце на свежем бетоне.\n\nМесто для дома мечты — с торгов. Торги Земли.",
+    "whiskPrompts": "Extreme macro of morning dew drops on fresh green grass blades, sunrise bokeh, shallow depth of field, photorealistic 4K, no on-screen text, no letters, no flags, no watermark --ar 9:16\nMacro of the clean edge of a freshly poured concrete foundation slab on a green plot, warm light, photorealistic 4K, no on-screen text, no letters, no flags, no watermark, no old wooden houses, no village --ar 9:16\nClean SHARP wide ground-level shot of ONE completed modern two-story house with wood and stone facade, flat roof and panoramic windows, landscaped yard with green lawn and stone path, golden hour, the WHOLE image in crisp sharp focus, deep depth of field, NO blur, NO bokeh, NO shallow depth of field, NO double exposure, NO overlapping images, NO ghosting, NO macro grass or objects in the foreground, single clean photograph, photorealistic 4K, no on-screen text, no letters, no flags, no watermark, no old wooden houses, no village --ar 9:16",
+    "videoPrompts": "Extreme macro, dew drops glisten on grass, tiny breeze moves the blades, photorealistic 4K, no on-screen text, no music, no voices\nMacro along the fresh concrete foundation edge, light shifts, photorealistic 4K, no on-screen text, no music, no voices\nSlow smooth push-in toward the completed modern house, warm window lights glow, the image stays SHARP and clean throughout, NO blur, NO double exposure, photorealistic 4K, no on-screen text, no music, no voices"
+  }
+}

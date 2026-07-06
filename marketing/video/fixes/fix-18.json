@@ -1,0 +1,8 @@
+{
+  "Блок3-18 Чертёж оживает": {
+    "autoInstructions": "",
+    "scriptText": "От проекта — к стенам.\n\nЛинии чертежа превращаются в реальный дом.\n\nА земля под него — с аукциона. Торги Земли.",
+    "whiskPrompts": "Macro over a clean architectural 3D model of a modern SINGLE-STORY family house with flat roof and panoramic windows, soft studio light, blueprint lines glowing, no readable text, no letters, photorealistic 4K, no flags, no watermark --ar 9:16\nGlowing white outline lines of the SAME modern single-story flat-roof house forming in mid-air over an empty green plot, identical silhouette to the 3D model, abstract, no readable text, no letters, photorealistic 4K, no flags, no watermark, no village --ar 9:16\nThe glowing outline becomes the SAME real completed modern single-story flat-roof house on the plot, identical silhouette and proportions, landscaped yard, golden hour, photorealistic 4K, no on-screen text, no letters, no flags, no watermark, no old wooden houses, no village, NOT an apartment building, NOT multi-story --ar 9:16",
+    "videoPrompts": "Macro camera glides over the 3D house model, lines glow softly, photorealistic 4K, no on-screen text, no music, no voices\nGlowing outline lines draw a house in mid-air over the plot, photorealistic 4K, no on-screen text, no music, no voices\nThe glowing outline morphs into a solid real house, photorealistic 4K, no on-screen text, no music, no voices"
+  }
+}
