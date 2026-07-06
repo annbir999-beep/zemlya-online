@@ -22,7 +22,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   const staticRoutes = [
     "", "/lots", "/zemelnye-torgi", "/blog", "/checklist",
-    "/pricing", "/faq", "/strategies", "/ai-picks", "/analytics",
+    "/pricing", "/faq", "/strategies", "/ai-picks", "/analytics", "/obuchenie",
   ].map((p) => ({ url: `${SITE}${p}`, lastModified: now, changeFrequency: "daily" as const, priority: p === "" ? 1 : 0.7 }));
 
   const regionsData = await safeGet("/api/seo/regions");

@@ -11,6 +11,7 @@ export default function Footer() {
           <Link href="/faq">FAQ и контакты</Link>
           <Link href="/oferta">Публичная оферта</Link>
           <Link href="/privacy">Политика конфиденциальности</Link>
+          <Link href="/obuchenie">Обучение</Link>
           <Link href="/blog">Блог</Link>
           <Link href="/zemelnye-torgi">Торги по регионам</Link>
           <Link href="/checklist">Чеклист 12 проверок</Link>
