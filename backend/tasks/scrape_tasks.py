@@ -9,13 +9,27 @@ from services.rosreestr import RosreestrClient
 
 
 def _run(coro):
-    """Каждая задача получает свежий event loop — избегаем 'attached to a different loop'."""
+    """Новый луп + dispose глобального engine в ТОМ ЖЕ лупе (см. agent_tasks._run):
+    иначе пул соединений переживает луп и следующий прогон падает с
+    «attached to a different loop» / «Event loop is closed» (ловилось на
+    update_lot_statuses)."""
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:
-        return loop.run_until_complete(coro)
+        return loop.run_until_complete(_with_engine_cleanup(coro))
     finally:
         loop.close()
+
+
+async def _with_engine_cleanup(coro):
+    from db.database import engine
+    try:
+        return await coro
+    finally:
+        try:
+            await engine.dispose()
+        except Exception:
+            pass
 
 
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=300)
