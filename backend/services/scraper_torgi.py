@@ -265,6 +265,13 @@ class TorgiGovScraper:
         self.client = httpx.AsyncClient(
             timeout=30.0,
             proxy=proxy_url,
+            # verify=False: текущий прокси (103.155.126.116) терминирует TLS сам и
+            # отдаёт цепочку без промежуточного CA — httpx валит ЛЮБОЙ запрос с
+            # CERTIFICATE_VERIFY_FAILED. Из-за try/except в _fetch_page это тихо
+            # гасилось, скрапер «успешно» завершался за 50 сек вместо 45 минут,
+            # сохраняя 0 лотов (обнаружено 08.07, простой с 04.07). Данные
+            # публичные (torgi.gov), риска утечки нет.
+            verify=False,
             headers={
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                 "Accept": "application/json, text/plain, */*",
