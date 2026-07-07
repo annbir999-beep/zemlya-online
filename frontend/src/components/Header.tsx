@@ -29,6 +29,7 @@ export default function Header() {
     { href: "/ai-picks", label: "ИИ-разборы", icon: "🤖" },
     { href: "/analytics", label: "Аналитика", icon: "📊" },
     { href: "/services", label: "Услуги", icon: "🤝" },
+    { href: "/obuchenie", label: "Обучение", icon: "🎓" },
     { href: "/blog", label: "Блог", icon: "📚" },
     { href: "/pricing", label: "Тарифы", icon: "⚡" },
   ];
