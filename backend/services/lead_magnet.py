@@ -103,8 +103,8 @@ body {{ font-family: "DejaVu", sans-serif; color: #1f2937; font-size: 10.5pt; }}
 .cta-box {{ background: #f0fdfa; border: 1pt solid #99f6e4; border-radius: 8pt; padding: 12pt 14pt;
   font-size: 9.5pt; color: #0f766e; line-height: 1.5; }}
 .cta-box a {{ color: #0d9488; font-weight: bold; text-decoration: none; }}
-.detail-head {{ font-size: 13pt; font-weight: bold; color: #0d9488; margin: 0 0 12pt;
-  page-break-before: always; }}
+.detail-head {{ font-size: 13pt; font-weight: bold; color: #0d9488; margin: 18pt 0 12pt;
+  -pdf-keep-with-next: true; }}
 .check {{ width: 100%; margin-bottom: 9pt; -pdf-keep-with-next: true; }}
 .num {{ width: 26pt; color: #0d9488; font-size: 15pt; font-weight: bold; vertical-align: top; }}
 .body {{ vertical-align: top; }}
