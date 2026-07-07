@@ -47,6 +47,14 @@ COL_SHADOW = "&H64000000"        # мягкая тёмная тень (~60% пр
 
 AUTO_OPEN = True                 # открывать готовый ролик в плеере
 
+# Фолбэк-распознавание (если рядом нет subtitles.srt от GoldWork): по аудио
+# видео строим пословный srt. Речь чистая (Edge TTS) → метки точные.
+WHISPER_MODEL = "small"          # tiny/base/small/medium; small — баланс
+WHISPER_LANG = "ru"
+_whisper = None
+# Исправление устойчивых мис-хёрдов бренда (распознавалка иногда слышит «Тарги»)
+POST_FIX = {"ТАРГИ": "ТОРГИ", "ТАРГ": "ТОРГ", "ЗЕМЛЯ.ОНЛАЙН": "ТОРГИ ЗЕМЛИ"}
+
 
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -133,10 +141,61 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     return header + "\n".join(body) + "\n"
 
 
+# ── Фолбэк: пословный srt из аудио видео (faster-whisper) ────────────────────
+def _srt_ts(sec: float) -> str:
+    if sec < 0:
+        sec = 0.0
+    h = int(sec // 3600); m = int(sec % 3600 // 60)
+    s = int(sec % 60); ms = int(round((sec - int(sec)) * 1000))
+    if ms == 1000:
+        ms = 0; s += 1
+    return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
+
+
+def transcribe_srt(final: Path, out_srt: Path) -> bool:
+    global _whisper
+    try:
+        from faster_whisper import WhisperModel
+    except Exception:
+        log("faster-whisper не установлен — распознать не могу")
+        return False
+    try:
+        if _whisper is None:
+            log(f"загружаю модель распознавания «{WHISPER_MODEL}» (разово)…")
+            _whisper = WhisperModel(WHISPER_MODEL, device="cpu", compute_type="int8")
+        segs, _ = _whisper.transcribe(
+            str(final), language=WHISPER_LANG, word_timestamps=True,
+            vad_filter=True,
+        )
+        cues = []
+        for seg in segs:
+            for wd in (seg.words or []):
+                txt = wd.word.strip().upper()
+                txt = POST_FIX.get(txt.strip(".,!?—–-"), txt)
+                if txt:
+                    cues.append((wd.start, wd.end, txt))
+        if not cues:
+            return False
+        lines = []
+        for i, (st, en, txt) in enumerate(cues, 1):
+            if en <= st:
+                en = st + 0.3
+            lines.append(f"{i}\n{_srt_ts(st)} --> {_srt_ts(en)}\n{txt}\n")
+        out_srt.write_text("\n".join(lines), encoding="utf-8")
+        log(f"распознано слов: {len(cues)}")
+        return True
+    except Exception as e:
+        log(f"ошибка распознавания: {e}")
+        return False
+
+
 # ── Прожиг субтитров (надёжный, с фолбэком) ──────────────────────────────────
 def burn(folder: Path, final: Path) -> Path | None:
     w, h = probe_dims(final)
     srt = folder / "subtitles.srt"
+    if not srt.exists():
+        log("нет subtitles.srt — распознаю аудио…")
+        transcribe_srt(final, srt)
     out = folder / f"Final{OUT_SUFFIX}.mp4"
 
     # локальная копия шрифта в папке рендера → в фильтре только относительные
