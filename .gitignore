@@ -19,3 +19,7 @@ redis_data/
 # OS
 .DS_Store
 Thumbs.db
+
+# GoldWork edu render artifacts (heavy, intermediate)
+marketing/video/education/rendered/
+marketing/video/education/_subtmp/
