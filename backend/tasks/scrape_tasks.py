@@ -1,4 +1,5 @@
 import asyncio
+from contextlib import contextmanager
 from worker import celery_app
 from services.scraper_torgi import TorgiGovScraper
 from services.scraper_avito import AvitoScraper
@@ -16,6 +17,27 @@ def _run(coro):
         return loop.run_until_complete(coro)
     finally:
         loop.close()
+
+
+@contextmanager
+def _single_flight(name: str, ttl: int = 3600 * 4):
+    """Redis-лок: не даёт двум копиям одной periodic-задачи стартовать
+    одновременно. Без этого при runtime > интервала beat-расписания задачи
+    складываются друг на друга и забивают все worker'ы (concurrency=4),
+    голодая scrape_torgi_gov и остальные periodic-задачи (найдено 08.07,
+    enrich_with_rosreestr шёл ~100 мин вместо расчётных ~12).
+    Если лок уже занят — просто пропускаем этот запуск (yield False)."""
+    import redis
+    from core.config import settings
+
+    client = redis.Redis.from_url(settings.REDIS_URL)
+    key = f"lock:{name}"
+    got = client.set(key, "1", nx=True, ex=ttl)
+    try:
+        yield bool(got)
+    finally:
+        if got:
+            client.delete(key)
 
 
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=300)
@@ -77,10 +99,14 @@ def enrich_with_rosreestr(self, batch_size: int = 2000):
     0.35с между запросами PKK даёт ~12 минут на цикл, помещается в часовой beat.
     Был 500/6ч — слишком медленно для 12000+ backlog без координат.
     """
-    try:
-        _run(_enrich_rosreestr(batch_size))
-    except Exception as exc:
-        raise self.retry(exc=exc)
+    with _single_flight("enrich_with_rosreestr") as acquired:
+        if not acquired:
+            print("[rosreestr] предыдущий прогон ещё идёт — пропускаем")
+            return
+        try:
+            _run(_enrich_rosreestr(batch_size))
+        except Exception as exc:
+            raise self.retry(exc=exc)
 
 
 async def _enrich_rosreestr(batch_size: int = 2000):
@@ -684,10 +710,14 @@ def enrich_organizer_from_notice(self, batch_size: int = 200):
     точное название организатора + структурированные контакты.
     Идёт по лотам с пустым organizer_contacts ИЛИ пустым organizer_name.
     """
-    try:
-        _run(_enrich_organizer_from_notice(batch_size))
-    except Exception as exc:
-        raise self.retry(exc=exc)
+    with _single_flight("enrich_organizer_from_notice") as acquired:
+        if not acquired:
+            print("[notice-json] предыдущий прогон ещё идёт — пропускаем")
+            return
+        try:
+            _run(_enrich_organizer_from_notice(batch_size))
+        except Exception as exc:
+            raise self.retry(exc=exc)
 
 
 async def _enrich_organizer_from_notice(batch_size: int):
