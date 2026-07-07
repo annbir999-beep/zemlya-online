@@ -152,50 +152,155 @@ def _srt_ts(sec: float) -> str:
     return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
 
 
-def transcribe_srt(final: Path, out_srt: Path) -> bool:
+def transcribe_words(final: Path) -> list[tuple[float, float, str]]:
+    """Распознать аудио → [(старт_сек, конец_сек, СЛОВО)]. Пусто при ошибке."""
     global _whisper
     try:
         from faster_whisper import WhisperModel
     except Exception:
         log("faster-whisper не установлен — распознать не могу")
-        return False
+        return []
     try:
         if _whisper is None:
             log(f"загружаю модель распознавания «{WHISPER_MODEL}» (разово)…")
             _whisper = WhisperModel(WHISPER_MODEL, device="cpu", compute_type="int8")
         segs, _ = _whisper.transcribe(
-            str(final), language=WHISPER_LANG, word_timestamps=True,
-            vad_filter=True,
+            str(final), language=WHISPER_LANG, word_timestamps=True, vad_filter=True,
         )
-        cues = []
+        out = []
         for seg in segs:
             for wd in (seg.words or []):
                 txt = wd.word.strip().upper()
                 txt = POST_FIX.get(txt.strip(".,!?—–-"), txt)
                 if txt:
-                    cues.append((wd.start, wd.end, txt))
-        if not cues:
-            return False
-        lines = []
-        for i, (st, en, txt) in enumerate(cues, 1):
-            if en <= st:
-                en = st + 0.3
-            lines.append(f"{i}\n{_srt_ts(st)} --> {_srt_ts(en)}\n{txt}\n")
-        out_srt.write_text("\n".join(lines), encoding="utf-8")
-        log(f"распознано слов: {len(cues)}")
-        return True
+                    out.append((float(wd.start), float(wd.end), txt))
+        return out
     except Exception as e:
         log(f"ошибка распознавания: {e}")
+        return []
+
+
+def _write_srt(cues: list[tuple[float, float, str]], out_srt: Path) -> None:
+    lines = []
+    for i, (st, en, txt) in enumerate(cues, 1):
+        if en <= st:
+            en = st + 0.3
+        lines.append(f"{i}\n{_srt_ts(st)} --> {_srt_ts(en)}\n{txt}\n")
+    out_srt.write_text("\n".join(lines), encoding="utf-8")
+
+
+def transcribe_srt(final: Path, out_srt: Path) -> bool:
+    words = transcribe_words(final)
+    if not words:
         return False
+    _write_srt(words, out_srt)
+    log(f"распознано слов: {len(words)}")
+    return True
+
+
+# ── Точный режим: слова из СЦЕНАРИЯ, тайминг из аудио (форс-выравнивание) ─────
+_WORD_RE = re.compile(r"[А-Яа-яЁёA-Za-z0-9]+(?:-[А-Яа-яЁёA-Za-z0-9]+)*")
+
+
+def tokenize_script(text: str) -> list[str]:
+    return _WORD_RE.findall(text)
+
+
+def _norm(w: str) -> str:
+    return w.lower().replace("ё", "е").strip(".,!?—–-")
+
+
+def align_known(final: Path, script_text: str, out_srt: Path) -> bool:
+    """Слова берём из script_text (наш точный сценарий), тайминг — из аудио.
+    Выравниваем последовательности difflib'ом → 0 орфографических ошибок."""
+    import difflib
+    W = transcribe_words(final)
+    S = tokenize_script(script_text)
+    if not W or not S:
+        return False
+    Sn = [_norm(s) for s in S]
+    Wn = [_norm(w) for _, _, w in W]
+    sm = difflib.SequenceMatcher(None, Sn, Wn, autojunk=False)
+    out: list[list] = []  # [start|None, end|None, СЛОВО]
+    for tag, i1, i2, j1, j2 in sm.get_opcodes():
+        s_words = S[i1:i2]
+        span = W[j1:j2]
+        if tag == "insert":
+            continue  # лишние слова распознавалки — игнор
+        if tag == "delete" or not span:
+            for s in s_words:
+                out.append([None, None, s.upper()])
+            continue
+        # equal / replace — раздаём тайминг span'а словам сценария
+        if len(s_words) == len(span):
+            for s, (ws, we, _) in zip(s_words, span):
+                out.append([ws, we, s.upper()])
+        else:
+            t0, t1 = span[0][0], span[-1][1]
+            total = sum(len(s) for s in s_words) or 1
+            acc = 0
+            for s in s_words:
+                a = t0 + (t1 - t0) * acc / total
+                acc += len(s)
+                b = t0 + (t1 - t0) * acc / total
+                out.append([a, b, s.upper()])
+    # интерполяция пропущенных таймингов
+    n = len(out)
+    for i in range(n):
+        if out[i][0] is not None:
+            continue
+        p = i - 1
+        while p >= 0 and out[p][1] is None:
+            p -= 1
+        q = i + 1
+        while q < n and out[q][0] is None:
+            q += 1
+        left = out[p][1] if p >= 0 else 0.0
+        right = out[q][0] if q < n else left + 0.4 * (n - i)
+        gap = q - p if q < n else n - p
+        k = i - p
+        out[i][0] = left + (right - left) * (k - 0.5) / gap
+        out[i][1] = left + (right - left) * (k + 0.5) / gap
+    cues = [(float(a), float(b), t) for a, b, t in out]
+    _write_srt(cues, out_srt)
+    log(f"выравнивание по сценарию: {len(cues)} слов (текст из сценария)")
+    return True
 
 
 # ── Прожиг субтитров (надёжный, с фолбэком) ──────────────────────────────────
+def _find_script(folder: Path) -> str | None:
+    """Точный текст ролика: script.txt рядом или narration из checkpoint.json."""
+    sp = folder / "script.txt"
+    if sp.exists():
+        t = sp.read_text(encoding="utf-8-sig", errors="replace").strip()
+        if t:
+            return t
+    cp = folder / "checkpoint.json"
+    if cp.exists():
+        try:
+            data = json.loads(cp.read_text(encoding="utf-8"))
+            parts = [s.get("narration", "") for s in data.get("scenes", [])]
+            t = "\n".join(p for p in parts if p).strip()
+            if t:
+                return t
+        except Exception:
+            pass
+    return None
+
+
 def burn(folder: Path, final: Path) -> Path | None:
     w, h = probe_dims(final)
     srt = folder / "subtitles.srt"
     if not srt.exists():
-        log("нет subtitles.srt — распознаю аудио…")
-        transcribe_srt(final, srt)
+        script = _find_script(folder)
+        if script:
+            log("нет srt, но есть сценарий — выравниваю по тексту…")
+            if not align_known(final, script, srt):
+                log("выравнивание не удалось — распознаю аудио…")
+                transcribe_srt(final, srt)
+        else:
+            log("нет subtitles.srt и сценария — распознаю аудио…")
+            transcribe_srt(final, srt)
     out = folder / f"Final{OUT_SUFFIX}.mp4"
 
     # локальная копия шрифта в папке рендера → в фильтре только относительные
