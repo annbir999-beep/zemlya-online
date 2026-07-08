@@ -18,7 +18,7 @@ celery_app = Celery(
     "sotka",
     broker=settings.REDIS_URL,
     backend=settings.REDIS_URL,
-    include=["tasks.scrape_tasks", "tasks.alert_tasks", "tasks.ai_batch_tasks", "tasks.digest_tasks", "tasks.price_drop_tasks", "tasks.drip_tasks", "tasks.lead_drip_tasks", "tasks.agent_tasks", "tasks.mail_tasks", "tasks.subscription_tasks"],
+    include=["tasks.scrape_tasks", "tasks.alert_tasks", "tasks.ai_batch_tasks", "tasks.digest_tasks", "tasks.price_drop_tasks", "tasks.drip_tasks", "tasks.lead_drip_tasks", "tasks.agent_tasks", "tasks.mail_tasks", "tasks.subscription_tasks", "tasks.monitoring_tasks"],
 )
 
 celery_app.conf.update(
@@ -187,6 +187,13 @@ celery_app.conf.update(
         "check-mail-notify": {
             "task": "tasks.mail_tasks.check_mail_notify",
             "schedule": crontab(minute="*/5"),
+        },
+        # Сторож очереди Celery — каждые 30 мин, алерт в Telegram при бэклоге
+        # (найдено 08.07.2026: periodic-задачи стакались, 296 задач в очереди
+        # держали ingest в подвешенном состоянии несколько часов незаметно).
+        "check-queue-health": {
+            "task": "tasks.monitoring_tasks.check_queue_health",
+            "schedule": crontab(minute="*/30"),
         },
     },
 )
