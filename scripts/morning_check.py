@@ -91,17 +91,24 @@ def main():
     if counts["active"] < 5000:
         issues.append("Активных лотов мало — проверить scraper_torgi")
 
-    yesterday = (NOW - timedelta(days=1)).strftime("%Y-%m-%d")
-    d = fetch_json(f"/lots?status=active&submission_end_to={yesterday}&per_page=1")
-    expired = d.get("total", 0)
-    pct_expired = round(expired / max(counts["active"], 1) * 100, 1)
-    if expired == 0:
-        signal("green", "Active с истекшим окном", "0", "0")
-    elif pct_expired < 5:
-        signal("yellow", "Active с истекшим окном", f"{expired} ({pct_expired}%)", "<5%")
+    # Честное число протухших берём из негейтед /lots/status-health (считает в
+    # БД). Раньше здесь был анонимный запрос /lots?submission_end_to=..., но
+    # премиум-гейт молча срезал фильтр дат для rank<1 → expired == все active ==
+    # ложные 100% каждый день. (Артефакт с 14.06.2026, коммит b860525.)
+    h = fetch_json("/lots/status-health")
+    if "_error" in h:
+        signal("yellow", "Active с истекшим окном", "н/д", "<2%")
+        issues.append(f"status-health недоступен: {h['_error']}")
     else:
-        signal("red", "Active с истекшим окном", f"{expired} ({pct_expired}%)", "<5%")
-        issues.append("update_lot_statuses не отрабатывает — много протухших ACTIVE")
+        expired = h.get("active_expired", 0)
+        pct_expired = h.get("stale_pct", 0.0)
+        if pct_expired < 1:
+            signal("green", "Active с истекшим окном", f"{expired} ({pct_expired}%)", "<2%")
+        elif pct_expired < 2:
+            signal("yellow", "Active с истекшим окном", f"{expired} ({pct_expired}%)", "<2%")
+        else:
+            signal("red", "Active с истекшим окном", f"{expired} ({pct_expired}%)", "<2%")
+            issues.append("update_lot_statuses не отрабатывает — много протухших ACTIVE")
 
     # ─── 2. Покрытие карты ─────────────────────────────────────────────
     section("КАРТА (КООРДИНАТЫ)")
