@@ -51,6 +51,12 @@ class Settings(BaseSettings):
     TELEGRAM_WEBHOOK_SECRET: str = ""  # для проверки X-Telegram-Bot-Api-Secret-Token
     ADMIN_TELEGRAM_CHAT_ID: str = "574728046"  # чат Анны: черновики агентов + кнопки одобрения
 
+    # Единый инбокс обратной связи (авто-отдел продаж, этап 1)
+    VK_CONFIRMATION_CODE: str = ""   # строка подтверждения из настроек Callback API сообщества
+    VK_CALLBACK_SECRET: str = ""     # секрет Callback API (проверка что вебхук от VK)
+    VK_GROUP_TOKEN: str = ""         # токен сообщества — для ответов от имени группы (этап 2)
+    INBOX_TELEGRAM_CHAT_ID: str = "" # чат/группа для входящих; пусто = ADMIN_TELEGRAM_CHAT_ID
+
     # Почта info@torgi-zemli.ru (IMAP, Timeweb) — уведомления о новых письмах в Telegram.
     IMAP_HOST: str = "imap.timeweb.ru"
     IMAP_USER: str = ""
