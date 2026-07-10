@@ -336,8 +336,9 @@ async def _reparse_contract_terms(batch_size: int):
                             lot.assignment_allowed = True
                         if terms.get("sublease") == "forbidden":
                             lot.sublease_allowed = False
-                        elif terms.get("sublease") in ("with_consent", "allowed"):
+                        elif terms.get("sublease") in ("with_consent", "with_notice", "allowed"):
                             lot.sublease_allowed = True
+                        _apply_art22(lot, terms)
                         updated += 1
                 except Exception as e:
                     print(f"[reparse-contract] lot={lot.id} error: {type(e).__name__}: {str(e)[:80]}")
@@ -352,26 +353,43 @@ async def _reparse_contract_terms(batch_size: int):
     await engine.dispose()
 
 
-SUBLEASE_KEYWORDS = ("субаренд",)
-ASSIGNMENT_KEYWORDS = ("переуступ", "уступк", "цессия", "третьим лицам")
-
-
-def _detect_sublease_assignment(raw: dict, title: str, description: str) -> tuple:
-    """Текстовый поиск ключевых слов по raw_data + title + description + атрибутам.
-
-    Возвращает (sublease, assignment) — каждое True/False.
-    """
+def _combined_lot_text(raw: dict, title: str, description: str) -> str:
+    """Склеивает весь доступный текст лота (title + description + raw-атрибуты)
+    для прогона через parse_contract, когда PDF-договора нет."""
     texts = [title or "", description or "", (raw or {}).get("lotDescription", "") or ""]
     for attr in ((raw or {}).get("noticeAttributes") or []) + ((raw or {}).get("attributes") or []):
         val = attr.get("value") or attr.get("characteristicValue") or ""
         if isinstance(val, str):
             texts.append(val)
         texts.append(attr.get("fullName", "") or "")
-    combined = " ".join(texts).lower()
-    return (
-        any(kw in combined for kw in SUBLEASE_KEYWORDS),
-        any(kw in combined for kw in ASSIGNMENT_KEYWORDS),
+    return " ".join(t for t in texts if t)
+
+
+def _apply_art22(lot, terms: dict) -> bool:
+    """Эвристика ст. 22 ЗК РФ: гос/муниципальная аренда на срок ≥5 лет → переуступка
+    и субаренда в УВЕДОМИТЕЛЬНОМ порядке, без согласия арендодателя. Применяем ТОЛЬКО
+    как fallback — если явных правил в тексте не нашли (поле осталось None). Явный
+    запрет/согласие из договора имеют приоритет. Все лоты torgi.gov по своей природе
+    гос/муниципальные. Возвращает True, если проставила что-то по эвристике."""
+    from models.lot import LotSource, DealType, AuctionType
+    term = (terms or {}).get("lease_term_years")
+    is_gov_lease = (
+        lot.source == LotSource.TORGI_GOV
+        and (lot.deal_type == DealType.LEASE or lot.auction_type == AuctionType.RENT)
     )
+    if not (is_gov_lease and term and term >= 5):
+        return False
+    inferred = False
+    if lot.assignment_allowed is None:
+        lot.assignment_allowed = True
+        inferred = True
+    if lot.sublease_allowed is None:
+        lot.sublease_allowed = True
+        inferred = True
+    if inferred:
+        # Метка: разрешено по закону (ст.22), а не явным пунктом договора — UI покажет честно.
+        lot.contract_terms = {**(lot.contract_terms or {}), "art22_inferred": True}
+    return inferred
 
 
 @celery_app.task(bind=True, max_retries=2, default_retry_delay=600)
@@ -426,16 +444,19 @@ async def _enrich_sublease_flags(batch_size: int, full_scan: bool):
         updated_with_flag = 0
         cleared_null = 0
         for lot in lots:
-            sublease, assignment = _detect_sublease_assignment(
-                lot.raw_data or {}, lot.title or "", lot.description or ""
-            )
-            # Не перетираем поле, если PDF-источник его уже выставил (то есть оно NOT NULL).
-            # Заполняем только NULL-ячейки текущей логикой.
-            if lot.sublease_allowed is None:
-                lot.sublease_allowed = sublease if (sublease or assignment) else None
-            if lot.assignment_allowed is None:
-                lot.assignment_allowed = assignment if (sublease or assignment) else None
-            if sublease or assignment:
+            # Флаги ставим ТОЛЬКО из реального разбора текста (parse_contract), НЕ из
+            # простого упоминания слова. Раньше «субаренда ЗАПРЕЩЕНА» ложно попадала в
+            # sublease_allowed=True и вводила фильтр в заблуждение — это и чиним.
+            terms = parse_contract(_combined_lot_text(
+                lot.raw_data or {}, lot.title or "", lot.description or ""))
+            a, s = terms.get("assignment"), terms.get("sublease")
+            # Только NULL-ячейки; PDF-источник (если уже выставил) имеет приоритет.
+            if lot.assignment_allowed is None and a:
+                lot.assignment_allowed = (a != "forbidden")
+            if lot.sublease_allowed is None and s:
+                lot.sublease_allowed = (s != "forbidden")
+            art22 = _apply_art22(lot, terms)
+            if a or s or art22:
                 updated_with_flag += 1
             else:
                 cleared_null += 1
@@ -673,8 +694,9 @@ async def _enrich_lot_pdfs(batch_size: int):
                                 lot.assignment_allowed = True
                             if terms.get("sublease") == "forbidden":
                                 lot.sublease_allowed = False
-                            elif terms.get("sublease") in ("with_consent", "allowed"):
+                            elif terms.get("sublease") in ("with_consent", "with_notice", "allowed"):
                                 lot.sublease_allowed = True
+                            _apply_art22(lot, terms)
                             changed = True
 
                     # Парсим коммуникации из всех текстов вместе
