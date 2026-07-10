@@ -33,3 +33,23 @@ def process_inbox(limit: int = 20):
     if n:
         print(f"[inbox-task] processed {n} message(s)")
     return n
+
+
+@celery_app.task
+def poll_youtube_comments():
+    """Свежие комментарии YouTube-канала → инбокс (read-only, ключ YOUTUBE_API_KEY)."""
+    from services.youtube_comments import poll_comments
+    n = _run(poll_comments())
+    if n:
+        print(f"[inbox-task] youtube: {n} new comment(s)")
+    return n
+
+
+@celery_app.task
+def poll_max_updates():
+    """Сообщения бота Max → инбокс (long-poll с marker в Redis, токен MAX_BOT_TOKEN)."""
+    from services.max_bot import poll_updates
+    n = _run(poll_updates())
+    if n:
+        print(f"[inbox-task] max: {n} new message(s)")
+    return n

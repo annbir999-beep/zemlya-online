@@ -201,5 +201,15 @@ celery_app.conf.update(
             "task": "tasks.inbox_tasks.process_inbox",
             "schedule": crontab(minute="*/2"),
         },
+        # Комменты YouTube-канала — каждые 15 минут (Data API v3, ~100 units/день)
+        "poll-youtube-comments": {
+            "task": "tasks.inbox_tasks.poll_youtube_comments",
+            "schedule": crontab(minute="*/15"),
+        },
+        # Сообщения бота Max — каждые 2 минуты (long-poll с marker в Redis)
+        "poll-max-updates": {
+            "task": "tasks.inbox_tasks.poll_max_updates",
+            "schedule": crontab(minute="*/2"),
+        },
     },
 )

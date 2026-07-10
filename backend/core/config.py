@@ -56,6 +56,9 @@ class Settings(BaseSettings):
     VK_CALLBACK_SECRET: str = ""     # секрет Callback API (проверка что вебхук от VK)
     VK_GROUP_TOKEN: str = ""         # токен сообщества — для ответов от имени группы (этап 2)
     INBOX_TELEGRAM_CHAT_ID: str = "" # чат/группа для входящих; пусто = ADMIN_TELEGRAM_CHAT_ID
+    YOUTUBE_API_KEY: str = ""        # Google Cloud API key с включённым YouTube Data API v3
+    YOUTUBE_CHANNEL_ID: str = "UCej045eSV8VJjK6Om9XXWzA"  # канал «ТОРГИ ЗЕМЛИ»
+    MAX_BOT_TOKEN: str = ""          # токен бота Max (создаётся у @MasterBot)
 
     # Почта info@torgi-zemli.ru (IMAP, Timeweb) — уведомления о новых письмах в Telegram.
     IMAP_HOST: str = "imap.timeweb.ru"
