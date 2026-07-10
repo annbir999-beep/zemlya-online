@@ -23,3 +23,10 @@ Thumbs.db
 # GoldWork edu render artifacts (heavy, intermediate)
 marketing/video/education/rendered/
 marketing/video/education/_subtmp/
+
+# Rendered video outputs — heavy (~1.4GB) и регенерируемые, не в git
+marketing/video/output/
+marketing/video/subbed/
+
+# Случайная scratch-папка (research-сессия), не в репо
+/Новая папка/

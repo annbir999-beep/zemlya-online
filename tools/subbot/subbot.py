@@ -117,17 +117,18 @@ def build_ass(cues, w: int, h: int) -> str:
     outline = max(4, round(fontsize * 0.10))
     shadow = max(2, round(fontsize * 0.04))
     margin_v = round(h * 0.20)  # выше телефонного UI
+    margin_h = round(w * 0.06)  # поля от края кадра (было фикс. 60px — вылезало на широких кадрах)
 
     header = f"""[Script Info]
 ScriptType: v4.00+
-WrapStyle: 2
+WrapStyle: 0
 ScaledBorderAndShadow: yes
 PlayResX: {w}
 PlayResY: {h}
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Brand,{FONT_NAME},{fontsize},{COL_FILL},{COL_FILL},{COL_OUTLINE},{COL_SHADOW},-1,0,0,0,100,100,0,0,1,{outline},{shadow},2,60,60,{margin_v},1
+Style: Brand,{FONT_NAME},{fontsize},{COL_FILL},{COL_FILL},{COL_OUTLINE},{COL_SHADOW},-1,0,0,0,100,100,0,0,1,{outline},{shadow},2,{margin_h},{margin_h},{margin_v},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -199,11 +200,30 @@ def transcribe_srt(final: Path, out_srt: Path) -> bool:
 
 
 # ── Точный режим: слова из СЦЕНАРИЯ, тайминг из аудио (форс-выравнивание) ─────
-_WORD_RE = re.compile(r"[А-Яа-яЁёA-Za-z0-9]+(?:-[А-Яа-яЁёA-Za-z0-9]+)*")
+# Число ("2,4", "62%") — ОДНИМ токеном, иначе "2,4" рвётся на отдельные попапы "2" / "4".
+_WORD_RE = re.compile(r"\d+(?:[.,]\d+)?%?|[А-Яа-яЁёA-Za-z]+(?:-[А-Яа-яЁёA-Za-z]+)*")
+
+# Число + следующее за ним слово-единица склеиваем в один попап: "2,4" + "миллиона" → "2,4 МЛН"
+_UNIT_ABBR = {
+    "миллион": "МЛН", "миллиона": "МЛН", "миллионов": "МЛН",
+    "тысяча": "ТЫС", "тысячи": "ТЫС", "тысяч": "ТЫС",
+}
 
 
 def tokenize_script(text: str) -> list[str]:
-    return _WORD_RE.findall(text)
+    words = _WORD_RE.findall(text)
+    out: list[str] = []
+    i = 0
+    while i < len(words):
+        w = words[i]
+        nxt = words[i + 1].lower() if i + 1 < len(words) else ""
+        if re.fullmatch(r"\d+(?:[.,]\d+)?", w) and nxt in _UNIT_ABBR:
+            out.append(f"{w} {_UNIT_ABBR[nxt]}")
+            i += 2
+        else:
+            out.append(w)
+            i += 1
+    return out
 
 
 def _norm(w: str) -> str:
@@ -288,9 +308,30 @@ def _find_script(folder: Path) -> str | None:
     return None
 
 
+def _is_phrase_level(srt: Path) -> bool:
+    """GoldWork иногда отдаёт subtitles.srt целыми фразами вместо пословных —
+    при бренд-шрифте (крупный, под один поп-слово) такая строка вылезает
+    за кадр (WrapStyle не спасает — фраза шире всего PlayResX)."""
+    try:
+        cues = parse_srt(srt)
+    except Exception:
+        return False
+    if not cues:
+        return False
+    avg_words = sum(len(text.split()) for _, _, text in cues) / len(cues)
+    return avg_words > 2.0
+
+
 def burn(folder: Path, final: Path) -> Path | None:
     w, h = probe_dims(final)
     srt = folder / "subtitles.srt"
+    if srt.exists() and _is_phrase_level(srt):
+        script = _find_script(folder)
+        if script:
+            log("subtitles.srt пофразный (не пословный) — перевыравниваю по сценарию…")
+            align_known(final, script, srt)  # перезаписывает srt пословно
+        else:
+            log("subtitles.srt пофразный, но сценария нет — оставляю как есть (риск переполнения кадра)")
     if not srt.exists():
         script = _find_script(folder)
         if script:

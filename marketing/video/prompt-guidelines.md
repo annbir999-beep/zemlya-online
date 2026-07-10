@@ -173,6 +173,13 @@ Nano Banana генерит каждый кадр как ОТДЕЛЬНУЮ ка�
   surroundings as the previous frame, NOTHING about the environment changes`. В таймлапсы:
   `the surroundings and background stay THE SAME throughout the shot`.
 
+## 6а. Огонь на кровле/террасе — уточнять что это fire pit, не пожар
+- Если в кадре лаунж-зона на крыше/террасе с открытым огнём (fire pit table), явно
+  прописывать источник и границы пламени, иначе визуально читается как «горит мебель»:
+  `a small controlled fire pit burning in the center of the stone fire pit table, flames
+  contained WITHIN the fire pit bowl only, the surrounding lounge furniture (sofas, cushions)
+  stays intact and untouched by fire, NO fire spreading to furniture, NO furniture burning`.
+
 ## 7. Свет и ракурс
 - Светло и воздушно: `elevated aerial three-quarter view from a drone, bright sun-lit
   green meadow, LIGHT airy birch and pine forest FAR in the background (not close), soft
