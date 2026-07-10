@@ -74,7 +74,7 @@ const LESSONS = [
     time: "4 мин",
     points: [
       "Подписываете протокол и договор купли-продажи или аренды с администрацией.",
-      "Дальше — межевание (если нужно), вынос границ в натуру и начало освоения.",
+      "Дальше — межевание (если нужно), закрепление границ участка на местности и начало освоения.",
       "От первой ставки до старта стройки обычно проходит 1–2 месяца.",
       "Не хотите проходить путь сами — мы сопровождаем сделку под ключ.",
     ],
@@ -112,16 +112,30 @@ export default function ObucheniePage() {
               </span>
               <h2 style={{ fontSize: 21, fontWeight: 700, margin: 0 }}>{l.title}</h2>
               <span className="badge badge-gray">{l.time}</span>
-              <span className="badge badge-blue">видео скоро</span>
+              <span className="badge badge-blue">видеоурок</span>
             </div>
-            <ul style={{ fontSize: 14, color: "var(--text-2)", lineHeight: 1.85, margin: "0 0 14px 18px", padding: 0 }}>
-              {l.points.map((p, i) => (
-                <li key={i}>{p}</li>
-              ))}
-            </ul>
-            <Link href={l.cta.href} className="btn btn-secondary btn-sm">
-              {l.cta.label}
-            </Link>
+            <div style={{ display: "flex", gap: 20, flexWrap: "wrap", alignItems: "flex-start" }}>
+              <video
+                src={`/edu/edu-0${l.n}.mp4`}
+                controls
+                playsInline
+                preload="metadata"
+                style={{
+                  width: 220, maxWidth: "100%", aspectRatio: "9 / 16", borderRadius: 12,
+                  background: "#000", flexShrink: 0, border: "1px solid var(--border)",
+                }}
+              />
+              <div style={{ flex: 1, minWidth: 240 }}>
+                <ul style={{ fontSize: 14, color: "var(--text-2)", lineHeight: 1.85, margin: "0 0 14px 18px", padding: 0 }}>
+                  {l.points.map((p, i) => (
+                    <li key={i}>{p}</li>
+                  ))}
+                </ul>
+                <Link href={l.cta.href} className="btn btn-secondary btn-sm">
+                  {l.cta.label}
+                </Link>
+              </div>
+            </div>
           </div>
         ))}
 

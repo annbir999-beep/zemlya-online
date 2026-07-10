@@ -35,7 +35,7 @@ def ai_batch_analyze(limit: int = AI_BATCH_LIMIT):
 
 
 async def _run(limit: int):
-    from db.database import AsyncSessionLocal
+    from db.database import AsyncSessionLocal, engine
     from sqlalchemy import select, or_, and_
     from models.lot import Lot, LotStatus, LandPurpose
     from services.ai_assessment import assess_lot, lot_to_ai_dict, compute_ai_fingerprint
@@ -110,3 +110,5 @@ async def _run(limit: int):
 
         await db.commit()
         print(f"[ai-batch] Готово. Всего: {len(lots)}, заново: {ok}, по кэшу (пропущено): {skipped_by_hash}, ошибок: {errors}")
+
+    await engine.dispose()

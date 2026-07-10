@@ -441,6 +441,7 @@ def _lot_to_item(lot: Lot, rank: int = 99) -> LotListItem:
         item.nearest_city_name = None
         item.nearest_city_distance_km = None
         item.nearest_city_population = None
+        item.discount_to_market_pct = None  # «−N% к рынку» — премиум-скоринг (Pro+), не светить free/анониму
     if rank < RANK_INVESTOR:
         item.pct_price_to_cadastral = None
         item.market_price_sqm = None

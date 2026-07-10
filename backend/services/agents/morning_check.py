@@ -12,13 +12,24 @@ from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import settings
-from models.lot import Lot, LotStatus
+from models.lot import Lot, LotStatus, LotSource
 from models.alert import Subscription
 from models.agent_run import AgentRun
 from services.agents.base import BaseAgent
 from services.telegram_bot import _tg_client
 
 SITE = settings.SITE_URL
+
+# Источник → (label, порог часов без НОВЫХ строк в БД, прежде чем считать
+# источник замолчавшим). По created_at (момент вставки к НАМ), не published_at
+# (дата публикации на исходном сайте) — иначе здоровый источник может
+# маскировать замолчавший другой источник в общем счётчике (найдено 08.07.2026:
+# torgi.gov не писал новых лотов 4 суток, а общий new_24h оставался >0 только
+# за счёт ЦИАН — старая проверка ничего не заметила).
+_INGEST_SOURCES = [
+    (LotSource.TORGI_GOV, "torgi.gov", 30),
+    (LotSource.CIAN, "ЦИАН", 30),
+]
 
 
 def _pct(part: int, total: int) -> str:
@@ -81,6 +92,25 @@ class MorningCheckAgent(BaseAgent):
             )
         )).scalar() or 0
 
+        # ── Ingest по источникам (created_at — момент вставки к нам) ──
+        ingest_by_source: dict[str, int] = {}
+        for src, label, hours in _INGEST_SOURCES:
+            cutoff = now - timedelta(hours=hours)
+            cnt = (await db.execute(
+                select(func.count()).select_from(Lot).where(
+                    and_(Lot.source == src, Lot.created_at > cutoff)
+                )
+            )).scalar() or 0
+            ingest_by_source[label] = cnt
+
+        # ── Очередь Celery ──
+        queue_depth = 0
+        try:
+            import redis
+            queue_depth = redis.Redis.from_url(settings.REDIS_URL).llen("celery")
+        except Exception:
+            pass
+
         metrics = {
             "active_lots": active,
             "new_24h": new_24h,
@@ -93,16 +123,29 @@ class MorningCheckAgent(BaseAgent):
             "payments_24h": pay_count,
             "revenue_24h": pay_sum,
             "failed_agents_24h": failed_agents,
+            "ingest_by_source": ingest_by_source,
+            "queue_depth": queue_depth,
         }
 
         # ── Сборка отчёта ──
         warnings = []
         if new_24h == 0:
-            warnings.append("⚠️ За сутки не добавилось ни одного лота — проверить скрейпер torgi.gov")
+            warnings.append("⚠️ За сутки не добавилось ни одного лота — проверить скрейперы")
+        for src, label, hours in _INGEST_SOURCES:
+            if ingest_by_source.get(label, 0) == 0:
+                warnings.append(
+                    f"⚠️ {label}: 0 новых лотов за {hours}ч (по created_at) — источник мог замолчать, "
+                    f"даже если общий счётчик выше нуля за счёт других источников"
+                )
         if active and on_map / active < 0.5:
             warnings.append(f"⚠️ Покрытие карты низкое ({metrics['map_coverage']}) — много лотов без координат")
         if failed_agents:
             warnings.append(f"⚠️ Упавших запусков агентов за сутки: {failed_agents}")
+        if queue_depth > 100:
+            warnings.append(
+                f"⚠️ Очередь Celery раздута: {queue_depth} задач — проверить, не стакаются ли "
+                f"periodic-задачи (inspect active)"
+            )
 
         report = (
             f"☀️ *Утренний отчёт — Торги Земли*\n"
@@ -113,7 +156,9 @@ class MorningCheckAgent(BaseAgent):
             f"• На карте: {on_map:,} ({metrics['map_coverage']})\n".replace(",", " ") +
             f"• Со скором: {scored:,} ({metrics['scored_pct']})\n".replace(",", " ") +
             f"• С AI-анализом: {ai_analyzed:,}\n".replace(",", " ") +
-            f"• Банкротных: {bankrupt:,}\n\n".replace(",", " ") +
+            f"• Банкротных: {bankrupt:,}\n".replace(",", " ") +
+            f"• Ingest 30ч: " + ", ".join(f"{l} +{c}" for l, c in ingest_by_source.items()) + "\n"
+            f"• Очередь: {queue_depth}\n\n" +
             f"💰 *Деньги за сутки*\n"
             f"• Платежей: {pay_count}\n"
             f"• Выручка: {pay_sum:,.0f} ₽\n\n".replace(",", " ")
