@@ -21,34 +21,96 @@ router = APIRouter()
 
 @router.get("/status-health")
 async def status_health(db: AsyncSession = Depends(get_db)):
-    """Публичная (негейтед) сводка статусной гигиены лотов.
+    """Публичная (негейтед) сводка статусной гигиены и качества данных.
 
-    Честный источник числа «протухших ACTIVE» (окно подачи закрыто, а статус
-    ещё ACTIVE) — считает прямо в БД, в обход премиум-гейта фильтров публичного
-    GET /lots. Именно из-за гейта анонимный morning_check раньше видел ложные
-    100% (submission_end_to молча обнулялся для rank<1). Ставится ПЕРВЫМ роутом,
-    чтобы не перехватывался динамическим /{lot_id}.
+    Честный источник агрегатов — считает прямо в БД, в обход премиум-гейта
+    фильтров публичного GET /lots. Из-за гейта анонимный morning_check раньше
+    видел ложные 100%: для rank<1 обнулялись score_min/discount_min/
+    sublease_allowed/assignment_allowed/submission_end_to → счётчик премиум-
+    фильтра возвращал ВСЕ активные лоты (тот же класс бага, что «протухшие
+    ACTIVE», коммит b6fabc5). Ставится ПЕРВЫМ роутом, чтобы не перехватывался
+    динамическим /{lot_id}.
+
+    Единое определение «активных»: канон — источник torgi_gov (дефолт сайта,
+    база /analytics и знаменатель morning_check). Все источники (torgi_gov +
+    avito) — отдельными информационными полями *_all_sources / by_source, чтобы
+    расхождение счётчиков не воспроизводилось. Метрики качества (скор, дисконт,
+    субаренда/переуступка, координаты) считаются по канону torgi_gov active.
     """
     now = datetime.now(timezone.utc)
-    active_total = (await db.execute(
-        select(func.count()).select_from(Lot).where(Lot.status == LotStatus.ACTIVE)
-    )).scalar() or 0
-    active_expired = (await db.execute(
-        select(func.count()).select_from(Lot).where(and_(
-            Lot.status == LotStatus.ACTIVE,
-            Lot.submission_end.isnot(None),
-            Lot.submission_end < now,
-        ))
-    )).scalar() or 0
+    ACTIVE = Lot.status == LotStatus.ACTIVE
+    TORGI = Lot.source == LotSource.TORGI_GOV
+    is_expired = and_(Lot.submission_end.isnot(None), Lot.submission_end < now)
+
+    # Разбивка активных по источникам + протухшие — одним запросом.
+    src_rows = (await db.execute(
+        select(
+            Lot.source,
+            func.count().label("active"),
+            func.count().filter(is_expired).label("expired"),
+        ).where(ACTIVE).group_by(Lot.source)
+    )).all()
+    by_source = {}
+    active_all = expired_all = 0
+    for r in src_rows:
+        key = r.source.value if r.source else "unknown"
+        by_source[key] = {"active": r.active, "expired": r.expired}
+        active_all += r.active
+        expired_all += r.expired
+    active_torgi = by_source.get("torgi_gov", {}).get("active", 0)
+    expired_torgi = by_source.get("torgi_gov", {}).get("expired", 0)
+
     completed_total = (await db.execute(
         select(func.count()).select_from(Lot).where(Lot.status == LotStatus.COMPLETED)
     )).scalar() or 0
-    stale_pct = round(active_expired / active_total * 100, 2) if active_total else 0.0
+
+    # Честные агрегаты качества по канону (torgi_gov active) — одним запросом,
+    # напрямую по БД, поэтому премиум-гейт не срезает фильтры.
+    qa = (await db.execute(
+        select(
+            func.count().filter(Lot.score >= 1).label("with_score"),
+            func.count().filter(Lot.score >= 80).label("score_ge_80"),
+            func.count().filter(Lot.discount_to_market_pct >= 10).label("disc_10"),
+            func.count().filter(Lot.discount_to_market_pct >= 25).label("disc_25"),
+            func.count().filter(Lot.discount_to_market_pct >= 50).label("disc_50"),
+            func.count().filter(Lot.discount_to_market_pct >= 75).label("disc_75"),
+            func.count().filter(Lot.sublease_allowed.is_(True)).label("sublease"),
+            func.count().filter(Lot.assignment_allowed.is_(True)).label("assignment"),
+            func.count().filter(Lot.location.isnot(None)).label("with_coords"),
+        ).where(and_(ACTIVE, TORGI))
+    )).one()
+
+    def _pct(n: int) -> float:
+        return round(n / active_torgi * 100, 2) if active_torgi else 0.0
+
     return {
-        "active_total": active_total,
-        "active_expired": active_expired,
-        "stale_pct": stale_pct,
+        # Канон = torgi_gov (единое определение «активных»).
+        "active_total": active_torgi,
+        "active_expired": expired_torgi,
+        "stale_pct": _pct(expired_torgi),
         "completed_total": completed_total,
+        # Информационно — все источники (torgi_gov + avito).
+        "active_all_sources": active_all,
+        "active_expired_all_sources": expired_all,
+        "by_source": by_source,
+        # Честные агрегаты качества по канону torgi_gov active (обход гейта).
+        "quality": {
+            "universe": "torgi_gov_active",
+            "total": active_torgi,
+            "with_score": qa.with_score,
+            "with_score_pct": _pct(qa.with_score),
+            "score_ge_80": qa.score_ge_80,
+            "discount": {
+                "ge_10": qa.disc_10,
+                "ge_25": qa.disc_25,
+                "ge_50": qa.disc_50,
+                "ge_75": qa.disc_75,
+            },
+            "sublease_allowed": qa.sublease,
+            "assignment_allowed": qa.assignment,
+            "with_coords": qa.with_coords,
+            "coords_pct": _pct(qa.with_coords),
+        },
         "server_time": now.isoformat(),
     }
 

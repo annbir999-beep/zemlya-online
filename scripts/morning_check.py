@@ -82,20 +82,34 @@ def main():
 
     # ─── 1. Статусы лотов ───────────────────────────────────────────────
     section("СТАТУСЫ ЛОТОВ")
+    # Единый честный источник агрегатов — негейтед /lots/status-health (считает
+    # прямо в БД, в обход премиум-гейта GET /lots). Раньше morning_check тянул
+    # премиум-метрики анонимными запросами /lots?score_min=/discount_min=/
+    # sublease_allowed= — но гейт для rank<1 молча обнулял эти фильтры → счётчик
+    # возвращал ВСЕ активные лоты == ложные 100% каждый день (коммит b6fabc5
+    # закрыл тот же класс бага для «протухших ACTIVE»). Теперь скор, дисконт,
+    # субаренда/переуступка берутся из status-health.quality (канон torgi_gov).
+    h = fetch_json("/lots/status-health")
+    q = h.get("quality", {}) if "_error" not in h else {}
+
+    # Канон «активных» — torgi_gov (active_total из status-health). Совпадает со
+    # знаменателем метрик качества; all_sources показываем справочно, чтобы
+    # расхождение с прежним счётчиком «все источники» больше не путало.
     counts = {}
-    for st in ("active", "completed"):
-        d = fetch_json(f"/lots?status={st}&per_page=1")
-        counts[st] = d.get("total", 0)
+    if "_error" not in h:
+        counts["active"] = h.get("active_total", 0)
+    else:
+        # Fallback: status-health лёг — берём активные из /lots (тоже torgi_gov).
+        counts["active"] = fetch_json("/lots?status=active&per_page=1").get("total", 0)
+    all_src = h.get("active_all_sources") if "_error" not in h else None
+    active_label = str(counts["active"])
+    if all_src and all_src != counts["active"]:
+        active_label = f"{counts['active']} (все источники: {all_src})"
     signal("green" if counts["active"] > 0 else "red",
-           "Активных лотов", str(counts["active"]), ">5000")
+           "Активных лотов (torgi_gov)", active_label, ">5000")
     if counts["active"] < 5000:
         issues.append("Активных лотов мало — проверить scraper_torgi")
 
-    # Честное число протухших берём из негейтед /lots/status-health (считает в
-    # БД). Раньше здесь был анонимный запрос /lots?submission_end_to=..., но
-    # премиум-гейт молча срезал фильтр дат для rank<1 → expired == все active ==
-    # ложные 100% каждый день. (Артефакт с 14.06.2026, коммит b860525.)
-    h = fetch_json("/lots/status-health")
     if "_error" in h:
         signal("yellow", "Active с истекшим окном", "н/д", "<2%")
         issues.append(f"status-health недоступен: {h['_error']}")
@@ -125,30 +139,38 @@ def main():
         issues.append("enrich_with_rosreestr отстаёт — мало координат на карте")
 
     # ─── 3. Скоринг ────────────────────────────────────────────────────
+    # Честный источник — status-health.quality (score_min под премиум-гейтом,
+    # анонимный /lots?score_min= раньше давал ложные 100%).
     section("СКОРИНГ")
-    d = fetch_json("/lots?status=active&score_min=1&per_page=1")
-    with_score = d.get("total", 0)
-    pct_score = round(with_score / max(list_total, 1) * 100, 1)
-    if pct_score >= 90:
-        signal("green", "Active со score", f"{with_score} ({pct_score}%)", ">=90%")
-    elif pct_score >= 70:
-        signal("yellow", "Active со score", f"{with_score} ({pct_score}%)", ">=90%")
-    else:
-        signal("red", "Active со score", f"{with_score} ({pct_score}%)", ">=90%")
-        issues.append("update_lot_scores отстаёт")
+    if q:
+        with_score = q.get("with_score", 0)
+        pct_score = q.get("with_score_pct", 0.0)
+        if pct_score >= 90:
+            signal("green", "Active со score", f"{with_score} ({pct_score}%)", ">=90%")
+        elif pct_score >= 70:
+            signal("yellow", "Active со score", f"{with_score} ({pct_score}%)", ">=90%")
+        else:
+            signal("red", "Active со score", f"{with_score} ({pct_score}%)", ">=90%")
+            issues.append("update_lot_scores отстаёт")
 
-    d = fetch_json("/lots?status=active&score_min=80&per_page=1")
-    top_score = d.get("total", 0)
-    signal("green" if top_score >= 100 else "yellow",
-           "Active со score >=80 (премиум)", str(top_score), ">=100")
+        top_score = q.get("score_ge_80", 0)
+        signal("green" if top_score >= 100 else "yellow",
+               "Active со score >=80 (премиум)", str(top_score), ">=100")
+    else:
+        signal("yellow", "Active со score", "н/д (status-health недоступен)", ">=90%")
 
     # ─── 4. Дисконты ───────────────────────────────────────────────────
+    # Честный источник — status-health.quality.discount (discount_min под
+    # премиум-гейтом, анонимный /lots?discount_min= раньше давал ложные 100%).
     section("ДИСКОНТЫ К РЫНКУ")
+    disc = q.get("discount", {}) if q else {}
     for thr, min_count in [(10, 1000), (25, 500), (50, 200), (75, 50)]:
-        d = fetch_json(f"/lots?status=active&discount_min={thr}&per_page=1")
-        n = d.get("total", 0)
-        signal("green" if n >= min_count else "yellow",
-               f"Дисконт >={thr}%", str(n), f">={min_count}")
+        if disc:
+            n = disc.get(f"ge_{thr}", 0)
+            signal("green" if n >= min_count else "yellow",
+                   f"Дисконт >={thr}%", str(n), f">={min_count}")
+        else:
+            signal("yellow", f"Дисконт >={thr}%", "н/д", f">={min_count}")
 
     # ─── 5. По назначению ──────────────────────────────────────────────
     section("РАСПРЕДЕЛЕНИЕ ПО НАЗНАЧЕНИЮ")
@@ -206,17 +228,21 @@ def main():
                 issues.append("Свежие лоты не приходят — проверить scrape_torgi_gov")
 
     # ─── 8b. Флаги переуступки/субаренды ───────────────────────────────
+    # Честный источник — status-health.quality (sublease_allowed/
+    # assignment_allowed под премиум-гейтом Инвестор+, анонимные
+    # /lots?sublease_allowed=true раньше давали ложные «все активные»).
     section("ПЕРЕУСТУПКА / СУБАРЕНДА")
-    d_sub = fetch_json("/lots?status=active&sublease_allowed=true&per_page=1")
-    d_ass = fetch_json("/lots?status=active&assignment_allowed=true&per_page=1")
-    sub_n = d_sub.get("total", 0)
-    ass_n = d_ass.get("total", 0)
-    signal("green" if sub_n >= 100 else ("yellow" if sub_n >= 20 else "red"),
-           "Лоты с разрешённой субарендой", str(sub_n), ">=100")
-    signal("green" if ass_n >= 100 else ("yellow" if ass_n >= 20 else "red"),
-           "Лоты с разрешённой переуступкой", str(ass_n), ">=100")
-    if sub_n < 20 and ass_n < 20:
-        issues.append("Покрытие фильтра переуступки/субаренды слишком низкое — проверь enrich_sublease_flags")
+    if q:
+        sub_n = q.get("sublease_allowed", 0)
+        ass_n = q.get("assignment_allowed", 0)
+        signal("green" if sub_n >= 100 else ("yellow" if sub_n >= 20 else "red"),
+               "Лоты с разрешённой субарендой", str(sub_n), ">=100")
+        signal("green" if ass_n >= 100 else ("yellow" if ass_n >= 20 else "red"),
+               "Лоты с разрешённой переуступкой", str(ass_n), ">=100")
+        if sub_n < 20 and ass_n < 20:
+            issues.append("Покрытие фильтра переуступки/субаренды слишком низкое — проверь enrich_sublease_flags")
+    else:
+        signal("yellow", "Переуступка/субаренда", "н/д (status-health недоступен)", ">=100")
 
     # ─── 9. Heatmap ────────────────────────────────────────────────────
     section("HEATMAP (АНАЛИТИКА)")
