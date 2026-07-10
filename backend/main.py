@@ -10,7 +10,8 @@ from models import promo  # noqa: F401
 from models import agent_run  # noqa: F401
 from models import content  # noqa: F401
 from models import lead  # noqa: F401
-from api import lots, users, alerts, ai, payments, subscriptions, telegram, admin, agents, blog, leads, seo, services
+from models import inbox  # noqa: F401
+from api import lots, users, alerts, ai, payments, subscriptions, telegram, admin, agents, blog, leads, seo, services, inbox as inbox_api
 from core.config import settings
 from core.ratelimit import limiter
 from core.sentry import init_sentry
@@ -57,6 +58,7 @@ app.include_router(blog.router, prefix="/api/blog", tags=["blog"])
 app.include_router(leads.router, prefix="/api/leads", tags=["leads"])
 app.include_router(seo.router, prefix="/api/seo", tags=["seo"])
 app.include_router(services.router, prefix="/api/services", tags=["services"])
+app.include_router(inbox_api.router, prefix="/api/inbox", tags=["inbox"])
 
 
 @app.get("/health")

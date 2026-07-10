@@ -326,8 +326,43 @@ async def process_update(db: AsyncSession, update: dict) -> None:
 
     chat = message.get("chat") or {}
     chat_id = chat.get("id")
-    text = (message.get("text") or "").strip()
+    text = (message.get("text") or message.get("caption") or "").strip()
     if not chat_id or not text:
+        return
+
+    # ── Группы/супергруппы: комментарии к постам канала → единый инбокс ──────
+    # Бот должен быть админом группы обсуждений @torgi_zemli. Команды в группах
+    # не обрабатываем и подсказками не спамим — только тихо собираем входящие.
+    if chat.get("type") in ("group", "supergroup"):
+        author = message.get("from") or {}
+        sender_chat = message.get("sender_chat") or {}
+        # Пропускаем: автофорварды постов самого канала, сообщения ботов, команды
+        if sender_chat.get("type") == "channel" or author.get("is_bot") or text.startswith("/"):
+            return
+        from services.inbox_hub import ingest
+        username = author.get("username")
+        name = " ".join(filter(None, [author.get("first_name"), author.get("last_name")])) or username
+        reply = (message.get("reply_to_message") or {})
+        post_ref = None
+        if reply.get("forward_from_chat"):
+            fchat = reply["forward_from_chat"]
+            if fchat.get("username") and reply.get("forward_from_message_id"):
+                post_ref = f"https://t.me/{fchat['username']}/{reply['forward_from_message_id']}"
+        try:
+            await ingest(
+                db,
+                source="tg_comment",
+                event_type="comment",
+                external_id=f"{chat_id}_{message.get('message_id')}",
+                author_id=str(author.get("id") or ""),
+                author_name=name,
+                author_url=f"https://t.me/{username}" if username else None,
+                text=text,
+                post_ref=post_ref,
+                raw={"chat_id": chat_id, "message_id": message.get("message_id")},
+            )
+        except Exception as e:
+            print(f"[telegram-bot] inbox ingest error: {type(e).__name__}: {e}")
         return
 
     # Найти текущего пользователя по telegram_id (если уже привязан)
@@ -348,5 +383,31 @@ async def process_update(db: AsyncSession, update: dict) -> None:
             await send_message(chat_id, "Что-то пошло не так. Попробуй позже.")
         return
 
-    # Любое другое сообщение — короткая подсказка
+    # Любое другое сообщение в личке — это вопрос живого человека: в инбокс
+    if not text.startswith("/"):
+        from services.inbox_hub import ingest
+        author = message.get("from") or {}
+        username = author.get("username")
+        name = " ".join(filter(None, [author.get("first_name"), author.get("last_name")])) or username
+        try:
+            await ingest(
+                db,
+                source="tg_dm",
+                event_type="dm",
+                external_id=f"{chat_id}_{message.get('message_id')}",
+                author_id=str(author.get("id") or ""),
+                author_name=name,
+                author_url=f"https://t.me/{username}" if username else None,
+                text=text,
+                raw={"chat_id": chat_id, "message_id": message.get("message_id")},
+            )
+        except Exception as e:
+            print(f"[telegram-bot] dm ingest error: {type(e).__name__}: {e}")
+        await send_message(
+            chat_id,
+            "Спасибо! Передал ваш вопрос команде — ответим здесь в ближайшее время.\n"
+            "Команды бота: /help",
+        )
+        return
+
     await send_message(chat_id, "Не понял команду. Отправь /help.")
