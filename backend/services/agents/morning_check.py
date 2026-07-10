@@ -50,6 +50,17 @@ class MorningCheckAgent(BaseAgent):
             select(func.count()).select_from(Lot).where(Lot.status == LotStatus.ACTIVE)
         )).scalar() or 0
 
+        # Протухшие ACTIVE: окно подачи закрыто, а статус ещё ACTIVE. В норме ~0
+        # (закрывает _update_statuses каждые 30 мин). Стабильно высокое = задача
+        # статусов не отрабатывает → лоты висят как живые везде.
+        stale_active = (await db.execute(
+            select(func.count()).select_from(Lot).where(and_(
+                Lot.status == LotStatus.ACTIVE,
+                Lot.submission_end.isnot(None),
+                Lot.submission_end < now,
+            ))
+        )).scalar() or 0
+
         new_24h = (await db.execute(
             select(func.count()).select_from(Lot).where(Lot.published_at > day_ago)
         )).scalar() or 0
@@ -113,6 +124,8 @@ class MorningCheckAgent(BaseAgent):
 
         metrics = {
             "active_lots": active,
+            "stale_active": stale_active,
+            "stale_pct": _pct(stale_active, active),
             "new_24h": new_24h,
             "on_map": on_map,
             "map_coverage": _pct(on_map, active),
@@ -137,6 +150,12 @@ class MorningCheckAgent(BaseAgent):
                     f"⚠️ {label}: 0 новых лотов за {hours}ч (по created_at) — источник мог замолчать, "
                     f"даже если общий счётчик выше нуля за счёт других источников"
                 )
+        if active and stale_active / active > 0.02:
+            warnings.append(
+                f"⚠️ Протухших ACTIVE (окно подачи закрыто): {stale_active} "
+                f"({metrics['stale_pct']}) — _update_statuses мог не отработать, "
+                f"лоты висят как живые на карте/в списке/в алертах"
+            )
         if active and on_map / active < 0.5:
             warnings.append(f"⚠️ Покрытие карты низкое ({metrics['map_coverage']}) — много лотов без координат")
         if failed_agents:
@@ -152,6 +171,7 @@ class MorningCheckAgent(BaseAgent):
             f"{now.strftime('%d.%m.%Y')}\n\n"
             f"📊 *Лоты*\n"
             f"• Активных: {active:,}\n".replace(",", " ") +
+            f"• Протухших ACTIVE: {stale_active:,} ({metrics['stale_pct']})\n".replace(",", " ") +
             f"• Новых за сутки: +{new_24h}\n"
             f"• На карте: {on_map:,} ({metrics['map_coverage']})\n".replace(",", " ") +
             f"• Со скором: {scored:,} ({metrics['scored_pct']})\n".replace(",", " ") +

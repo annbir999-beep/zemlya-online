@@ -19,6 +19,40 @@ from services.rubrics import get_all_rubrics, get_rubrics_by_section, get_sectio
 router = APIRouter()
 
 
+@router.get("/status-health")
+async def status_health(db: AsyncSession = Depends(get_db)):
+    """Публичная (негейтед) сводка статусной гигиены лотов.
+
+    Честный источник числа «протухших ACTIVE» (окно подачи закрыто, а статус
+    ещё ACTIVE) — считает прямо в БД, в обход премиум-гейта фильтров публичного
+    GET /lots. Именно из-за гейта анонимный morning_check раньше видел ложные
+    100% (submission_end_to молча обнулялся для rank<1). Ставится ПЕРВЫМ роутом,
+    чтобы не перехватывался динамическим /{lot_id}.
+    """
+    now = datetime.now(timezone.utc)
+    active_total = (await db.execute(
+        select(func.count()).select_from(Lot).where(Lot.status == LotStatus.ACTIVE)
+    )).scalar() or 0
+    active_expired = (await db.execute(
+        select(func.count()).select_from(Lot).where(and_(
+            Lot.status == LotStatus.ACTIVE,
+            Lot.submission_end.isnot(None),
+            Lot.submission_end < now,
+        ))
+    )).scalar() or 0
+    completed_total = (await db.execute(
+        select(func.count()).select_from(Lot).where(Lot.status == LotStatus.COMPLETED)
+    )).scalar() or 0
+    stale_pct = round(active_expired / active_total * 100, 2) if active_total else 0.0
+    return {
+        "active_total": active_total,
+        "active_expired": active_expired,
+        "stale_pct": stale_pct,
+        "completed_total": completed_total,
+        "server_time": now.isoformat(),
+    }
+
+
 # ── Pydantic schemas ──────────────────────────────────────────────────────────
 
 class LotListItem(BaseModel):

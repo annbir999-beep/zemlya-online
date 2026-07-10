@@ -1113,7 +1113,7 @@ async def _update_statuses():
     свежей выгрузке, но в БД ещё ACTIVE).
     """
     from db.database import AsyncSessionLocal
-    from sqlalchemy import update
+    from sqlalchemy import update, select, func
     from models.lot import Lot, LotStatus, LotSource
     from datetime import datetime, timezone, timedelta
 
@@ -1141,4 +1141,22 @@ async def _update_statuses():
             .values(status=LotStatus.COMPLETED)
         )
         await db.commit()
-        print(f"[statuses] закрыто по окну: {r0.rowcount}, забытых (>14д): {r1.rowcount}")
+
+        # Сторож: после подметания протухших ACTIVE быть почти не должно.
+        # Стабильно высокий остаток = закрытие структурно не работает (не лаг).
+        remaining = (await db.execute(
+            select(func.count()).select_from(Lot).where(
+                Lot.status == LotStatus.ACTIVE,
+                Lot.submission_end.isnot(None),
+                Lot.submission_end < now,
+            )
+        )).scalar() or 0
+        print(
+            f"[statuses] закрыто по окну: {r0.rowcount}, забытых (>14д): "
+            f"{r1.rowcount}, осталось протухших: {remaining}"
+        )
+        try:
+            from services.status_watchdog import check_stale_active
+            check_stale_active(remaining)
+        except Exception as e:  # noqa: BLE001
+            print(f"[statuses] watchdog failed: {type(e).__name__}: {e}")
