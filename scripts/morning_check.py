@@ -228,23 +228,24 @@ def main():
                 issues.append("Свежие лоты не приходят — проверить scrape_torgi_gov")
 
     # ─── 8b. Переуступка / субаренда ───────────────────────────────────
-    # Честный источник — status-health.resale (знаменатель = LEASE-лоты, а не все
-    # active). Два чётких флага (без градации): есть переуступка / есть субаренда
-    # (ст.22 >5 лет или явно в договоре).
+    # Честный источник — status-health.resale (знаменатель = LEASE-лоты). Флаг
+    # «возможна» = свободно + по согласованию (можно договориться с админ) — оба
+    # идут в списки; отдельно показываем, сколько из них по согласованию.
     section("ПЕРЕУСТУПКА / СУБАРЕНДА")
     rs = h.get("resale", {}) if "_error" not in h else {}
     if rs:
         lease_total = rs.get("lease_total", 0)
-        ass_n = rs.get("assignment_free", 0)
-        ass_pct = rs.get("assignment_free_pct", 0.0)
-        sub_n = rs.get("sublease_free", 0)
-        sub_pct = rs.get("sublease_free_pct", 0.0)
+        ass_n = rs.get("assignment_possible", 0)
+        ass_pct = rs.get("assignment_possible_pct", 0.0)
+        ass_c = rs.get("assignment_by_consent", 0)
+        sub_n = rs.get("sublease_possible", 0)
+        sub_pct = rs.get("sublease_possible_pct", 0.0)
         signal("green" if lease_total > 0 else "yellow",
                "Арендных лотов (знаменатель)", str(lease_total), ">0")
         signal("green" if ass_n >= 500 else ("yellow" if ass_n >= 100 else "red"),
-               "Есть переуступка", f"{ass_n} ({ass_pct}%)", ">=500")
+               "Переуступка возможна", f"{ass_n} ({ass_pct}%), из них по согл. {ass_c}", ">=500")
         signal("green" if sub_n >= 500 else ("yellow" if sub_n >= 100 else "red"),
-               "Есть субаренда", f"{sub_n} ({sub_pct}%)", ">=500")
+               "Субаренда возможна", f"{sub_n} ({sub_pct}%)", ">=500")
         if ass_n < 100:
             issues.append("Переуступка почти не проставлена — проверь enrich_sublease_flags (ст.22 + срок из attributes)")
     else:

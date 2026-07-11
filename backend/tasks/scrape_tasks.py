@@ -427,6 +427,7 @@ async def _enrich_sublease_flags(batch_size: int, full_scan: bool):
     from models.lot import Lot, LotStatus, LotSource, DealType, AuctionType
     from services.contract_parser import (
         parse_contract, extract_lease_term_years, derive_resale_sublease,
+        RESALE_CONSENT_BASES,
     )
 
     engine = create_async_engine(settings.DATABASE_URL, echo=False, pool_pre_ping=True)
@@ -450,7 +451,7 @@ async def _enrich_sublease_flags(batch_size: int, full_scan: bool):
             select(Lot).where(and_(*conditions)).limit(batch_size)
         )
         lots = result.scalars().all()
-        n_free = n_forbidden = n_unknown = n_skip = 0
+        n_free = n_consent = n_forbidden = n_unknown = n_skip = 0
         for lot in lots:
             is_lease = lot.deal_type == DealType.LEASE or lot.auction_type == AuctionType.RENT
             if not is_lease:
@@ -481,7 +482,10 @@ async def _enrich_sublease_flags(batch_size: int, full_scan: bool):
             lot.contract_terms = terms or None
 
             if d["assignment_allowed"] is True:
-                n_free += 1
+                if d["resale_basis"] in RESALE_CONSENT_BASES:
+                    n_consent += 1
+                else:
+                    n_free += 1
             elif d["assignment_allowed"] is False:
                 n_forbidden += 1
             else:
@@ -489,8 +493,8 @@ async def _enrich_sublease_flags(batch_size: int, full_scan: bool):
         await db.commit()
         print(
             f"[resale/st22] full_scan={full_scan} лотов={len(lots)} "
-            f"переуступка_есть={n_free} запрет={n_forbidden} "
-            f"неизвестно={n_unknown} не_аренда={n_skip}"
+            f"переуступка_свободно={n_free} по_согласованию={n_consent} "
+            f"запрет={n_forbidden} неизвестно={n_unknown} не_аренда={n_skip}"
         )
     await engine.dispose()
 

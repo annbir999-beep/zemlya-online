@@ -81,14 +81,16 @@ async def status_health(db: AsyncSession = Depends(get_db)):
     )).one()
 
     # Переуступка/субаренда осмысленны только для аренды — считаем в своём
-    # знаменателе (LEASE), иначе доля тонет среди лотов на продажу. Два чётких
-    # флага (без градации): «есть переуступка» / «есть субаренда».
+    # знаменателе (LEASE). Флаг True = «возможна»: свободно ИЛИ по согласованию
+    # (можно договориться) — оба идут в списки; отличаем по resale_basis.
     IS_LEASE = or_(Lot.deal_type == DealType.LEASE, Lot.auction_type == AuctionType.RENT)
+    CONSENT_BASIS = Lot.contract_terms["resale_basis"].astext.in_(["zk_st22_p5", "contract_consent"])
     rs = (await db.execute(
         select(
             func.count().label("lease_total"),
-            func.count().filter(Lot.assignment_allowed.is_(True)).label("asg_free"),
-            func.count().filter(Lot.sublease_allowed.is_(True)).label("sub_free"),
+            func.count().filter(Lot.assignment_allowed.is_(True)).label("asg_possible"),
+            func.count().filter(and_(Lot.assignment_allowed.is_(True), CONSENT_BASIS)).label("asg_consent"),
+            func.count().filter(Lot.sublease_allowed.is_(True)).label("sub_possible"),
         ).where(and_(ACTIVE, TORGI, IS_LEASE))
     )).one()
 
@@ -126,14 +128,16 @@ async def status_health(db: AsyncSession = Depends(get_db)):
             "with_coords": qa.with_coords,
             "coords_pct": _pct(qa.with_coords),
         },
-        # Переуступка/субаренда — по канону аренды (LEASE), два чётких флага + ст.22.
+        # Переуступка/субаренда — по канону аренды (LEASE). possible = возможна
+        # (свободно + по согласованию); by_consent — из них только по согласованию.
         "resale": {
             "universe": "torgi_gov_active_lease",
             "lease_total": rs.lease_total,
-            "assignment_free": rs.asg_free,   # есть переуступка (свободно): ст.22 >5 лет / договор
-            "assignment_free_pct": _lpct(rs.asg_free),
-            "sublease_free": rs.sub_free,     # есть субаренда (свободно)
-            "sublease_free_pct": _lpct(rs.sub_free),
+            "assignment_possible": rs.asg_possible,
+            "assignment_possible_pct": _lpct(rs.asg_possible),
+            "assignment_by_consent": rs.asg_consent,   # из possible — можно договориться с админ
+            "sublease_possible": rs.sub_possible,
+            "sublease_possible_pct": _lpct(rs.sub_possible),
         },
         "server_time": now.isoformat(),
     }

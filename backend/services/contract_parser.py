@@ -242,46 +242,53 @@ def derive_resale_sublease(lease_term_years: Optional[float],
 
     Возвращает:
       assignment_allowed / sublease_allowed — переуступка/субаренда:
-        True  — СВОБОДНА (уведомительный порядок ст.22 при сроке >5 лет или
-                прямо разрешено договором);
+        True  — ВОЗМОЖНА: свободно (уведомит. порядок ст.22 при сроке >5 лет /
+                прямо в договоре) ЛИБО по согласованию с арендодателем (срок ≤5
+                лет / договор требует согласия — «можно договориться»);
         False — прямой запрет договора;
-        None  — неизвестно ИЛИ только с согласия арендодателя (срок ≤5 лет /
-                договор требует согласия) — в «есть переуступку» не попадает;
-      resale_basis: "contract"|"zk_st22_p9"|"zk_st22_p5" — источник вывода
-        (UI покажет честно: по договору или по умолчанию закона).
+        None  — неизвестно (срок и условие не определены);
+      resale_basis: источник/режим вывода —
+        свободно: "zk_st22_p9" (>5 лет) | "contract_notice";
+        по согласованию: "zk_st22_p5" (≤5 лет) | "contract_consent";
+        запрет: "contract_forbidden".
 
-    Договор приоритетнее закона.
+    Договор приоритетнее закона. «Свободно» и «по согласованию» ОБА дают флаг
+    True (оба — в списки); отличить их можно по resale_basis (см. RESALE_CONSENT_BASES).
     """
     contract = contract or {}
     a = contract.get("assignment")   # forbidden | with_consent | with_notice | None
     s = contract.get("sublease")     # forbidden | with_consent | with_notice | allowed | None
     out = {"assignment_allowed": None, "sublease_allowed": None, "resale_basis": None}
     long_term = lease_term_years is not None and lease_term_years > ZK_ST22_LONG_TERM_YEARS
+    short_term = lease_term_years is not None and 0 < lease_term_years <= ZK_ST22_LONG_TERM_YEARS
 
     # ── Переуступка (цессия права аренды) ──
     if a == "forbidden":
-        out.update(assignment_allowed=False, resale_basis="contract")
+        out.update(assignment_allowed=False, resale_basis="contract_forbidden")
     elif a == "with_notice":
-        out.update(assignment_allowed=True, resale_basis="contract")
+        out.update(assignment_allowed=True, resale_basis="contract_notice")
     elif a == "with_consent":
-        out.update(assignment_allowed=None, resale_basis="contract")
+        out.update(assignment_allowed=True, resale_basis="contract_consent")
     elif long_term:
         out.update(assignment_allowed=True, resale_basis="zk_st22_p9")
-    elif lease_term_years is not None and lease_term_years > 0:
-        out.update(assignment_allowed=None, resale_basis="zk_st22_p5")
+    elif short_term:
+        out.update(assignment_allowed=True, resale_basis="zk_st22_p5")
 
-    # ── Субаренда ──
+    # ── Субаренда ── (симметрично: возможна свободно или по согласованию)
     if s == "forbidden":
         out["sublease_allowed"] = False
-    elif s in ("allowed", "with_notice"):
+    elif s in ("allowed", "with_notice", "with_consent"):
         out["sublease_allowed"] = True
-    elif s == "with_consent":
-        out["sublease_allowed"] = None
-    elif long_term:
+    elif long_term or short_term:
         out["sublease_allowed"] = True
-    # срок ≤5 лет без явного условия → только с согласия → None (не свободно)
 
     return out
+
+
+# Режимы resale_basis, означающие «переуступка/субаренда по согласованию с
+# арендодателем» (можно договориться) — в отличие от свободной (уведомительной).
+RESALE_CONSENT_BASES = ("zk_st22_p5", "contract_consent")
+RESALE_FREE_BASES = ("zk_st22_p9", "contract_notice")
 
 
 # ── Текстовое представление для AI/UI ────────────────────────────────────────
