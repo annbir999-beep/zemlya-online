@@ -586,11 +586,26 @@ class TorgiGovScraper:
         lot.section_tg = section_name[:500] if section_name else None
         lot.etp = etp_name[:200] if etp_name else None
         lot.resale_type = resale_type
-        sublease, assignment = _detect_sublease_assignment(
-            raw, lot.title or "", lot.description or ""
-        )
-        lot.sublease_allowed = sublease if (sublease or assignment) else None
-        lot.assignment_allowed = assignment if (sublease or assignment) else None
+        # Автоклассификация переуступки/субаренды по ст. 22 ЗК ПРЯМО ПРИ ИНГЕСТЕ —
+        # новый арендный лот сразу виден в фильтрах, без ожидания суточного enrich.
+        # Срок берём из structured attributes (дёшево, без regex); явные условия
+        # договора уточняет daily enrich_sublease_flags по тексту/PDF. Не перетираем
+        # уже выставленный флаг значением None (напр. вердикт PDF при ре-скрейпе).
+        is_lease = (deal_type_parsed == DealType.LEASE or auction_type == AuctionType.RENT)
+        if is_lease:
+            from services.contract_parser import extract_lease_term_years, derive_resale_sublease
+            term_y = extract_lease_term_years(raw)
+            d = derive_resale_sublease(term_y, lot.contract_terms)
+            if d["assignment_allowed"] is not None:
+                lot.assignment_allowed = d["assignment_allowed"]
+            if d["sublease_allowed"] is not None:
+                lot.sublease_allowed = d["sublease_allowed"]
+            if d["resale_basis"]:
+                ct = dict(lot.contract_terms or {})
+                ct["resale_basis"] = d["resale_basis"]
+                if term_y and not ct.get("lease_term_years"):
+                    ct["lease_term_years"] = term_y
+                lot.contract_terms = ct
         # Имущество банкротов — детектируем по ключевым словам
         lot.is_bankruptcy = _is_bankruptcy_text(
             (lot.title or "") + " " + (lot.description or "") + " " + (lot.organizer_name or "")

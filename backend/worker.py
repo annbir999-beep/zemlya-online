@@ -57,13 +57,23 @@ celery_app.conf.update(
             "schedule": crontab(minute=45, hour=4),
             "args": (500,),
         },
-        # Ежедневный пересчёт флагов переуступки и субаренды по тексту лота
-        # (поля, установленные из PDF договора в enrich_torgi_details, не трогаются).
-        # 03:30 МСК — до утренних beat-задач, после ночного scrape_avito.
+        # Классификация переуступки/субаренды (ст.22 ЗК + договор) — СРАЗУ ПОСЛЕ
+        # каждого скрейпа torgi.gov (01:20 и 04:20), чтобы новые арендные лоты
+        # быстро уточнялись по тексту/PDF и были видны в фильтрах. Структурный
+        # срок из attributes уже проставлен при ингесте в _upsert_lot; здесь —
+        # инкрементальное уточнение свежих лотов (updated_at за 7 дней).
         "enrich-sublease-flags": {
             "task": "tasks.scrape_tasks.enrich_sublease_flags",
-            "schedule": crontab(minute=30, hour=3),
+            "schedule": crontab(minute=20, hour="1,4"),
             "args": (2000,),
+        },
+        # Полная суточная переклассификация всей активной аренды (full_scan) —
+        # 06:15 МСК, после ночных скрейпов, PDF-enrich и reparse. Нормализует
+        # флаги, выставленные PDF-путём, в единую ст.22-схему (два флага + basis).
+        "enrich-resale-fullscan": {
+            "task": "tasks.scrape_tasks.enrich_sublease_flags",
+            "schedule": crontab(minute=15, hour=6),
+            "args": (6000, True),
         },
         # Обогащение данными Росреестра — каждый час по 1000 лотов
         # batch=2000 заваливал очередь (3.6ч на прогон при hourly beat → накапливалось).
