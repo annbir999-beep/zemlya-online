@@ -2,11 +2,16 @@
 import { useState, useMemo } from "react";
 import { api } from "@/lib/api";
 import { REGIONS, LAND_PURPOSES } from "@/lib/filters";
+import { planRank, RANK_INVESTOR } from "@/lib/plan";
 
 type Channel = "email" | "telegram" | "both";
 
 interface Props {
   hasTelegram: boolean;
+  // Тариф пользователя (enum-значение из БД) — для гейтинга премиум-фильтров
+  // переуступки/субаренды (Инвестор+). Бэк всё равно проверяет при сохранении,
+  // но замок в UI честнее, чем 402 постфактум.
+  plan?: string | null;
   onCreated: () => void;
   onClose: () => void;
 }
@@ -34,7 +39,8 @@ const LIQUIDITY_OPTS = [
   { value: "low", label: "Низкая" },
 ];
 
-export default function CreateAlertModal({ hasTelegram, onCreated, onClose }: Props) {
+export default function CreateAlertModal({ hasTelegram, plan, onCreated, onClose }: Props) {
+  const isInvestor = planRank(plan) >= RANK_INVESTOR;
   const [name, setName] = useState("");
   const [regionSearch, setRegionSearch] = useState("");
   const [regions, setRegions] = useState<string[]>([]);
@@ -111,8 +117,8 @@ export default function CreateAlertModal({ hasTelegram, onCreated, onClose }: Pr
           cadastral_cost_max: num(cadCostMax),
           deposit_pct_min: num(depPctMin),
           deposit_pct_max: num(depPctMax),
-          sublease_allowed: subleaseOnly ? true : undefined,
-          assignment_allowed: assignmentOnly ? true : undefined,
+          sublease_allowed: subleaseOnly && isInvestor ? true : undefined,
+          assignment_allowed: assignmentOnly && isInvestor ? true : undefined,
         },
       });
       onCreated();
@@ -336,15 +342,48 @@ export default function CreateAlertModal({ hasTelegram, onCreated, onClose }: Pr
             </div>
           </Field>
 
-          <Field label="Дополнительно">
-            <label className="checkbox-item" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
-              <input type="checkbox" checked={subleaseOnly} onChange={e => setSubleaseOnly(e.target.checked)} />
-              Только с разрешённой субарендой
+          <Field label="Переуступка и субаренда права аренды">
+            {!isInvestor && (
+              <div style={{ fontSize: 12, color: "var(--text-3)", marginBottom: 6 }}>
+                🔒 Доступно на тарифе{" "}
+                <a href="/pricing" style={{ color: "var(--primary)", fontWeight: 600 }}>Инвестор</a>{" "}
+                и выше
+              </div>
+            )}
+            <label
+              className="checkbox-item"
+              style={{
+                display: "flex", alignItems: "center", gap: 6, fontSize: 13,
+                opacity: isInvestor ? 1 : 0.5, cursor: isInvestor ? "pointer" : "not-allowed",
+              }}
+            >
+              <input
+                type="checkbox"
+                disabled={!isInvestor}
+                checked={isInvestor && subleaseOnly}
+                onChange={e => setSubleaseOnly(e.target.checked)}
+              />
+              Где возможна субаренда (в т.ч. по согласованию)
             </label>
-            <label className="checkbox-item" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
-              <input type="checkbox" checked={assignmentOnly} onChange={e => setAssignmentOnly(e.target.checked)} />
-              Только с разрешённой переуступкой
+            <label
+              className="checkbox-item"
+              style={{
+                display: "flex", alignItems: "center", gap: 6, fontSize: 13,
+                opacity: isInvestor ? 1 : 0.5, cursor: isInvestor ? "pointer" : "not-allowed",
+              }}
+            >
+              <input
+                type="checkbox"
+                disabled={!isInvestor}
+                checked={isInvestor && assignmentOnly}
+                onChange={e => setAssignmentOnly(e.target.checked)}
+              />
+              Где возможна переуступка (в т.ч. по согласованию)
             </label>
+            <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 4, lineHeight: 1.4 }}>
+              По ст. 22 ЗК РФ при аренде свыше 5 лет — в уведомительном порядке,
+              без согласия арендодателя. «По согласованию» — можно договориться с администрацией.
+            </div>
           </Field>
 
           <Field label="Куда присылать уведомления">

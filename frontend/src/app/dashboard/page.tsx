@@ -357,6 +357,7 @@ export default function DashboardPage() {
       {showCreateAlert && (
         <CreateAlertModal
           hasTelegram={!!user.telegram_id}
+          plan={user.subscription_plan}
           onClose={() => setShowCreateAlert(false)}
           onCreated={async () => {
             setShowCreateAlert(false);
