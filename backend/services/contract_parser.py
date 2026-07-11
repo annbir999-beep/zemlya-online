@@ -182,6 +182,108 @@ def parse_contract(text: str) -> dict:
     return result
 
 
+# ── Срок аренды из структурных атрибутов torgi.gov ────────────────────────────
+# Ключевое звено фикса переуступки: срок аренды в карточке ЗК-аукциона лежит
+# отдельными ЧИСЛОВЫМИ полями attributes (DA_contractYears / DA_contractMonths /
+# DA_contractDays; суффикс кода зависит от формы торгов — матчим по префиксу).
+# Regex по PDF ловит срок лишь у ~2.5% лотов, из-за чего эвристика ст.22 голодала;
+# структурные поля дают срок у ~63% арендных лотов.
+_TERM_ATTR_PREFIXES = {
+    "years": "DA_contractYears",
+    "months": "DA_contractMonths",
+    "days": "DA_contractDays",
+}
+
+
+def extract_lease_term_years(raw: dict) -> Optional[float]:
+    """Срок аренды в годах из числовых attributes карточки torgi.gov.
+
+    Складывает годы + месяцы/12 + дни/365. None — если ни одного числового поля
+    срока нет (не арендный ЗК-аукцион или срок не заполнен)."""
+    if not isinstance(raw, dict):
+        return None
+    parts = {"years": 0.0, "months": 0.0, "days": 0.0}
+    found = False
+    for attr in (raw.get("attributes") or []) + (raw.get("noticeAttributes") or []):
+        if not isinstance(attr, dict):
+            continue
+        code = attr.get("code") or ""
+        val = attr.get("value")
+        if isinstance(val, bool) or not isinstance(val, (int, float)):
+            continue
+        for key, prefix in _TERM_ATTR_PREFIXES.items():
+            if code.startswith(prefix):
+                parts[key] = float(val)
+                found = True
+                break
+    if not found:
+        return None
+    total = parts["years"] + parts["months"] / 12 + parts["days"] / 365
+    return round(total, 2) if total > 0 else None
+
+
+# ст. 22 ЗК РФ — переуступка прав и субаренда участка, арендованного у государства:
+#   п.9: срок аренды > 5 лет → в уведомительном порядке, БЕЗ согласия арендодателя
+#        (если договором прямо не предусмотрено иное);
+#   п.5: срок аренды ≤ 5 лет → только с согласия арендодателя.
+# Явное условие договора всегда приоритетнее эвристики закона.
+ZK_ST22_LONG_TERM_YEARS = 5
+
+
+def derive_resale_sublease(lease_term_years: Optional[float],
+                           contract: Optional[dict]) -> dict:
+    """Сводит явные условия договора и дефолт ст. 22 ЗК РФ в поля лота (два уровня).
+
+    Возвращает:
+      resale_type: "no"|"with_approval"|"with_notice"|"yes"|None — градация
+        переуступки (поле Lot.resale_type, для тонкой фильтрации на фронте);
+      assignment_allowed / sublease_allowed: СТРОГИЙ булев флаг «свободно, без
+        согласия арендодателя» — True только для уведомительного/явно разрешённого;
+        False — явный запрет; None — неизвестно ИЛИ только с согласия (не свободно);
+      resale_basis: "contract"|"zk_st22_p9"|"zk_st22_p5" — источник вывода
+        (UI покажет честно: по договору или по умолчанию закона).
+
+    Договор > закон. Флаг True = самый ценный для инвестора сигнал «можно
+    переуступить свободно»; «с согласия» в булев True НЕ попадает (см. resale_type).
+    """
+    contract = contract or {}
+    a = contract.get("assignment")   # forbidden | with_consent | with_notice | None
+    s = contract.get("sublease")     # forbidden | with_consent | with_notice | allowed | None
+    out = {
+        "resale_type": None,
+        "assignment_allowed": None,
+        "sublease_allowed": None,
+        "resale_basis": None,
+    }
+    long_term = lease_term_years is not None and lease_term_years > ZK_ST22_LONG_TERM_YEARS
+    short_term = lease_term_years is not None and 0 < lease_term_years <= ZK_ST22_LONG_TERM_YEARS
+
+    # ── Переуступка (цессия права аренды) ──
+    if a == "forbidden":
+        out.update(resale_type="no", assignment_allowed=False, resale_basis="contract")
+    elif a == "with_notice":
+        out.update(resale_type="with_notice", assignment_allowed=True, resale_basis="contract")
+    elif a == "with_consent":
+        out.update(resale_type="with_approval", assignment_allowed=None, resale_basis="contract")
+    elif long_term:
+        out.update(resale_type="with_notice", assignment_allowed=True, resale_basis="zk_st22_p9")
+    elif short_term:
+        out.update(resale_type="with_approval", assignment_allowed=None, resale_basis="zk_st22_p5")
+
+    # ── Субаренда ──
+    if s == "forbidden":
+        out["sublease_allowed"] = False
+    elif s in ("allowed", "with_notice"):
+        out["sublease_allowed"] = True
+    elif s == "with_consent":
+        out["sublease_allowed"] = None
+    elif long_term:
+        out["sublease_allowed"] = True
+    # short_term без явного условия → только с согласия → остаётся None (не свободно)
+
+    return out
+
+
 # ── Текстовое представление для AI/UI ────────────────────────────────────────
 ASSIGNMENT_LABELS = {
     "forbidden": "Цессия запрещена",

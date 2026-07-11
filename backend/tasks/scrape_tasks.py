@@ -388,17 +388,30 @@ def _detect_sublease_assignment(raw: dict, title: str, description: str) -> tupl
     )
 
 
+def _combined_lot_text(raw: dict, title: str, description: str) -> str:
+    """Склеивает весь текст лота (title + description + строковые raw-атрибуты)
+    для прогона через parse_contract, когда отдельного PDF-договора нет."""
+    texts = [title or "", description or "", (raw or {}).get("lotDescription", "") or ""]
+    for attr in ((raw or {}).get("noticeAttributes") or []) + ((raw or {}).get("attributes") or []):
+        val = attr.get("value") or attr.get("characteristicValue") or ""
+        if isinstance(val, str):
+            texts.append(val)
+        texts.append(attr.get("fullName", "") or "")
+    return " ".join(t for t in texts if t)
+
+
 @celery_app.task(bind=True, max_retries=2, default_retry_delay=600)
 def enrich_sublease_flags(self, batch_size: int = 2000, full_scan: bool = False):
-    """Ежедневное обновление флагов sublease_allowed / assignment_allowed по тексту лота.
+    """Классификация переуступки/субаренды арендных лотов: два уровня (resale_type
+    + строгий булев флаг «свободно»), договор + дефолт ст. 22 ЗК РФ.
 
-    full_scan=False (по умолчанию для beat) — берём только лоты, обновлённые за
-    последние 7 дней (новые поступления и переразметка).
-    full_scan=True — разовый прогон по всей активной базе (вызывать руками
-    через celery call после изменения словаря ключевых слов).
+    Источник срока аренды: сперва structured attributes карточки
+    (extract_lease_term_years — покрытие ~63%), затем PDF-regex (contract_terms).
+    Явные условия договора (parse_contract) приоритетнее закона; при их отсутствии —
+    ст. 22: срок > 5 лет → уведомительный порядок (свободно), ≤ 5 лет → с согласия.
 
-    PDF-источник приоритетнее: если оба флага уже заполнены через enrich_torgi_details
-    (распарсен проект договора) — не трогаем.
+    full_scan=False (beat, ежедневно) — лоты, обновлённые за 7 дней.
+    full_scan=True — переклассификация ВСЕЙ активной аренды torgi.gov (бэкфилл).
     """
     try:
         _run(_enrich_sublease_flags(batch_size, full_scan))
@@ -411,50 +424,84 @@ async def _enrich_sublease_flags(batch_size: int, full_scan: bool):
     from sqlalchemy import select, and_, or_
     from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
     from core.config import settings
-    from models.lot import Lot, LotStatus
+    from models.lot import Lot, LotStatus, LotSource, DealType, AuctionType, ResaleType
+    from services.contract_parser import (
+        parse_contract, extract_lease_term_years, derive_resale_sublease,
+    )
 
+    RESALE_MAP = {
+        "no": ResaleType.NO,
+        "with_approval": ResaleType.WITH_APPROVAL,
+        "with_notice": ResaleType.WITH_NOTICE,
+        "yes": ResaleType.YES,
+    }
     engine = create_async_engine(settings.DATABASE_URL, echo=False, pool_pre_ping=True)
     SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
     cutoff = datetime.now(timezone.utc) - timedelta(days=7)
 
     async with SessionLocal() as db:
-        # PDF приоритетнее: пропускаем лоты, у которых оба флага уже заполнены.
-        # Тут не трогаем False/True от PDF.
-        conditions = [
-            Lot.status == LotStatus.ACTIVE,
-            or_(
-                Lot.sublease_allowed.is_(None),
-                Lot.assignment_allowed.is_(None),
-            ),
-        ]
-        if not full_scan:
+        # Переуступка/субаренда осмысленны только для аренды (torgi.gov — все
+        # гос/муниципальные). full_scan переклассифицирует всю активную аренду;
+        # инкремент — только свежие лоты.
+        conditions = [Lot.status == LotStatus.ACTIVE, Lot.source == LotSource.TORGI_GOV]
+        if full_scan:
+            conditions.append(
+                or_(Lot.deal_type == DealType.LEASE, Lot.auction_type == AuctionType.RENT)
+            )
+        else:
             conditions.append(Lot.updated_at >= cutoff)
 
         result = await db.execute(
-            select(Lot)
-            .where(and_(*conditions))
-            .limit(batch_size)
+            select(Lot).where(and_(*conditions)).limit(batch_size)
         )
         lots = result.scalars().all()
-        updated_with_flag = 0
-        cleared_null = 0
+        n_free = n_forbidden = n_consent = n_unknown = n_skip = 0
         for lot in lots:
-            sublease, assignment = _detect_sublease_assignment(
-                lot.raw_data or {}, lot.title or "", lot.description or ""
+            is_lease = lot.deal_type == DealType.LEASE or lot.auction_type == AuctionType.RENT
+            if not is_lease:
+                n_skip += 1
+                continue
+            raw = lot.raw_data or {}
+            # Явные условия из текста лота, объединяем с ранее распарсенными из PDF
+            # (contract_terms приоритетнее — PDF полнее текста карточки).
+            terms = dict(lot.contract_terms or {})
+            text_terms = parse_contract(
+                _combined_lot_text(raw, lot.title or "", lot.description or "")
             )
-            # Не перетираем поле, если PDF-источник его уже выставил (то есть оно NOT NULL).
-            # Заполняем только NULL-ячейки текущей логикой.
-            if lot.sublease_allowed is None:
-                lot.sublease_allowed = sublease if (sublease or assignment) else None
-            if lot.assignment_allowed is None:
-                lot.assignment_allowed = assignment if (sublease or assignment) else None
-            if sublease or assignment:
-                updated_with_flag += 1
+            for k in ("assignment", "sublease"):
+                if not terms.get(k) and text_terms.get(k):
+                    terms[k] = text_terms[k]
+            # Срок аренды: PDF-regex → иначе структурные attributes карточки.
+            term_years = terms.get("lease_term_years") or extract_lease_term_years(raw)
+            if term_years and not terms.get("lease_term_years"):
+                terms["lease_term_years"] = term_years
+
+            d = derive_resale_sublease(term_years, terms)
+            # Для аренды выставляем авторитетно (derive уже учёл явный договор):
+            # булевы — строгий флаг «свободно» (True/False/None), resale_type — градация.
+            lot.assignment_allowed = d["assignment_allowed"]
+            lot.sublease_allowed = d["sublease_allowed"]
+            if d["resale_type"]:
+                lot.resale_type = RESALE_MAP[d["resale_type"]]
+            if d["resale_basis"]:
+                terms["resale_basis"] = d["resale_basis"]
+            lot.contract_terms = terms or None
+
+            if d["assignment_allowed"] is True:
+                n_free += 1
+            elif d["assignment_allowed"] is False:
+                n_forbidden += 1
+            elif d["resale_type"] == "with_approval":
+                n_consent += 1
             else:
-                cleared_null += 1
+                n_unknown += 1
         await db.commit()
-        print(f"[sublease] full_scan={full_scan} обработано: {len(lots)}, с упоминаниями: {updated_with_flag}, без: {cleared_null}")
+        print(
+            f"[resale/st22] full_scan={full_scan} лотов={len(lots)} "
+            f"свободно={n_free} запрет={n_forbidden} с_согласия={n_consent} "
+            f"неизвестно={n_unknown} не_аренда={n_skip}"
+        )
     await engine.dispose()
 
 

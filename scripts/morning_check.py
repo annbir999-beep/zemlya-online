@@ -228,21 +228,31 @@ def main():
                 issues.append("Свежие лоты не приходят — проверить scrape_torgi_gov")
 
     # ─── 8b. Флаги переуступки/субаренды ───────────────────────────────
-    # Честный источник — status-health.quality (sublease_allowed/
-    # assignment_allowed под премиум-гейтом Инвестор+, анонимные
-    # /lots?sublease_allowed=true раньше давали ложные «все активные»).
+    # Честный источник — status-health.resale (знаменатель = LEASE-лоты, а не все
+    # active: переуступка/субаренда осмысленны только для аренды). Два уровня:
+    # строгий булев флаг «свободно» (ст.22 >5 лет / договор) + градация resale_type.
     section("ПЕРЕУСТУПКА / СУБАРЕНДА")
-    if q:
-        sub_n = q.get("sublease_allowed", 0)
-        ass_n = q.get("assignment_allowed", 0)
-        signal("green" if sub_n >= 100 else ("yellow" if sub_n >= 20 else "red"),
-               "Лоты с разрешённой субарендой", str(sub_n), ">=100")
-        signal("green" if ass_n >= 100 else ("yellow" if ass_n >= 20 else "red"),
-               "Лоты с разрешённой переуступкой", str(ass_n), ">=100")
-        if sub_n < 20 and ass_n < 20:
-            issues.append("Покрытие фильтра переуступки/субаренды слишком низкое — проверь enrich_sublease_flags")
+    rs = h.get("resale", {}) if "_error" not in h else {}
+    if rs:
+        lease_total = rs.get("lease_total", 0)
+        ass_n = rs.get("assignment_free", 0)
+        ass_pct = rs.get("assignment_free_pct", 0.0)
+        sub_n = rs.get("sublease_free", 0)
+        brt = rs.get("by_resale_type", {})
+        signal("green" if lease_total > 0 else "yellow",
+               "Арендных лотов (знаменатель)", str(lease_total), ">0")
+        # Норма грубая: по ст.22 бОльшая часть длинной аренды (>5 лет) должна быть «свободно».
+        signal("green" if ass_n >= 500 else ("yellow" if ass_n >= 100 else "red"),
+               "Переуступка свободна (ст.22/договор)", f"{ass_n} ({ass_pct}%)", ">=500")
+        signal("green" if sub_n >= 500 else ("yellow" if sub_n >= 100 else "red"),
+               "Субаренда свободна", str(sub_n), ">=500")
+        signal("green", "  градация resale_type",
+               f"уведом={brt.get('with_notice',0)} да={brt.get('yes',0)} "
+               f"с_согл={brt.get('with_approval',0)} запрет={brt.get('no',0)}")
+        if ass_n < 100:
+            issues.append("Переуступка почти не проставлена — проверь enrich_sublease_flags (ст.22 + срок из attributes)")
     else:
-        signal("yellow", "Переуступка/субаренда", "н/д (status-health недоступен)", ">=100")
+        signal("yellow", "Переуступка/субаренда", "н/д (status-health недоступен)", ">=500")
 
     # ─── 9. Heatmap ────────────────────────────────────────────────────
     section("HEATMAP (АНАЛИТИКА)")
