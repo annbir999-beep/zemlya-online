@@ -27,6 +27,8 @@ marketing/video/education/_subtmp/
 # Rendered video outputs — heavy (~1.4GB) и регенерируемые, не в git
 marketing/video/output/
 marketing/video/subbed/
+marketing/video/check/
+marketing/video/stories/
 
 # Случайная scratch-папка (research-сессия), не в репо
 /Новая папка/
