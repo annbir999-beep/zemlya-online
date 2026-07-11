@@ -53,3 +53,13 @@ def poll_max_updates():
     if n:
         print(f"[inbox-task] max: {n} new message(s)")
     return n
+
+
+@celery_app.task
+def poll_ok_updates():
+    """Сообщения группы ОК → инбокс (long-poll api.ok.ru, токен OK_GROUP_TOKEN)."""
+    from services.ok_bot import poll_updates
+    n = _run(poll_updates())
+    if n:
+        print(f"[inbox-task] ok: {n} new message(s)")
+    return n

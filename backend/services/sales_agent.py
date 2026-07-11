@@ -105,6 +105,10 @@ async def _send_reply(msg: InboxMessage, reply: str) -> bool:
             from services.max_bot import send_message as max_send
             return await max_send((raw or {}).get("chat_id"), reply)
 
+        if msg.source == "ok":
+            from services.ok_bot import send_message as ok_send
+            return await ok_send((raw or {}).get("chat_id"), reply)
+
         if msg.source in ("tg_dm", "tg_comment"):
             chat_id = raw.get("chat_id")
             if not (settings.TELEGRAM_BOT_TOKEN and chat_id):

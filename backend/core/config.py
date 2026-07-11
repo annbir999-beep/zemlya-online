@@ -59,6 +59,7 @@ class Settings(BaseSettings):
     YOUTUBE_API_KEY: str = ""        # Google Cloud API key с включённым YouTube Data API v3
     YOUTUBE_CHANNEL_ID: str = "UCej045eSV8VJjK6Om9XXWzA"  # канал «ТОРГИ ЗЕМЛИ»
     MAX_BOT_TOKEN: str = ""          # токен бота Max (создаётся у @MasterBot)
+    OK_GROUP_TOKEN: str = ""         # токен Bot API группы ОК (Настройки → Работа с API)
 
     # Почта info@torgi-zemli.ru (IMAP, Timeweb) — уведомления о новых письмах в Telegram.
     IMAP_HOST: str = "imap.timeweb.ru"

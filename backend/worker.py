@@ -221,5 +221,10 @@ celery_app.conf.update(
             "task": "tasks.inbox_tasks.poll_max_updates",
             "schedule": crontab(minute="*/2"),
         },
+        # Сообщения группы ОК — каждые 2 минуты (long-poll api.ok.ru, marker в Redis)
+        "poll-ok-updates": {
+            "task": "tasks.inbox_tasks.poll_ok_updates",
+            "schedule": crontab(minute="*/2"),
+        },
     },
 )
