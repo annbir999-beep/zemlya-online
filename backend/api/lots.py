@@ -84,7 +84,8 @@ async def status_health(db: AsyncSession = Depends(get_db)):
     # знаменателе (LEASE). Флаг True = «возможна»: свободно ИЛИ по согласованию
     # (можно договориться) — оба идут в списки; отличаем по resale_basis.
     IS_LEASE = or_(Lot.deal_type == DealType.LEASE, Lot.auction_type == AuctionType.RENT)
-    CONSENT_BASIS = Lot.contract_terms["resale_basis"].astext.in_(["zk_st22_p5", "contract_consent"])
+    # contract_terms — generic JSON (не JSONB), поэтому берём текст через ->>.
+    CONSENT_BASIS = Lot.contract_terms.op("->>")("resale_basis").in_(["zk_st22_p5", "contract_consent"])
     rs = (await db.execute(
         select(
             func.count().label("lease_total"),
