@@ -424,17 +424,11 @@ async def _enrich_sublease_flags(batch_size: int, full_scan: bool):
     from sqlalchemy import select, and_, or_
     from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
     from core.config import settings
-    from models.lot import Lot, LotStatus, LotSource, DealType, AuctionType, ResaleType
+    from models.lot import Lot, LotStatus, LotSource, DealType, AuctionType
     from services.contract_parser import (
         parse_contract, extract_lease_term_years, derive_resale_sublease,
     )
 
-    RESALE_MAP = {
-        "no": ResaleType.NO,
-        "with_approval": ResaleType.WITH_APPROVAL,
-        "with_notice": ResaleType.WITH_NOTICE,
-        "yes": ResaleType.YES,
-    }
     engine = create_async_engine(settings.DATABASE_URL, echo=False, pool_pre_ping=True)
     SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
@@ -456,7 +450,7 @@ async def _enrich_sublease_flags(batch_size: int, full_scan: bool):
             select(Lot).where(and_(*conditions)).limit(batch_size)
         )
         lots = result.scalars().all()
-        n_free = n_forbidden = n_consent = n_unknown = n_skip = 0
+        n_free = n_forbidden = n_unknown = n_skip = 0
         for lot in lots:
             is_lease = lot.deal_type == DealType.LEASE or lot.auction_type == AuctionType.RENT
             if not is_lease:
@@ -478,12 +472,10 @@ async def _enrich_sublease_flags(batch_size: int, full_scan: bool):
                 terms["lease_term_years"] = term_years
 
             d = derive_resale_sublease(term_years, terms)
-            # Для аренды выставляем авторитетно (derive уже учёл явный договор):
-            # булевы — строгий флаг «свободно» (True/False/None), resale_type — градация.
+            # Два чётких флага (без градации). derive уже учёл явный договор,
+            # выставляем авторитетно: True=свободно, False=запрет, None=нет данных/с согласия.
             lot.assignment_allowed = d["assignment_allowed"]
             lot.sublease_allowed = d["sublease_allowed"]
-            if d["resale_type"]:
-                lot.resale_type = RESALE_MAP[d["resale_type"]]
             if d["resale_basis"]:
                 terms["resale_basis"] = d["resale_basis"]
             lot.contract_terms = terms or None
@@ -492,14 +484,12 @@ async def _enrich_sublease_flags(batch_size: int, full_scan: bool):
                 n_free += 1
             elif d["assignment_allowed"] is False:
                 n_forbidden += 1
-            elif d["resale_type"] == "with_approval":
-                n_consent += 1
             else:
                 n_unknown += 1
         await db.commit()
         print(
             f"[resale/st22] full_scan={full_scan} лотов={len(lots)} "
-            f"свободно={n_free} запрет={n_forbidden} с_согласия={n_consent} "
+            f"переуступка_есть={n_free} запрет={n_forbidden} "
             f"неизвестно={n_unknown} не_аренда={n_skip}"
         )
     await engine.dispose()

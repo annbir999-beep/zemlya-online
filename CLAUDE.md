@@ -120,7 +120,7 @@ docker compose exec celery_worker celery -A worker call tasks.scrape_tasks.<task
 - **master vs main** — `git push origin main`, не `master`.
 - **AI «Ошибка запроса»** — обычно баланс на прокси-шлюзе = 0. Пополнение пропагается ~25 мин.
 - **Покрытие карты ~6.5%** — много AVITO-лотов без КН. Решение: Nominatim fallback (пока отложено).
-- **Субаренда/переуступка** — в договорах редко прописывается явно. Эвристика по ст. 22 ЗК РФ (аренда ≥5 лет → разрешено без согласия) пока не внедрена.
+- **Субаренда/переуступка** — в договорах редко прописывается явно, поэтому внедрена эвристика ст. 22 ЗК РФ (11.07.2026): срок аренды берётся структурно из `raw_data.attributes` (`DA_contractYears/Months/Days`), а не regex по PDF; при сроке >5 лет и отсутствии явного запрета — переуступка/субаренда «свободна» (уведомительный порядок). Логика в `contract_parser.derive_resale_sublease` + `scrape_tasks.enrich_sublease_flags` (beat 03:30, `full_scan=True` = бэкфилл). Два чётких флага `assignment_allowed`/`sublease_allowed` (True=свободно, False=запрет, None=нет данных/с согласия). Честная сводка — `/api/lots/status-health` блок `resale`.
 - **Длинные SSH-сессии рвутся** — для долгих тасков использовать `nohup` или `run_in_background`, не polling-циклы.
 
 ## Юр.инфо

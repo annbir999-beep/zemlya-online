@@ -227,10 +227,10 @@ def main():
                 signal("red", "Самый свежий лот опубликован", f"{hours_ago:.1f} ч назад", "<6ч")
                 issues.append("Свежие лоты не приходят — проверить scrape_torgi_gov")
 
-    # ─── 8b. Флаги переуступки/субаренды ───────────────────────────────
+    # ─── 8b. Переуступка / субаренда ───────────────────────────────────
     # Честный источник — status-health.resale (знаменатель = LEASE-лоты, а не все
-    # active: переуступка/субаренда осмысленны только для аренды). Два уровня:
-    # строгий булев флаг «свободно» (ст.22 >5 лет / договор) + градация resale_type.
+    # active). Два чётких флага (без градации): есть переуступка / есть субаренда
+    # (ст.22 >5 лет или явно в договоре).
     section("ПЕРЕУСТУПКА / СУБАРЕНДА")
     rs = h.get("resale", {}) if "_error" not in h else {}
     if rs:
@@ -238,17 +238,13 @@ def main():
         ass_n = rs.get("assignment_free", 0)
         ass_pct = rs.get("assignment_free_pct", 0.0)
         sub_n = rs.get("sublease_free", 0)
-        brt = rs.get("by_resale_type", {})
+        sub_pct = rs.get("sublease_free_pct", 0.0)
         signal("green" if lease_total > 0 else "yellow",
                "Арендных лотов (знаменатель)", str(lease_total), ">0")
-        # Норма грубая: по ст.22 бОльшая часть длинной аренды (>5 лет) должна быть «свободно».
         signal("green" if ass_n >= 500 else ("yellow" if ass_n >= 100 else "red"),
-               "Переуступка свободна (ст.22/договор)", f"{ass_n} ({ass_pct}%)", ">=500")
+               "Есть переуступка", f"{ass_n} ({ass_pct}%)", ">=500")
         signal("green" if sub_n >= 500 else ("yellow" if sub_n >= 100 else "red"),
-               "Субаренда свободна", str(sub_n), ">=500")
-        signal("green", "  градация resale_type",
-               f"уведом={brt.get('with_notice',0)} да={brt.get('yes',0)} "
-               f"с_согл={brt.get('with_approval',0)} запрет={brt.get('no',0)}")
+               "Есть субаренда", f"{sub_n} ({sub_pct}%)", ">=500")
         if ass_n < 100:
             issues.append("Переуступка почти не проставлена — проверь enrich_sublease_flags (ст.22 + срок из attributes)")
     else:

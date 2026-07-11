@@ -9,7 +9,7 @@ import math
 
 from core.config import settings
 from db.database import get_db
-from models.lot import Lot, LotStatus, LandPurpose, AuctionType, LotSource, AuctionForm, DealType, AreaDiscrepancy, ResaleType  # noqa: F401
+from models.lot import Lot, LotStatus, LandPurpose, AuctionType, LotSource, AuctionForm, DealType, AreaDiscrepancy, ResaleType
 from models.user import User, SubscriptionPlan
 from api.users import get_current_user, get_current_user_optional
 from core.plans import plan_rank, RANK_PRO, RANK_INVESTOR
@@ -81,18 +81,14 @@ async def status_health(db: AsyncSession = Depends(get_db)):
     )).one()
 
     # Переуступка/субаренда осмысленны только для аренды — считаем в своём
-    # знаменателе (LEASE), иначе доля тонет среди лотов на продажу.
+    # знаменателе (LEASE), иначе доля тонет среди лотов на продажу. Два чётких
+    # флага (без градации): «есть переуступка» / «есть субаренда».
     IS_LEASE = or_(Lot.deal_type == DealType.LEASE, Lot.auction_type == AuctionType.RENT)
     rs = (await db.execute(
         select(
             func.count().label("lease_total"),
             func.count().filter(Lot.assignment_allowed.is_(True)).label("asg_free"),
-            func.count().filter(Lot.assignment_allowed.is_(False)).label("asg_forbidden"),
             func.count().filter(Lot.sublease_allowed.is_(True)).label("sub_free"),
-            func.count().filter(Lot.resale_type == ResaleType.WITH_NOTICE).label("rt_notice"),
-            func.count().filter(Lot.resale_type == ResaleType.YES).label("rt_yes"),
-            func.count().filter(Lot.resale_type == ResaleType.WITH_APPROVAL).label("rt_approval"),
-            func.count().filter(Lot.resale_type == ResaleType.NO).label("rt_no"),
         ).where(and_(ACTIVE, TORGI, IS_LEASE))
     )).one()
 
@@ -130,20 +126,14 @@ async def status_health(db: AsyncSession = Depends(get_db)):
             "with_coords": qa.with_coords,
             "coords_pct": _pct(qa.with_coords),
         },
-        # Переуступка/субаренда — по канону аренды (LEASE), два уровня + ст.22.
+        # Переуступка/субаренда — по канону аренды (LEASE), два чётких флага + ст.22.
         "resale": {
             "universe": "torgi_gov_active_lease",
             "lease_total": rs.lease_total,
-            "assignment_free": rs.asg_free,          # свободно (уведомит./явно) — строгий флаг
+            "assignment_free": rs.asg_free,   # есть переуступка (свободно): ст.22 >5 лет / договор
             "assignment_free_pct": _lpct(rs.asg_free),
-            "assignment_forbidden": rs.asg_forbidden,
-            "sublease_free": rs.sub_free,
-            "by_resale_type": {
-                "with_notice": rs.rt_notice,   # уведомительный (ст.22 >5 лет / договор)
-                "yes": rs.rt_yes,              # прямо разрешено договором
-                "with_approval": rs.rt_approval,  # только с согласия (ст.22 ≤5 лет / договор)
-                "no": rs.rt_no,                # запрещено договором
-            },
+            "sublease_free": rs.sub_free,     # есть субаренда (свободно)
+            "sublease_free_pct": _lpct(rs.sub_free),
         },
         "server_time": now.isoformat(),
     }

@@ -76,9 +76,15 @@ SUBLEASE_WITH_CONSENT = [
 
 # ── Срок аренды ──────────────────────────────────────────────────────────────
 LEASE_TERM_PATTERNS = [
-    r"срок\s+(?:аренды|действия\s+договора)[\s:.,-]+(?:\w+\s+)?(\d{1,3})\s*(?:\(.*?\))?\s*(год|лет|месяц)",
-    r"договор\s+заключ\w+\s+на\s+срок\s+(\d{1,3})\s*(год|лет|месяц)",
-    r"срок\w*\s*[:.]\s*(\d{1,3})\s*(год|лет|месяц)",
+    r"срок\s+(?:аренды|действия\s+договора)[\s:.,-]+(?:\w+\s+)?(\d{1,3})\s*(?:\([^)]*\)\s*)?(год|года|лет|месяц)",
+    r"договор\s+заключ\w+\s+на\s+срок\s+(\d{1,3})\s*(?:\([^)]*\)\s*)?(год|года|лет|месяц)",
+    r"срок\w*\s*[:.]\s*(\d{1,3})\s*(год|года|лет|месяц)",
+    # Расширено 11.07.2026 — формулировки из lotName/lotDescription карточки
+    # («…договора аренды … сроком на 20 лет», «на срок 49 (сорок девять) лет»).
+    # Применяется в enrich только к арендным лотам, поэтому «на срок N лет» здесь
+    # почти всегда именно срок аренды.
+    r"(?:на\s+срок|сроком(?:\s+на)?)\s+(\d{1,3})\s*(?:\([^)]*\)\s*)?(год|года|лет|месяц)",
+    r"аренд\w+[^.]{0,40}?\bна\s+(\d{1,3})\s*(?:\([^)]*\)\s*)?(год|года|лет)\b",
 ]
 
 # ── Штрафы ───────────────────────────────────────────────────────────────────
@@ -232,43 +238,37 @@ ZK_ST22_LONG_TERM_YEARS = 5
 
 def derive_resale_sublease(lease_term_years: Optional[float],
                            contract: Optional[dict]) -> dict:
-    """Сводит явные условия договора и дефолт ст. 22 ЗК РФ в поля лота (два уровня).
+    """Договор + дефолт ст. 22 ЗК РФ → два чётких флага (без градации).
 
     Возвращает:
-      resale_type: "no"|"with_approval"|"with_notice"|"yes"|None — градация
-        переуступки (поле Lot.resale_type, для тонкой фильтрации на фронте);
-      assignment_allowed / sublease_allowed: СТРОГИЙ булев флаг «свободно, без
-        согласия арендодателя» — True только для уведомительного/явно разрешённого;
-        False — явный запрет; None — неизвестно ИЛИ только с согласия (не свободно);
+      assignment_allowed / sublease_allowed — переуступка/субаренда:
+        True  — СВОБОДНА (уведомительный порядок ст.22 при сроке >5 лет или
+                прямо разрешено договором);
+        False — прямой запрет договора;
+        None  — неизвестно ИЛИ только с согласия арендодателя (срок ≤5 лет /
+                договор требует согласия) — в «есть переуступку» не попадает;
       resale_basis: "contract"|"zk_st22_p9"|"zk_st22_p5" — источник вывода
         (UI покажет честно: по договору или по умолчанию закона).
 
-    Договор > закон. Флаг True = самый ценный для инвестора сигнал «можно
-    переуступить свободно»; «с согласия» в булев True НЕ попадает (см. resale_type).
+    Договор приоритетнее закона.
     """
     contract = contract or {}
     a = contract.get("assignment")   # forbidden | with_consent | with_notice | None
     s = contract.get("sublease")     # forbidden | with_consent | with_notice | allowed | None
-    out = {
-        "resale_type": None,
-        "assignment_allowed": None,
-        "sublease_allowed": None,
-        "resale_basis": None,
-    }
+    out = {"assignment_allowed": None, "sublease_allowed": None, "resale_basis": None}
     long_term = lease_term_years is not None and lease_term_years > ZK_ST22_LONG_TERM_YEARS
-    short_term = lease_term_years is not None and 0 < lease_term_years <= ZK_ST22_LONG_TERM_YEARS
 
     # ── Переуступка (цессия права аренды) ──
     if a == "forbidden":
-        out.update(resale_type="no", assignment_allowed=False, resale_basis="contract")
+        out.update(assignment_allowed=False, resale_basis="contract")
     elif a == "with_notice":
-        out.update(resale_type="with_notice", assignment_allowed=True, resale_basis="contract")
+        out.update(assignment_allowed=True, resale_basis="contract")
     elif a == "with_consent":
-        out.update(resale_type="with_approval", assignment_allowed=None, resale_basis="contract")
+        out.update(assignment_allowed=None, resale_basis="contract")
     elif long_term:
-        out.update(resale_type="with_notice", assignment_allowed=True, resale_basis="zk_st22_p9")
-    elif short_term:
-        out.update(resale_type="with_approval", assignment_allowed=None, resale_basis="zk_st22_p5")
+        out.update(assignment_allowed=True, resale_basis="zk_st22_p9")
+    elif lease_term_years is not None and lease_term_years > 0:
+        out.update(assignment_allowed=None, resale_basis="zk_st22_p5")
 
     # ── Субаренда ──
     if s == "forbidden":
@@ -279,7 +279,7 @@ def derive_resale_sublease(lease_term_years: Optional[float],
         out["sublease_allowed"] = None
     elif long_term:
         out["sublease_allowed"] = True
-    # short_term без явного условия → только с согласия → остаётся None (не свободно)
+    # срок ≤5 лет без явного условия → только с согласия → None (не свободно)
 
     return out
 
