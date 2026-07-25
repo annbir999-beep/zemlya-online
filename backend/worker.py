@@ -28,6 +28,15 @@ celery_app.conf.update(
     timezone="Europe/Moscow",
     enable_utc=True,
     task_track_started=True,
+    # Глобальный потолок на любую задачу — страховка от зависаний (найдено
+    # 25.07.2026: poll_youtube_comments/poll_ok_updates зависли на 56ч/18ч,
+    # заняли 3 из 4 worker-слотов, очередь выросла до 485). soft — задача
+    # ловит исключение и может красиво завершиться; time_limit — celery
+    # жёстко убивает воркер-процесс (prefork-пул, соседние задачи не
+    # затрагивает). Запас достаточен для честно долгих батчей
+    # (enrich_with_rosreestr и т.п. укладываются в единицы минут).
+    task_soft_time_limit=1200,
+    task_time_limit=1500,
     # Расписание периодических задач
     beat_schedule={
         # Парсинг torgi.gov — каждые 2 часа
@@ -198,12 +207,15 @@ celery_app.conf.update(
             "task": "tasks.mail_tasks.check_mail_notify",
             "schedule": crontab(minute="*/5"),
         },
-        # Сторож очереди Celery — каждые 30 мин, алерт в Telegram при бэклоге
-        # (найдено 08.07.2026: periodic-задачи стакались, 296 задач в очереди
-        # держали ingest в подвешенном состоянии несколько часов незаметно).
+        # Сторож очереди Celery — каждые 5 мин (было 30): алерт при бэклоге +
+        # активно снимает зависшие «быстрые» задачи из FAST_TASKS
+        # (см. services/queue_watchdog.py). Найдено 08.07.2026 (296 задач в
+        # очереди из-за замедлившегося enrich_with_rosreestr) и 25.07.2026
+        # (poll_youtube_comments/poll_ok_updates зависли на 56ч/18ч — 3 из 4
+        # worker-слотов не освобождались, очередь выросла до 485).
         "check-queue-health": {
             "task": "tasks.monitoring_tasks.check_queue_health",
-            "schedule": crontab(minute="*/30"),
+            "schedule": crontab(minute="*/5"),
         },
         # AI-первая линия продаж: разбор новых сообщений инбокса каждые 2 минуты
         # (классификация, автоответ в исходный канал, скоринг, эскалация горячих).
