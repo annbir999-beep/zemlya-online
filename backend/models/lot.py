@@ -146,6 +146,11 @@ class Lot(Base):
     region_name = Column(String(200))
     district = Column(String(200))
     address = Column(String(500))
+    # Когда по этому лоту последний раз ходили в Nominatim (fallback-геокодинг по
+    # адресу для лотов без КН). Заполнено + location IS NULL = попытка была и
+    # не удалась, повторим не раньше чем через 30 дней. Заполнено +
+    # location NOT NULL = координаты пришли из геокодера, а не из ПКК.
+    geocoded_at = Column(DateTime(timezone=True))
 
     # Организатор аукциона
     organizer_name = Column(String(500))

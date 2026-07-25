@@ -89,6 +89,7 @@ docker compose exec celery_worker celery -A worker call tasks.scrape_tasks.<task
 - Скрейпинг AVITO — каждые 6 часов
 - `_update_statuses` — каждые 30 минут
 - `_enrich_rosreestr` — каждый час в :30 (batch 1000, приоритет `rosreestr_data IS NULL`)
+- `geocode_missing_coords` — каждый час в :55 (batch 150, Nominatim-fallback для лотов без КН)
 - `check_and_notify` (алерты) — каждые 15 минут
 - `enrich-sublease-flags` — ежедневно 03:30 МСК
 - `reparse-contract-terms` — ежедневно 04:45 МСК (batch 500)
@@ -119,7 +120,7 @@ docker compose exec celery_worker celery -A worker call tasks.scrape_tasks.<task
 - **Beget vs Timeweb** — Анна иногда путает консоли. Прод сейчас Timeweb (см. выше).
 - **master vs main** — `git push origin main`, не `master`.
 - **AI «Ошибка запроса»** — обычно баланс на прокси-шлюзе = 0. Пополнение пропагается ~25 мин.
-- **Покрытие карты ~6.5%** — много AVITO-лотов без КН. Решение: Nominatim fallback (пока отложено).
+- **Покрытие карты ~6.5%** — много AVITO-лотов без КН, поэтому ПКК их не пробивает. Решение внедрено (25.07.2026): fallback-геокодинг адреса через Nominatim — `services/geocoder.py` + таска `scrape_tasks.geocode_missing_coords` (beat ежечасно, 150 лотов, лимит 1 запрос/сек). Ставит координаты только там, где `location IS NULL` — данные ПКК приоритетнее и не перетираются. Отметка попытки — колонка `lots.geocoded_at` (заполнена + `location IS NULL` = искали и не нашли, повтор через 30 дней). Грубые попадания (центроид региона) отсекаются по `place_rank`, чужой регион — сверкой `address.state` с `region_name`. **Новая колонка требует `scripts/migrate_add_geocoded_at.py`** — `create_all` колонки в существующие таблицы не добавляет.
 - **Субаренда/переуступка** — в договорах редко прописывается явно, поэтому внедрена эвристика ст. 22 ЗК РФ (11.07.2026): срок аренды берётся структурно из `raw_data.attributes` (`DA_contractYears/Months/Days`), а не regex по PDF; при сроке >5 лет и отсутствии явного запрета — переуступка/субаренда «свободна» (уведомительный порядок). Логика в `contract_parser.derive_resale_sublease` + `scrape_tasks.enrich_sublease_flags` (beat 03:30, `full_scan=True` = бэкфилл). Два чётких флага `assignment_allowed`/`sublease_allowed` (True=свободно, False=запрет, None=нет данных/с согласия). Честная сводка — `/api/lots/status-health` блок `resale`.
 - **Длинные SSH-сессии рвутся** — для долгих тасков использовать `nohup` или `run_in_background`, не polling-циклы.
 

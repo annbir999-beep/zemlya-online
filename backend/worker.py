@@ -92,6 +92,15 @@ celery_app.conf.update(
             "schedule": crontab(minute=30, hour="*"),
             "args": (1000,),
         },
+        # Fallback-координаты по адресу через Nominatim — раз в час по 150 лотов.
+        # Догоняет то, что не берёт enrich_with_rosreestr: лоты без КН (почти
+        # весь AVITO) в ПКК не пробить, и на карту они не попадали вовсе.
+        # Лимит Nominatim — 1 запрос/сек, 150 лотов ≈ 4 минуты на прогон.
+        "geocode-missing-coords": {
+            "task": "tasks.scrape_tasks.geocode_missing_coords",
+            "schedule": crontab(minute=55, hour="*"),
+            "args": (150,),
+        },
         # Подтягивание даты торгов из детального API torgi — ночью, после скрейпа
         "enrich-torgi-details": {
             "task": "tasks.scrape_tasks.enrich_torgi_details",

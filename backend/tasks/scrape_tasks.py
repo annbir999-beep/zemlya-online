@@ -901,6 +901,125 @@ async def _extract_contacts_existing(batch_size: int):
     await engine.dispose()
 
 
+@celery_app.task(bind=True, max_retries=1, default_retry_delay=900)
+def geocode_missing_coords(self, batch_size: int = 150):
+    """Fallback-координаты по текстовому адресу через Nominatim.
+
+    Догоняет то, что не может `enrich_with_rosreestr`: лоты без кадастрового
+    номера (почти весь AVITO) в ПКК не пробить, и на карту они не попадают.
+    Точность хуже ПКК (село/улица вместо участка), поэтому геокодим только
+    тех, у кого координат нет вообще, и никогда не перетираем существующие.
+    """
+    with _single_flight("geocode_missing_coords") as acquired:
+        if not acquired:
+            print("[geocode] предыдущий прогон ещё идёт — пропускаем")
+            return
+        try:
+            _run(_geocode_missing_coords(batch_size))
+        except Exception as exc:
+            raise self.retry(exc=exc)
+
+
+async def _geocode_missing_coords(batch_size: int):
+    """ACTIVE-лоты с адресом и без location → Nominatim → PostGIS POINT.
+
+    Nominatim разрешает 1 запрос/сек, поэтому batch=150 занимает ~3 минуты.
+    Неудачные попытки помечаем `geocoded_at`, чтобы следующий прогон брал
+    новые лоты, а не долбился в те же безадресные — повтор не раньше 30 дней
+    (за месяц OSM успевает обрасти данными по деревням).
+    """
+    import asyncio as _asyncio
+    import time as _time
+    from datetime import datetime, timezone, timedelta
+    from sqlalchemy import select, or_, and_, update, func
+    from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+    from geoalchemy2.shape import from_shape
+    from shapely.geometry import Point
+    from core.config import settings
+    from models.lot import Lot, LotStatus
+    from services.geocoder import geocode_lot_address
+
+    engine = create_async_engine(settings.DATABASE_URL, pool_pre_ping=True, pool_size=5, max_overflow=0)
+    SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
+
+    retry_cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+    # Свой потолок ниже task_soft_time_limit (1200с): если Nominatim тупит,
+    # выходим сами и доедаем остаток на следующем часовом прогоне — вместо
+    # того чтобы попасть под SoftTimeLimitExceeded посреди батча.
+    deadline = _time.monotonic() + 900
+
+    async with SessionLocal() as db:
+        result = await db.execute(
+            select(Lot.id, Lot.address, Lot.region_name, Lot.district, Lot.region_code)
+            .where(
+                and_(
+                    Lot.status == LotStatus.ACTIVE,
+                    Lot.location.is_(None),
+                    Lot.address.isnot(None),
+                    func.length(func.trim(Lot.address)) > 8,
+                    or_(Lot.geocoded_at.is_(None), Lot.geocoded_at < retry_cutoff),
+                )
+            )
+            # Сначала те, у кого ПКК заведомо не сработает (нет КН), — ради них
+            # всё и затевалось; внутри группы приоритет по скору.
+            .order_by(
+                (func.coalesce(Lot.cadastral_number, "") != "").asc(),
+                Lot.score.desc().nulls_last(),
+            )
+            .limit(batch_size)
+        )
+        rows = result.all()
+
+        found = 0
+        processed = 0
+        errors_in_row = 0
+        for i, r in enumerate(rows, 1):
+            if _time.monotonic() > deadline:
+                print(f"[geocode] лимит времени — остановились на {i - 1}/{len(rows)}")
+                break
+            processed = i
+            try:
+                hit = await geocode_lot_address(
+                    address=r.address,
+                    region_name=r.region_name,
+                    district=r.district,
+                    region_code=r.region_code,
+                )
+                errors_in_row = 0
+            except Exception as e:
+                # Сеть/HTTP-ошибка — это НЕ «адрес не найден». geocoded_at не
+                # ставим, иначе получасовой сбой Nominatim похоронил бы лот на
+                # 30 дней. Лот просто попадёт в следующую выборку.
+                print(f"[geocode] lot={r.id} error: {type(e).__name__}: {e}")
+                errors_in_row += 1
+                if errors_in_row >= 10:
+                    print("[geocode] 10 ошибок подряд — Nominatim недоступен, выходим")
+                    break
+                await _asyncio.sleep(1.1)
+                continue
+
+            # Сюда дошли — запрос состоялся. Помечаем попытку в любом случае:
+            # промах (hit is None) не переспрашиваем раньше retry_cutoff.
+            values = {"geocoded_at": datetime.now(timezone.utc)}
+            if hit:
+                values["location"] = from_shape(Point(hit["lng"], hit["lat"]), srid=4326)
+                found += 1
+
+            await db.execute(update(Lot).where(Lot.id == r.id).values(**values))
+            if i % 25 == 0:
+                await db.commit()
+                print(f"[geocode] {i}/{len(rows)} обработано, координат найдено: {found}")
+
+            # Usage policy Nominatim — не чаще 1 запроса в секунду.
+            await _asyncio.sleep(1.1)
+
+        await db.commit()
+        print(f"[geocode] Готово. Координаты проставлены: {found}/{processed} "
+              f"(в выборке было {len(rows)})")
+
+    await engine.dispose()
+
+
 @celery_app.task(bind=True, max_retries=1, default_retry_delay=600)
 def enrich_nearby_features(self, batch_size: int = 100):
     """Обогащает лоты данными из OSM Overpass API: водоёмы / лес / трассы / н.п. / ж/д."""
