@@ -1168,3 +1168,50 @@ async def _update_statuses():
             check_stale_active(remaining)
         except Exception as e:  # noqa: BLE001
             print(f"[statuses] watchdog failed: {type(e).__name__}: {e}")
+
+
+@celery_app.task(bind=True, max_retries=2, default_retry_delay=600)
+def enrich_deposits(self, batch_size: int = 2000):
+    """Достаёт сумму задатка из текста извещения (Lot.full_description).
+
+    В API torgi.gov поля deposit нет — там только текстовые отсылки
+    («п. 8 Извещения»), сама сумма внутри PDF. Из-за этого задаток стоял
+    у 5% лотов. Разбор — services/deposit_parser.py.
+    """
+    try:
+        _run(_enrich_deposits(batch_size))
+    except Exception as exc:
+        raise self.retry(exc=exc)
+
+
+async def _enrich_deposits(batch_size: int):
+    from sqlalchemy import select, and_
+    from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+    from core.config import settings
+    from models.lot import Lot, LotStatus
+    from services.deposit_parser import parse_deposit
+
+    engine = create_async_engine(settings.DATABASE_URL, echo=False, pool_pre_ping=True)
+    SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
+
+    async with SessionLocal() as db:
+        result = await db.execute(
+            select(Lot).where(and_(
+                Lot.status == LotStatus.ACTIVE,
+                Lot.deposit.is_(None),
+                Lot.full_description.isnot(None),
+            )).limit(batch_size)
+        )
+        lots = result.scalars().all()
+        found = 0
+        for lot in lots:
+            val = parse_deposit(lot.full_description, lot.start_price)
+            if val:
+                lot.deposit = val
+                if lot.start_price and lot.start_price > 0:
+                    lot.deposit_pct = round(val / lot.start_price * 100, 2)
+                found += 1
+        await db.commit()
+        pct = round(found / len(lots) * 100, 1) if lots else 0
+        print(f"[deposits] обработано: {len(lots)}, найдено задатков: {found} ({pct}%)")
+    await engine.dispose()

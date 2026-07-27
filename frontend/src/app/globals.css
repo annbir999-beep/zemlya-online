@@ -200,6 +200,19 @@ html, body { overflow-x: hidden; max-width: 100vw; }
   overflow: hidden;
 }
 
+/* Заголовок-ссылка: без подчёркивания в покое, подсветка при наведении —
+   чтобы было видно, что по нему можно кликнуть. */
+a.lot-card-title-link {
+  text-decoration: none;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+a.lot-card-title-link:hover {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .lot-card-meta {
   display: flex;
   flex-wrap: wrap;

@@ -7,6 +7,7 @@ import {
   DEADLINE_PRESETS, DEFAULT_DEADLINE_PRESET,
 } from "@/lib/filters";
 import type { LotListItem, LotsResponse, UserProfile } from "@/lib/api";
+import { authFetch } from "@/lib/api";
 import { getMe } from "@/lib/auth";
 import { ScoreCircle, ScoreBadges } from "@/components/ScoreBadge";
 
@@ -83,10 +84,8 @@ export default function CatalogPage() {
   const downloadExcel = async () => {
     if (!isPaid) { router.push("/pricing"); return; }
     try {
-      const token = (await import("js-cookie")).default.get("access_token");
-      const res = await fetch(
+      const res = await authFetch(
         `${API}/api/lots/export?${filtersToQueryString({ ...filters })}`,
-        { headers: token ? { Authorization: `Bearer ${token}` } : {} },
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const blob = await res.blob();
@@ -118,7 +117,7 @@ export default function CatalogPage() {
     setLoading(true);
     try {
       const qs = filtersToQueryString({ ...f, per_page: 50 });
-      const res = await fetch(`${API}/api/lots?${qs}`);
+      const res = await authFetch(`${API}/api/lots?${qs}`);
       setData(await res.json());
     } finally {
       setLoading(false);

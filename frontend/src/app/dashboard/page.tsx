@@ -7,8 +7,16 @@ import TelegramConnect from "@/components/TelegramConnect";
 import ReferralCard from "@/components/ReferralCard";
 import CreateAlertModal from "@/components/CreateAlertModal";
 
+// Ключи = enum value в БД, значения = ПУБЛИЧНЫЕ названия тарифов с /pricing.
+// Не хватало enterprise — у такого юзера поле «Тариф» было пустым; заодно
+// поправлены старые внутренние имена (Личный/Эксперт/Лендлорд) на бренд-названия.
 const PLAN_LABEL: Record<string, string> = {
-  free: "Бесплатный", personal: "Личный", investor: "Инвестор", expert: "Эксперт", landlord: "Лендлорд",
+  free: "Бесплатный",
+  personal: "Pro",
+  investor: "Инвестор",
+  expert: "Бюро",
+  landlord: "Бюро+",
+  enterprise: "Enterprise",
 };
 const CHANNEL_LABEL: Record<string, string> = { email: "Email", telegram: "Telegram", both: "Email + Telegram" };
 
@@ -109,7 +117,9 @@ export default function DashboardPage() {
               </div>
               <div>
                 <div style={{ fontSize: 12, color: "var(--text-3)", marginBottom: 2 }}>Тариф</div>
-                <span className="badge badge-blue">{PLAN_LABEL[user.subscription_plan]}</span>
+                <span className="badge badge-blue">
+                  {PLAN_LABEL[user.subscription_plan] || user.subscription_plan}
+                </span>
               </div>
               {user.subscription_expires_at && (
                 <div>

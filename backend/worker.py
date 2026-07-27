@@ -18,7 +18,7 @@ celery_app = Celery(
     "sotka",
     broker=settings.REDIS_URL,
     backend=settings.REDIS_URL,
-    include=["tasks.scrape_tasks", "tasks.alert_tasks", "tasks.ai_batch_tasks", "tasks.digest_tasks", "tasks.price_drop_tasks", "tasks.drip_tasks", "tasks.lead_drip_tasks", "tasks.agent_tasks", "tasks.mail_tasks", "tasks.subscription_tasks", "tasks.monitoring_tasks"],
+    include=["tasks.scrape_tasks", "tasks.alert_tasks", "tasks.ai_batch_tasks", "tasks.digest_tasks", "tasks.price_drop_tasks", "tasks.drip_tasks", "tasks.lead_drip_tasks", "tasks.agent_tasks", "tasks.mail_tasks", "tasks.subscription_tasks", "tasks.monitoring_tasks", "tasks.seo_tasks"],
 )
 
 celery_app.conf.update(
@@ -194,6 +194,20 @@ celery_app.conf.update(
         "check-queue-health": {
             "task": "tasks.monitoring_tasks.check_queue_health",
             "schedule": crontab(minute="*/30"),
+        },
+        # Задаток из текста извещения — ежедневно 05:20 МСК, после enrich_lot_pdfs.
+        # В API torgi.gov суммы задатка нет, только отсылка к извещению (см.
+        # services/deposit_parser.py), поэтому парсим уже скачанный текст.
+        "enrich-deposits": {
+            "task": "tasks.scrape_tasks.enrich_deposits",
+            "schedule": crontab(minute=20, hour=5),
+            "args": (2000,),
+        },
+        # IndexNow — ежедневно 08:00 МСК (после ночного скрейпа и обогащения)
+        # шлёт список региональных SEO-страниц + статей блога Яндексу/Bing.
+        "ping-indexnow": {
+            "task": "tasks.seo_tasks.ping_indexnow",
+            "schedule": crontab(minute=0, hour=8),
         },
     },
 )

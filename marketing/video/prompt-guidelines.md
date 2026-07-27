@@ -140,6 +140,28 @@ Nano Banana генерит каждый кадр как ОТДЕЛЬНУЮ ка�
   time-lapse, NO reverse, the ground is NEVER bare, only gentle leaf/grass sway`. Появление
   сада несёт СМЕНА КАДРОВ (сцена «дом без сада» → сцена «дом с садом»), а не движение в клипе.
 
+## 5а. Морфинг живых персонажей — ребёнок↔собака (из bankrupt-auctions v2)
+- В финальной сцене с семьёй частый шаблон «ребёнок бежит + рядом бежит собака» — Veo
+  на длинном клипе может ПЕРЕПУТАТЬ два живых объекта: ребёнок на глазах превращается в
+  собаку и обратно. Общей фразы `nothing morphs` недостаточно — она не привязана к
+  КОНКРЕТНЫМ персонажам и не всегда срабатывает.
+- Писать ЯВНО, что это два РАЗНЫХ фиксированных персонажа: `ONE distinct human child
+  (a real child, NEVER an animal, NEVER changing into a dog) ... and completely
+  separately ONE distinct dog (a real dog, NEVER a child, NEVER changing into a human);
+  the child and the dog are two fixed separate characters that NEVER merge, swap, morph,
+  duplicate or blend into one another, EXACTLY one child and EXACTLY one dog appear in
+  the whole frame, NO extra people, NO extra animals, NOTHING multiplies or appears out
+  of nowhere`.
+- В video-промпте — то же самое, но привязано к течению кадра: `the child stays the
+  SAME single human child in every frame from start to end and NEVER turns into an
+  animal ... the dog stays the SAME single dog in every frame from start to end and
+  NEVER turns into a human or child ... the child and the dog remain two completely
+  separate fixed characters that NEVER merge, swap, or morph into one another, NO
+  cloning, NO duplication, NO extra child or extra dog appearing mid-shot, EXACTLY one
+  child plus EXACTLY one dog throughout the entire shot`.
+- Правило общее — применять к ЛЮБОЙ сцене с двумя и более живыми персонажами разного
+  вида (человек+животное, взрослый+ребёнок), не только к финалу с домом.
+
 ## 6. Фоны и окружение
 - ВСЕГДА: `NO skyscrapers, NO high-rise buildings, NO tower cranes, NO city skyline —
   across the river only forest and a few small modern low-rise cottages similar in style

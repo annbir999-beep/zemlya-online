@@ -58,6 +58,26 @@ async function request<T>(path: string, options: RequestInit = {}, _retried = fa
   return res.json();
 }
 
+/**
+ * fetch для ПУБЛИЧНЫХ эндпоинтов, которые отдают больше данных залогиненному.
+ *
+ * Каталог, карта и экспорт лотов открыты и анониму, поэтому раньше их звали
+ * голым fetch() — без заголовка Authorization. Из-за этого бэкенд считал
+ * ЛЮБОГО пользователя анонимом (rank=0) и резал премиум-поля (дисконт к рынку,
+ * НЦ/КС, КС/Рынок, переуступка, ТОР) и молча игнорировал премиум-фильтры —
+ * платный тариф в списке и на карте не работал, хотя в карточке лота
+ * (она ходит через api.get) всё открывалось. Отсюда «то открыто, то нет».
+ *
+ * В отличие от api.get() — не редиректит на /login: для анонима 401 здесь
+ * штатная ситуация, страница просто показывает публичный срез.
+ */
+export function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
+  const token = Cookies.get("access_token");
+  const headers: Record<string, string> = { ...(options.headers as Record<string, string>) };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  return fetch(url, { ...options, headers });
+}
+
 export const api = {
   get: <T>(path: string) => request<T>(path),
   post: <T>(path: string, body: unknown) =>
@@ -107,6 +127,27 @@ export interface LotListItem {
     road?: "asphalt" | "gravel" | "none";
     internet?: boolean;
   };
+  // Поля ниже бэкенд отдаёт давно (schemas LotListItem в api/lots.py),
+  // но в TS-тип их не добавляли — код читал их «вслепую», и tsc ругался.
+  // Держать синхронно с api/lots.py::LotListItem.
+  notice_number?: string;
+  deposit?: number;
+  deposit_pct?: number;
+  area_sqm_kn?: number;
+  area_discrepancy?: string;
+  rubric_tg?: number;
+  rubric_kn?: number;
+  vri_kn?: string;
+  category_tg?: string;
+  category_kn?: string;
+  auction_form?: string;
+  deal_type?: string;
+  etp?: string;
+  resale_type?: string;
+  sublease_allowed?: boolean | null;
+  assignment_allowed?: boolean | null;
+  last_price_drop_pct?: number | null;
+  last_price_drop_at?: string | null;
   tor_zone?: TorZone | null;
 }
 

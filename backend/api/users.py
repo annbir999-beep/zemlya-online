@@ -190,6 +190,103 @@ async def login(request: Request, form: OAuth2PasswordRequestForm = Depends(), d
     )
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    password: str
+
+
+@router.post("/forgot-password")
+@limiter.limit("5/hour")
+async def forgot_password(
+    request: Request,
+    data: ForgotPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Письмо со ссылкой на смену пароля.
+
+    Ответ ВСЕГДА одинаковый, даже если такого email нет — иначе форма
+    превращается в способ проверить, зарегистрирован ли человек на сервисе.
+    """
+    result = await db.execute(select(User).where(User.email == data.email))
+    user = result.scalar_one_or_none()
+
+    if user and user.is_active:
+        from core.security import create_reset_token
+        from services.notifications import _send_via_resend
+
+        token = create_reset_token(user.id, user.hashed_password)
+        link = f"{settings.SITE_URL}/reset-password?token={token}"
+        html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"></head>
+<body style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:20px;color:#1f2937">
+  <div style="background:linear-gradient(135deg,#16a34a,#0d9488);padding:22px;border-radius:10px 10px 0 0;color:#fff">
+    <h1 style="margin:0;font-size:20px">Смена пароля</h1>
+  </div>
+  <div style="background:#f9fafb;padding:22px;border-radius:0 0 10px 10px">
+    <p style="margin:0 0 14px">Здравствуйте{f", {user.name}" if user.name else ""}!</p>
+    <p style="margin:0 0 18px;font-size:14px;color:#4b5563">
+      Вы запросили смену пароля на torgi-zemli.ru. Нажмите кнопку — откроется страница,
+      где можно задать новый пароль. Ссылка действует <b>60 минут</b> и срабатывает один раз.
+    </p>
+    <div style="text-align:center;margin:22px 0">
+      <a href="{link}" style="display:inline-block;padding:12px 28px;background:#16a34a;color:#fff;
+         text-decoration:none;border-radius:8px;font-weight:600">Задать новый пароль</a>
+    </div>
+    <p style="margin:0;font-size:12px;color:#9ca3af">
+      Если вы этого не запрашивали — просто удалите письмо, пароль останется прежним.
+    </p>
+  </div>
+</body></html>"""
+        try:
+            await _send_via_resend(
+                to=user.email, subject="Смена пароля — Торги Земли", html=html,
+            )
+        except Exception as e:
+            print(f"[forgot-password] send failed for {user.email}: {type(e).__name__}: {e}")
+
+    return {"detail": "Если такой email зарегистрирован, письмо со ссылкой уже отправлено."}
+
+
+@router.post("/reset-password", response_model=TokenResponse)
+@limiter.limit("10/hour")
+async def reset_password(
+    request: Request,
+    data: ResetPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Смена пароля по токену из письма. Сразу логинит — чтобы не вводить пароль дважды."""
+    from core.security import decode_reset_token
+
+    if len(data.password) < 8:
+        raise HTTPException(status_code=400, detail="Пароль должен быть не короче 8 символов")
+
+    decoded = decode_reset_token(data.token)
+    if not decoded:
+        raise HTTPException(status_code=400, detail="Ссылка недействительна или истекла")
+    user_id, fingerprint = decoded
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user or not user.is_active:
+        raise HTTPException(status_code=400, detail="Ссылка недействительна или истекла")
+
+    # Отпечаток старого хэша: после первой смены пароля ссылка перестаёт работать.
+    if user.hashed_password[:16] != fingerprint:
+        raise HTTPException(status_code=400, detail="Ссылка уже использована")
+
+    user.hashed_password = hash_password(data.password)
+    user.last_login_at = datetime.now(timezone.utc)
+    await db.commit()
+
+    return TokenResponse(
+        access_token=create_access_token(user.id),
+        refresh_token=create_refresh_token(user.id),
+    )
+
+
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh_token(refresh_token: str, db: AsyncSession = Depends(get_db)):
     user_id = decode_refresh_token(refresh_token)

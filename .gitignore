@@ -32,3 +32,14 @@ marketing/video/stories/
 
 # Случайная scratch-папка (research-сессия), не в репо
 /Новая папка/
+
+# Отрендеренные ролики — тяжёлые (десятки-сотни МБ), в git не место.
+# Исходники (сценарии-json, промпты) версионируются, сами файлы — нет.
+marketing/video/to-post/
+marketing/video/subbed/
+marketing/video/output/
+marketing/video/check/
+marketing/video/stories/*.mp4
+marketing/video/clip-library/
+marketing/video/covers/
+frontend/public/edu/*.mp4

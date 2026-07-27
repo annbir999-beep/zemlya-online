@@ -8,6 +8,7 @@ import {
   DEADLINE_PRESETS, DEFAULT_DEADLINE_PRESET,
 } from "@/lib/filters";
 import type { LotListItem, LotsResponse } from "@/lib/api";
+import { authFetch } from "@/lib/api";
 
 const MapView = dynamic(() => import("@/components/MapView"), { ssr: false });
 
@@ -62,7 +63,7 @@ export default function MapPage() {
     setLoading(true);
     try {
       const qs = filtersToQueryString({ ...f, per_page: 30 } as FiltersState & { per_page: number });
-      const res = await fetch(`${API}/api/lots?${qs}`);
+      const res = await authFetch(`${API}/api/lots?${qs}`);
       const data: LotsResponse = await res.json();
       setSidebarLots(data.items);
       setTotal(data.total);
@@ -77,7 +78,7 @@ export default function MapPage() {
   const loadMapPoints = useCallback(async (f: FiltersState) => {
     try {
       const qs = filtersToQueryString(f);
-      const res = await fetch(`${API}/api/lots/map?${qs}`);
+      const res = await authFetch(`${API}/api/lots/map?${qs}`);
       const data = await res.json();
       setMapPoints(data.points || []);
     } catch (e) {
@@ -121,7 +122,7 @@ export default function MapPage() {
   const handleMapLotClick = useCallback((id: number) => {
     const lot = sidebarLots.find((l) => l.id === id);
     if (lot) setSelectedLot(lot);
-    else fetch(`${API}/api/lots/${id}`).then((r) => r.json()).then(setSelectedLot);
+    else authFetch(`${API}/api/lots/${id}`).then((r) => r.json()).then(setSelectedLot);
   }, [sidebarLots]);
 
   return (

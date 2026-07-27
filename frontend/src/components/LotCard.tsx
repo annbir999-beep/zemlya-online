@@ -70,7 +70,18 @@ export default function LotCard({ lot, selected, compareIds, onSelect, onToggleC
       <div style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 6 }}>
         <ScoreCircle score={lot.score} size={36} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div className="lot-card-title" style={{ marginBottom: 4 }}>{lot.title || "Земельный участок"}</div>
+          {/* Заголовок — ссылка на карточку лота: раньше был просто текстом,
+              клик по нему лишь выделял лот на карте и никуда не вёл. */}
+          <a
+            href={`/lots/${lot.id}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="lot-card-title lot-card-title-link"
+            style={{ marginBottom: 4, display: "block" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {lot.title || "Земельный участок"}
+          </a>
           <ScoreBadges badges={lot.score_badges} max={3} compact />
         </div>
       </div>
@@ -182,11 +193,12 @@ export default function LotCard({ lot, selected, compareIds, onSelect, onToggleC
       )}
 
       <div className="lot-card-footer" onClick={(e) => e.stopPropagation()}>
+        {/* Главное действие карточки — выделено, а не «призрачная» кнопка */}
         <a
           href={`/lots/${lot.id}`}
           target="_blank"
           rel="noopener noreferrer"
-          className="btn btn-ghost btn-sm"
+          className="btn btn-primary btn-sm"
         >
           Подробнее →
         </a>
