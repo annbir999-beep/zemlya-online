@@ -1,11 +1,21 @@
-"""Сторож очереди Celery — алерт в Telegram при накоплении бэклога.
+"""Сторож очереди Celery — алерт в Telegram при накоплении бэклога, и
+активная зачистка зависших «быстрых» задач.
 
 Найдено 08.07.2026: enrich_with_rosreestr шёл ~100 мин вместо расчётных ~12
 (замедлился Rosreestr/PKK), beat триггерил её каждый час — копии стакались
 и забили все 4 worker-слота (concurrency=4), очередь выросла до 296 задач,
 scrape_torgi_gov несколько часов не мог получить слот. Суточный отчёт
 (morning_check) это бы заметил только на следующее утро — здесь проверка
-каждые 30 минут с дебаунсом, чтобы не спамить одним и тем же алертом.
+каждые 5 минут с дебаунсом на алерт, чтобы не спамить одним и тем же.
+
+Найдено 25.07.2026: poll_youtube_comments/poll_ok_updates зависли на
+56ч/18ч (ожидание соединения из пула БД) — заняли 3 из 4 слотов, очередь
+выросла до 485 незаметно (алерт раз в 30 мин не успевал среагировать
+быстро, а глобального лимита времени на задачу не было вообще). Фикс:
+task_soft_time_limit/task_time_limit в worker.py — страховка для ЛЮБОЙ
+задачи; плюс FAST_TASKS ниже — для заведомо быстрых задач детектим и
+снимаем зависшую копию немедленно, не дожидаясь celery time_limit (у него
+запас 20-25 мин под честно долгие батчи).
 """
 from __future__ import annotations
 
@@ -15,11 +25,22 @@ import httpx
 import redis
 
 from core.config import settings
+from worker import celery_app
 
 QUEUE_THRESHOLD = 100      # выше — считаем бэклогом
 REALERT_HOURS = 4          # не повторять алерт чаще, пока проблема не ушла
 _STATE_KEY = "health:queue:state"
 _LAST_ALERT_KEY = "health:queue:last_alert"
+
+# Задачи, которые в норме отрабатывают за секунды (HTTP-опрос + пара
+# запросов в БД). Если активны дольше лимита — считаем зависшими и снимаем
+# сразу, не дожидаясь глобального task_time_limit (20-25 мин).
+FAST_TASKS = {
+    "tasks.inbox_tasks.poll_youtube_comments": 300,
+    "tasks.inbox_tasks.poll_max_updates": 300,
+    "tasks.inbox_tasks.poll_ok_updates": 300,
+    "tasks.inbox_tasks.process_inbox": 420,
+}
 
 
 def _notify(text: str) -> None:
@@ -36,9 +57,48 @@ def _notify(text: str) -> None:
         print(f"[queue_watchdog] telegram send failed: {e}")
 
 
+def _revoke_stuck_fast_tasks() -> list[str]:
+    """Снимает активные задачи из FAST_TASKS, если они идут дольше своего
+    лимита. Возвращает список человекочитаемых описаний снятых задач."""
+    revoked: list[str] = []
+    try:
+        active = celery_app.control.inspect(timeout=5).active() or {}
+    except Exception as e:  # noqa: BLE001
+        print(f"[queue_watchdog] inspect active failed: {e}")
+        return revoked
+
+    now = time.time()
+    for worker_name, tasks in active.items():
+        for t in tasks:
+            name = t.get("name")
+            limit = FAST_TASKS.get(name)
+            if not limit:
+                continue
+            started = t.get("time_start")
+            if not started:
+                continue
+            age = now - started
+            if age <= limit:
+                continue
+            task_id = t.get("id")
+            try:
+                celery_app.control.revoke(task_id, terminate=True, signal="SIGKILL")
+                revoked.append(f"{name} (шла {age/60:.0f} мин, id {task_id[:8]}, {worker_name})")
+            except Exception as e:  # noqa: BLE001
+                print(f"[queue_watchdog] revoke {task_id} failed: {e}")
+    return revoked
+
+
 def check_queue_depth() -> int:
-    """Проверяет глубину очереди celery, шлёт алерт при бэклоге и при
-    восстановлении. Возвращает текущую глубину (для логов)."""
+    """Снимает зависшие быстрые задачи, проверяет глубину очереди, шлёт
+    алерт при бэклоге и при восстановлении. Возвращает текущую глубину."""
+    revoked = _revoke_stuck_fast_tasks()
+    if revoked:
+        _notify(
+            "🛠 Автосторож снял зависшие задачи (держали worker-слот дольше нормы):\n"
+            + "\n".join(f"• {r}" for r in revoked)
+        )
+
     r = redis.Redis.from_url(settings.REDIS_URL)
     depth = r.llen("celery")
     was_alerting = r.get(_STATE_KEY) == b"alert"

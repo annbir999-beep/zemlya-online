@@ -113,9 +113,15 @@ SUBLEASE_WITH_CONSENT = [
 
 # ── Срок аренды ──────────────────────────────────────────────────────────────
 LEASE_TERM_PATTERNS = [
-    r"срок\s+(?:аренды|действия\s+договора)[\s:.,-]+(?:\w+\s+)?(\d{1,3})\s*(?:\(.*?\))?\s*(год|лет|месяц)",
-    r"договор\s+заключ\w+\s+на\s+срок\s+(\d{1,3})\s*(год|лет|месяц)",
-    r"срок\w*\s*[:.]\s*(\d{1,3})\s*(год|лет|месяц)",
+    r"срок\s+(?:аренды|действия\s+договора)[\s:.,-]+(?:\w+\s+)?(\d{1,3})\s*(?:\([^)]*\)\s*)?(год|года|лет|месяц)",
+    r"договор\s+заключ\w+\s+на\s+срок\s+(\d{1,3})\s*(?:\([^)]*\)\s*)?(год|года|лет|месяц)",
+    r"срок\w*\s*[:.]\s*(\d{1,3})\s*(год|года|лет|месяц)",
+    # Расширено 11.07.2026 — формулировки из lotName/lotDescription карточки
+    # («…договора аренды … сроком на 20 лет», «на срок 49 (сорок девять) лет»).
+    # Применяется в enrich только к арендным лотам, поэтому «на срок N лет» здесь
+    # почти всегда именно срок аренды.
+    r"(?:на\s+срок|сроком(?:\s+на)?)\s+(\d{1,3})\s*(?:\([^)]*\)\s*)?(год|года|лет|месяц)",
+    r"аренд\w+[^.]{0,40}?\bна\s+(\d{1,3})\s*(?:\([^)]*\)\s*)?(год|года|лет)\b",
 ]
 
 # ── Штрафы ───────────────────────────────────────────────────────────────────
@@ -224,6 +230,109 @@ def parse_contract(text: str) -> dict:
         result["has_strict_termination"] = True
 
     return result
+
+
+# ── Срок аренды из структурных атрибутов torgi.gov ────────────────────────────
+# Ключевое звено фикса переуступки: срок аренды в карточке ЗК-аукциона лежит
+# отдельными ЧИСЛОВЫМИ полями attributes (DA_contractYears / DA_contractMonths /
+# DA_contractDays; суффикс кода зависит от формы торгов — матчим по префиксу).
+# Regex по PDF ловит срок лишь у ~2.5% лотов, из-за чего эвристика ст.22 голодала;
+# структурные поля дают срок у ~63% арендных лотов.
+_TERM_ATTR_PREFIXES = {
+    "years": "DA_contractYears",
+    "months": "DA_contractMonths",
+    "days": "DA_contractDays",
+}
+
+
+def extract_lease_term_years(raw: dict) -> Optional[float]:
+    """Срок аренды в годах из числовых attributes карточки torgi.gov.
+
+    Складывает годы + месяцы/12 + дни/365. None — если ни одного числового поля
+    срока нет (не арендный ЗК-аукцион или срок не заполнен)."""
+    if not isinstance(raw, dict):
+        return None
+    parts = {"years": 0.0, "months": 0.0, "days": 0.0}
+    found = False
+    for attr in (raw.get("attributes") or []) + (raw.get("noticeAttributes") or []):
+        if not isinstance(attr, dict):
+            continue
+        code = attr.get("code") or ""
+        val = attr.get("value")
+        if isinstance(val, bool) or not isinstance(val, (int, float)):
+            continue
+        for key, prefix in _TERM_ATTR_PREFIXES.items():
+            if code.startswith(prefix):
+                parts[key] = float(val)
+                found = True
+                break
+    if not found:
+        return None
+    total = parts["years"] + parts["months"] / 12 + parts["days"] / 365
+    return round(total, 2) if total > 0 else None
+
+
+# ст. 22 ЗК РФ — переуступка прав и субаренда участка, арендованного у государства:
+#   п.9: срок аренды > 5 лет → в уведомительном порядке, БЕЗ согласия арендодателя
+#        (если договором прямо не предусмотрено иное);
+#   п.5: срок аренды ≤ 5 лет → только с согласия арендодателя.
+# Явное условие договора всегда приоритетнее эвристики закона.
+ZK_ST22_LONG_TERM_YEARS = 5
+
+
+def derive_resale_sublease(lease_term_years: Optional[float],
+                           contract: Optional[dict]) -> dict:
+    """Договор + дефолт ст. 22 ЗК РФ → два чётких флага (без градации).
+
+    Возвращает:
+      assignment_allowed / sublease_allowed — переуступка/субаренда:
+        True  — ВОЗМОЖНА: свободно (уведомит. порядок ст.22 при сроке >5 лет /
+                прямо в договоре) ЛИБО по согласованию с арендодателем (срок ≤5
+                лет / договор требует согласия — «можно договориться»);
+        False — прямой запрет договора;
+        None  — неизвестно (срок и условие не определены);
+      resale_basis: источник/режим вывода —
+        свободно: "zk_st22_p9" (>5 лет) | "contract_notice";
+        по согласованию: "zk_st22_p5" (≤5 лет) | "contract_consent";
+        запрет: "contract_forbidden".
+
+    Договор приоритетнее закона. «Свободно» и «по согласованию» ОБА дают флаг
+    True (оба — в списки); отличить их можно по resale_basis (см. RESALE_CONSENT_BASES).
+    """
+    contract = contract or {}
+    a = contract.get("assignment")   # forbidden | with_consent | with_notice | None
+    s = contract.get("sublease")     # forbidden | with_consent | with_notice | allowed | None
+    out = {"assignment_allowed": None, "sublease_allowed": None, "resale_basis": None}
+    long_term = lease_term_years is not None and lease_term_years > ZK_ST22_LONG_TERM_YEARS
+    short_term = lease_term_years is not None and 0 < lease_term_years <= ZK_ST22_LONG_TERM_YEARS
+
+    # ── Переуступка (цессия права аренды) ──
+    if a == "forbidden":
+        out.update(assignment_allowed=False, resale_basis="contract_forbidden")
+    elif a == "with_notice":
+        out.update(assignment_allowed=True, resale_basis="contract_notice")
+    elif a == "with_consent":
+        out.update(assignment_allowed=True, resale_basis="contract_consent")
+    elif long_term:
+        out.update(assignment_allowed=True, resale_basis="zk_st22_p9")
+    elif short_term:
+        out.update(assignment_allowed=True, resale_basis="zk_st22_p5")
+
+    # ── Субаренда ── (симметрично: возможна свободно или по согласованию)
+    if s == "forbidden":
+        out["sublease_allowed"] = False
+    elif s in ("allowed", "with_notice", "with_consent"):
+        out["sublease_allowed"] = True
+    elif long_term or short_term:
+        out["sublease_allowed"] = True
+
+    return out
+
+
+# Режимы resale_basis, означающие «переуступка/субаренда по согласованию с
+# арендодателем» (можно договориться) — в отличие от свободной (уведомительной).
+RESALE_CONSENT_BASES = ("zk_st22_p5", "contract_consent")
+RESALE_FREE_BASES = ("zk_st22_p9", "contract_notice")
 
 
 # ── Текстовое представление для AI/UI ────────────────────────────────────────

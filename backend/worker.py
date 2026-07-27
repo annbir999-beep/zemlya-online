@@ -18,7 +18,7 @@ celery_app = Celery(
     "sotka",
     broker=settings.REDIS_URL,
     backend=settings.REDIS_URL,
-    include=["tasks.scrape_tasks", "tasks.alert_tasks", "tasks.ai_batch_tasks", "tasks.digest_tasks", "tasks.price_drop_tasks", "tasks.drip_tasks", "tasks.lead_drip_tasks", "tasks.agent_tasks", "tasks.mail_tasks", "tasks.subscription_tasks", "tasks.monitoring_tasks", "tasks.seo_tasks"],
+    include=["tasks.scrape_tasks", "tasks.alert_tasks", "tasks.ai_batch_tasks", "tasks.digest_tasks", "tasks.price_drop_tasks", "tasks.drip_tasks", "tasks.lead_drip_tasks", "tasks.agent_tasks", "tasks.mail_tasks", "tasks.subscription_tasks", "tasks.monitoring_tasks", "tasks.inbox_tasks", "tasks.seo_tasks"],
 )
 
 celery_app.conf.update(
@@ -28,6 +28,15 @@ celery_app.conf.update(
     timezone="Europe/Moscow",
     enable_utc=True,
     task_track_started=True,
+    # Глобальный потолок на любую задачу — страховка от зависаний (найдено
+    # 25.07.2026: poll_youtube_comments/poll_ok_updates зависли на 56ч/18ч,
+    # заняли 3 из 4 worker-слотов, очередь выросла до 485). soft — задача
+    # ловит исключение и может красиво завершиться; time_limit — celery
+    # жёстко убивает воркер-процесс (prefork-пул, соседние задачи не
+    # затрагивает). Запас достаточен для честно долгих батчей
+    # (enrich_with_rosreestr и т.п. укладываются в единицы минут).
+    task_soft_time_limit=1200,
+    task_time_limit=1500,
     # Расписание периодических задач
     beat_schedule={
         # Парсинг torgi.gov — каждые 2 часа
@@ -57,13 +66,23 @@ celery_app.conf.update(
             "schedule": crontab(minute=45, hour=4),
             "args": (500,),
         },
-        # Ежедневный пересчёт флагов переуступки и субаренды по тексту лота
-        # (поля, установленные из PDF договора в enrich_torgi_details, не трогаются).
-        # 03:30 МСК — до утренних beat-задач, после ночного scrape_avito.
+        # Классификация переуступки/субаренды (ст.22 ЗК + договор) — СРАЗУ ПОСЛЕ
+        # каждого скрейпа torgi.gov (01:20 и 04:20), чтобы новые арендные лоты
+        # быстро уточнялись по тексту/PDF и были видны в фильтрах. Структурный
+        # срок из attributes уже проставлен при ингесте в _upsert_lot; здесь —
+        # инкрементальное уточнение свежих лотов (updated_at за 7 дней).
         "enrich-sublease-flags": {
             "task": "tasks.scrape_tasks.enrich_sublease_flags",
-            "schedule": crontab(minute=30, hour=3),
+            "schedule": crontab(minute=20, hour="1,4"),
             "args": (2000,),
+        },
+        # Полная суточная переклассификация всей активной аренды (full_scan) —
+        # 06:15 МСК, после ночных скрейпов, PDF-enrich и reparse. Нормализует
+        # флаги, выставленные PDF-путём, в единую ст.22-схему (два флага + basis).
+        "enrich-resale-fullscan": {
+            "task": "tasks.scrape_tasks.enrich_sublease_flags",
+            "schedule": crontab(minute=15, hour=6),
+            "args": (6000, True),
         },
         # Обогащение данными Росреестра — каждый час по 1000 лотов
         # batch=2000 заваливал очередь (3.6ч на прогон при hourly beat → накапливалось).
@@ -188,12 +207,36 @@ celery_app.conf.update(
             "task": "tasks.mail_tasks.check_mail_notify",
             "schedule": crontab(minute="*/5"),
         },
-        # Сторож очереди Celery — каждые 30 мин, алерт в Telegram при бэклоге
-        # (найдено 08.07.2026: periodic-задачи стакались, 296 задач в очереди
-        # держали ingest в подвешенном состоянии несколько часов незаметно).
+        # Сторож очереди Celery — каждые 5 мин (было 30): алерт при бэклоге +
+        # активно снимает зависшие «быстрые» задачи из FAST_TASKS
+        # (см. services/queue_watchdog.py). Найдено 08.07.2026 (296 задач в
+        # очереди из-за замедлившегося enrich_with_rosreestr) и 25.07.2026
+        # (poll_youtube_comments/poll_ok_updates зависли на 56ч/18ч — 3 из 4
+        # worker-слотов не освобождались, очередь выросла до 485).
         "check-queue-health": {
             "task": "tasks.monitoring_tasks.check_queue_health",
-            "schedule": crontab(minute="*/30"),
+            "schedule": crontab(minute="*/5"),
+        },
+        # AI-первая линия продаж: разбор новых сообщений инбокса каждые 2 минуты
+        # (классификация, автоответ в исходный канал, скоринг, эскалация горячих).
+        "process-inbox": {
+            "task": "tasks.inbox_tasks.process_inbox",
+            "schedule": crontab(minute="*/2"),
+        },
+        # Комменты YouTube-канала — каждые 15 минут (Data API v3, ~100 units/день)
+        "poll-youtube-comments": {
+            "task": "tasks.inbox_tasks.poll_youtube_comments",
+            "schedule": crontab(minute="*/15"),
+        },
+        # Сообщения бота Max — каждые 2 минуты (long-poll с marker в Redis)
+        "poll-max-updates": {
+            "task": "tasks.inbox_tasks.poll_max_updates",
+            "schedule": crontab(minute="*/2"),
+        },
+        # Сообщения группы ОК — каждые 2 минуты (long-poll api.ok.ru, marker в Redis)
+        "poll-ok-updates": {
+            "task": "tasks.inbox_tasks.poll_ok_updates",
+            "schedule": crontab(minute="*/2"),
         },
         # Задаток из текста извещения — ежедневно 05:20 МСК, после enrich_lot_pdfs.
         # В API torgi.gov суммы задатка нет, только отсылка к извещению (см.

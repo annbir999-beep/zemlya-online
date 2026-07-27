@@ -183,6 +183,10 @@ class MorningCheckAgent(BaseAgent):
             f"• Платежей: {pay_count}\n"
             f"• Выручка: {pay_sum:,.0f} ₽\n\n".replace(",", " ")
         )
+        # ── Воронка авто-отдела продаж (обращения → лиды → оплаты) ──
+        from services.funnel_analytics import build_funnel_section
+        report += await build_funnel_section(db, days=1)
+
         if warnings:
             report += "🔔 *Требует внимания*\n" + "\n".join(warnings) + "\n\n"
         else:

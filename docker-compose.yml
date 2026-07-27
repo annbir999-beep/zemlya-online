@@ -59,7 +59,7 @@ services:
       - ./backend:/app
     extra_hosts:
       - "api.telegram.org:149.154.167.220"
-    command: celery -A worker.celery_app worker --loglevel=info --concurrency=4
+    command: celery -A worker.celery_app worker --loglevel=info --concurrency=4 --max-tasks-per-child=200 --max-memory-per-child=300000
 
   celery_beat:
     build: ./backend
