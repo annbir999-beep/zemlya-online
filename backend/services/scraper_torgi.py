@@ -635,6 +635,10 @@ class TorgiGovScraper:
         lot.status = api_status
         lot.published_at = _parse_datetime(raw.get("firstVersionPublicationDate"))
         lot.raw_data = raw
+        # Дублируем id фото отдельной колонкой — чтобы каталог не разбирал
+        # весь raw_data ради списка картинок (см. models/lot.py::photo_ids)
+        from services.lot_photos import photo_ids as _photo_ids
+        lot.photo_ids = _photo_ids(raw) or None
 
         if lat and lng:
             try:

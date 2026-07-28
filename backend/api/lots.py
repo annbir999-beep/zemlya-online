@@ -202,6 +202,9 @@ class LotListItem(BaseModel):
     last_price_drop_at: Optional[str] = None
     # ТОР/СЭЗ — заполняется из services.tor_zones по region_code
     tor_zone: Optional[dict] = None
+    # Сколько фото у лота; сами картинки отдаёт /api/lots/{id}/photo/{idx}.
+    # В списке нужен, чтобы каталог знал, у каких карточек рисовать превью.
+    photos_count: int = 0
 
     class Config:
         from_attributes = True
@@ -220,8 +223,6 @@ class LotDetail(LotListItem):
     contract_terms: Optional[dict] = None
     nearby_features: Optional[dict] = None
     organizer_contacts: Optional[dict] = None
-    # Сколько фото у лота: сами картинки отдаёт /api/lots/{id}/photo/{idx}
-    photos_count: int = 0
 
 
 class LotsResponse(BaseModel):
@@ -514,6 +515,7 @@ def _lot_to_item(lot: Lot, rank: int = 99) -> LotListItem:
 
     item = LotListItem(
         id=lot.id,
+        photos_count=len(lot.photo_ids) if isinstance(lot.photo_ids, list) else 0,
         external_id=lot.external_id,
         title=lot.title,
         cadastral_number=lot.cadastral_number,
@@ -1885,11 +1887,15 @@ async def get_lot_photo(
     from fastapi.responses import Response
     from services.lot_photos import fetch_photo, photo_ids
 
-    row = (await db.execute(select(Lot.raw_data).where(Lot.id == lot_id))).first()
+    # Берём только колонку с id, а не весь raw_data: тот весит десятки килобайт
+    row = (await db.execute(
+        select(Lot.photo_ids, Lot.raw_data).where(Lot.id == lot_id)
+    )).first()
     if row is None:
         raise HTTPException(status_code=404, detail="Лот не найден")
 
-    ids = photo_ids(row[0])
+    # raw_data — запасной путь для лотов, до которых бэкфилл ещё не дошёл
+    ids = row[0] if isinstance(row[0], list) and row[0] else photo_ids(row[1])
     if idx < 0 or idx >= len(ids):
         raise HTTPException(status_code=404, detail="Фото не найдено")
 
@@ -1965,5 +1971,4 @@ async def get_lot(
         contract_terms=contract,
         nearby_features=lot.nearby_features if isinstance(lot.nearby_features, dict) else None,
         organizer_contacts=contacts,
-        photos_count=len(photo_ids(lot.raw_data)),
     )

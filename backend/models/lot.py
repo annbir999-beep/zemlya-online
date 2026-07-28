@@ -205,6 +205,10 @@ class Lot(Base):
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     raw_data = Column(JSON)
+    # Идентификаторы фото из raw_data.lotImages, вынесенные отдельно. raw_data —
+    # это json (не jsonb), и вытащить оттуда список значит распарсить весь
+    # документ; на странице каталога это двадцать разборов тяжёлого JSON.
+    photo_ids = Column(JSON)
 
     # Связи
     saved_by = relationship("SavedLot", back_populates="lot")

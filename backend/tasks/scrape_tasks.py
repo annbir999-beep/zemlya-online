@@ -1222,6 +1222,88 @@ async def _update_statuses():
             print(f"[statuses] watchdog failed: {type(e).__name__}: {e}")
 
 
+@celery_app.task(bind=True, max_retries=1, default_retry_delay=900)
+def backfill_photo_ids(self, batch_size: int = 20000):
+    """Разовый бэкфилл Lot.photo_ids из raw_data.lotImages.
+
+    Новые лоты колонку заполняют при скрейпинге, а накопленным нужен один
+    прогон. Сеть не нужна: id уже лежат в raw_data, перекладываем внутри БД.
+    """
+    _run(_backfill_photo_ids(batch_size))
+
+
+async def _backfill_photo_ids(batch_size: int):
+    from sqlalchemy import text
+    from sqlalchemy.ext.asyncio import create_async_engine
+    from core.config import settings
+
+    engine = create_async_engine(settings.DATABASE_URL, pool_pre_ping=True)
+    async with engine.begin() as conn:
+        # Целиком в SQL: тянуть десятки тысяч raw_data в Python незачем.
+        res = await conn.execute(text("""
+            UPDATE lots
+               SET photo_ids = (raw_data::jsonb -> 'lotImages')::json
+             WHERE photo_ids IS NULL
+               AND raw_data IS NOT NULL
+               AND jsonb_typeof(raw_data::jsonb -> 'lotImages') = 'array'
+               AND jsonb_array_length(raw_data::jsonb -> 'lotImages') > 0
+        """))
+        print(f"[photo_ids] заполнено лотов: {res.rowcount}")
+    await engine.dispose()
+
+
+@celery_app.task(bind=True, max_retries=1, default_retry_delay=900)
+def warm_photo_thumbs(self, limit: int = 1500):
+    """Прогревает миниатюры (320 px) активных лотов.
+
+    Зачем: первый показ фото стоит 5-9 секунд — мы в этот момент качаем с
+    torgi.gov оригинал (бывает по 6 МБ) через прокси и ужимаем. Прогретая
+    миниатюра позволяет отдать картинку сразу. Большой размер намеренно НЕ
+    греем: все фото в 1400 px заняли бы около 10 ГБ при 6 свободных.
+    """
+    _run(_warm_photo_thumbs(limit))
+
+
+async def _warm_photo_thumbs(limit: int):
+    from sqlalchemy import select, and_
+    from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+    from core.config import settings
+    from models.lot import Lot, LotStatus
+    from services.lot_photos import fetch_photo, _cache_path
+
+    engine = create_async_engine(settings.DATABASE_URL, pool_pre_ping=True)
+    SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
+
+    done = skipped = failed = 0
+    async with SessionLocal() as db:
+        rows = (await db.execute(
+            select(Lot.photo_ids).where(and_(
+                Lot.status == LotStatus.ACTIVE,
+                Lot.photo_ids.isnot(None),
+            )).limit(limit * 2)
+        )).all()
+
+    for (ids,) in rows:
+        if done >= limit:
+            break
+        if not isinstance(ids, list) or not ids:
+            continue
+        # Только первая картинка: в каталоге показывается одна на карточку,
+        # остальные догрузятся при заходе на лот.
+        fid = str(ids[0])
+        if _cache_path(fid, 320).exists():
+            skipped += 1
+            continue
+        got = await fetch_photo(fid, width=320)
+        if got:
+            done += 1
+        else:
+            failed += 1
+
+    print(f"[photo-warm] прогрето: {done}, уже было: {skipped}, не вышло: {failed}")
+    await engine.dispose()
+
+
 @celery_app.task(bind=True, max_retries=2, default_retry_delay=600)
 def enrich_deposits(self, batch_size: int = 2000):
     """Достаёт сумму задатка из текста извещения (Lot.full_description).

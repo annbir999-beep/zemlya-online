@@ -246,6 +246,14 @@ celery_app.conf.update(
             "schedule": crontab(minute=20, hour=5),
             "args": (2000,),
         },
+        # Миниатюры фото — ночью, порциями. Каждый прогон качает с torgi.gov
+        # свежую тысячу оригиналов и кладёт из них 320 px; за несколько ночей
+        # прогревается вся активная база (~14 тыс. картинок, ~435 МБ на диске).
+        "warm-photo-thumbs": {
+            "task": "tasks.scrape_tasks.warm_photo_thumbs",
+            "schedule": crontab(minute=40, hour=3),
+            "args": (1000,),
+        },
         # IndexNow — ежедневно 08:00 МСК (после ночного скрейпа и обогащения)
         # шлёт список региональных SEO-страниц + статей блога Яндексу/Bing.
         "ping-indexnow": {
