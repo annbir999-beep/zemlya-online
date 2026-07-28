@@ -1237,7 +1237,7 @@ def enrich_deposits(self, batch_size: int = 2000):
 
 
 async def _enrich_deposits(batch_size: int):
-    from sqlalchemy import select, and_
+    from sqlalchemy import select, and_, update, bindparam
     from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
     from core.config import settings
     from models.lot import Lot, LotStatus
@@ -1246,24 +1246,46 @@ async def _enrich_deposits(batch_size: int):
     engine = create_async_engine(settings.DATABASE_URL, echo=False, pool_pre_ping=True)
     SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
+    # Порциями и только нужными колонками: full_description бывает под 40 тыс.
+    # знаков, и выборка целых ORM-объектов пачкой в 13 000 штук съедала больше
+    # памяти, чем есть на VPS (2 ГБ) — задача висела десятками минут без коммита.
+    CHUNK = 500
+    processed = found = 0
+
     async with SessionLocal() as db:
-        result = await db.execute(
-            select(Lot).where(and_(
-                Lot.status == LotStatus.ACTIVE,
-                Lot.deposit.is_(None),
-                Lot.full_description.isnot(None),
-            )).limit(batch_size)
-        )
-        lots = result.scalars().all()
-        found = 0
-        for lot in lots:
-            val = parse_deposit(lot.full_description, lot.start_price)
-            if val:
-                lot.deposit = val
-                if lot.start_price and lot.start_price > 0:
-                    lot.deposit_pct = round(val / lot.start_price * 100, 2)
-                found += 1
-        await db.commit()
-        pct = round(found / len(lots) * 100, 1) if lots else 0
-        print(f"[deposits] обработано: {len(lots)}, найдено задатков: {found} ({pct}%)")
+        while processed < batch_size:
+            take = min(CHUNK, batch_size - processed)
+            rows = (await db.execute(
+                select(Lot.id, Lot.full_description, Lot.start_price).where(and_(
+                    Lot.status == LotStatus.ACTIVE,
+                    Lot.deposit.is_(None),
+                    Lot.full_description.isnot(None),
+                )).limit(take)
+            )).all()
+            if not rows:
+                break
+
+            updates = []
+            for lot_id, text, price in rows:
+                val = parse_deposit(text, price)
+                if val:
+                    pct = round(val / price * 100, 2) if price and price > 0 else None
+                    updates.append({"b_id": lot_id, "deposit": val, "deposit_pct": pct})
+
+            processed += len(rows)
+            if updates:
+                # Условие выборки — deposit IS NULL, поэтому без записи следующая
+                # порция вернула бы те же строки и цикл не сдвинулся бы.
+                await db.execute(
+                    update(Lot).where(Lot.id == bindparam("b_id")),
+                    updates,
+                )
+                found += len(updates)
+            await db.commit()
+
+            if len(rows) < take:
+                break
+
+    pct = round(found / processed * 100, 1) if processed else 0
+    print(f"[deposits] обработано: {processed}, найдено задатков: {found} ({pct}%)")
     await engine.dispose()
