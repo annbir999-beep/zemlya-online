@@ -136,7 +136,7 @@ export default function OfertaPage() {
         <p>
           ИП Бирюкова Анна Ильинична<br />
           ИНН: 753611302731<br />
-          Контакты: info@torgi-zemli.ru · Telegram: @anna_zemlya · @ZemlyaOnlineBot<br />
+          Контакты: info@torgi-zemli.ru · Telegram: @torgi_zemli · @ZemlyaOnlineBot<br />
           Сайт: torgi-zemli.ru (torgi-zemli.ru)
         </p>
       </article>

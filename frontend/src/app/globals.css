@@ -517,6 +517,20 @@ a.lot-card-title-link:hover {
 }
 .site-footer-links a:hover { color: var(--primary); text-decoration: none; }
 
+/* Вторая строка футера: официальные аккаунты (список — src/lib/social.ts) */
+.site-footer-social {
+  justify-content: flex-start;
+  margin-top: 3px;
+  gap: 2px 12px;
+}
+.site-footer-social a {
+  color: var(--text-3);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+.site-footer-social a:hover { color: var(--primary); text-decoration: none; }
+.site-footer-social-label { opacity: 0.7; }
+
 @media (max-width: 768px) {
   .site-footer {
     padding: 8px 12px;
@@ -526,4 +540,5 @@ a.lot-card-title-link:hover {
   .site-footer-inner { gap: 4px; }
   .site-footer-links { gap: 4px 10px; }
   .site-footer-copy { width: 100%; }
+  .site-footer-social { gap: 2px 10px; margin-top: 2px; }
 }

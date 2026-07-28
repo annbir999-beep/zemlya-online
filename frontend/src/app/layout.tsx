@@ -13,6 +13,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import UtmCapture from "@/components/UtmCapture";
 import HeroBar from "@/components/HeroBar";
+import { SOCIAL_LINKS, CONTACT_EMAIL } from "@/lib/social";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://torgi-zemli.ru"),
@@ -26,10 +27,28 @@ export const metadata: Metadata = {
   },
 };
 
+// schema.org Organization: связывает сайт с официальными аккаунтами (sameAs),
+// чтобы Яндекс и Google не считали профили в соцсетях чужими.
+const ORG_JSONLD = {
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  name: "Торги Земли",
+  url: "https://torgi-zemli.ru",
+  logo: "https://torgi-zemli.ru/favicon.svg",
+  email: CONTACT_EMAIL,
+  description:
+    "Агрегатор земельных аукционов России: карта лотов с torgi.gov, фильтры, AI-проверка участка.",
+  sameAs: SOCIAL_LINKS.map((s) => s.url),
+};
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ru" className={manrope.variable}>
       <body className={manrope.className}>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(ORG_JSONLD) }}
+        />
         <div className="app-layout">
           <UtmCapture />
           <HeroBar />

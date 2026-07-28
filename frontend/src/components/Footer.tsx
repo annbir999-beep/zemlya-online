@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SOCIAL_LINKS, CONTACT_EMAIL } from "@/lib/social";
 
 export default function Footer() {
   return (
@@ -15,8 +16,16 @@ export default function Footer() {
           <Link href="/blog">Блог</Link>
           <Link href="/zemelnye-torgi">Торги по регионам</Link>
           <Link href="/checklist">Чеклист 12 проверок</Link>
-          <a href="mailto:info@torgi-zemli.ru">info@torgi-zemli.ru</a>
+          <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
         </div>
+      </div>
+      <div className="site-footer-inner site-footer-social">
+        <span className="site-footer-social-label">Мы в соцсетях:</span>
+        {SOCIAL_LINKS.map((s) => (
+          <a key={s.name} href={s.url} target="_blank" rel="me noopener noreferrer">
+            {s.name}
+          </a>
+        ))}
       </div>
     </footer>
   );
