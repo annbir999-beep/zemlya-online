@@ -1237,7 +1237,7 @@ def enrich_deposits(self, batch_size: int = 2000):
 
 
 async def _enrich_deposits(batch_size: int):
-    from sqlalchemy import select, and_, update, bindparam
+    from sqlalchemy import select, and_, update
     from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
     from core.config import settings
     from models.lot import Lot, LotStatus
@@ -1277,20 +1277,14 @@ async def _enrich_deposits(batch_size: int):
                 val = parse_deposit(text, price)
                 if val:
                     pct = round(val / price * 100, 2) if price and price > 0 else None
-                    updates.append({"b_id": lot_id, "deposit": val, "deposit_pct": pct})
+                    updates.append({"id": lot_id, "deposit": val, "deposit_pct": pct})
 
             processed += len(rows)
             if updates:
-                # synchronize_session=None обязателен: без него SQLAlchemy пытается
-                # синхронизировать сессию с bulk-update по своему WHERE и падает
-                # с InvalidRequestError. Нам синхронизация не нужна — объекты в
-                # сессию не грузим, работаем колонками.
-                await db.execute(
-                    update(Lot).where(Lot.id == bindparam("b_id")).execution_options(
-                        synchronize_session=None
-                    ),
-                    updates,
-                )
+                # ORM bulk UPDATE by primary key: список словарей с ключом «id»
+                # и БЕЗ своего .where() — SQLAlchemy 2.0 сам подставит WHERE по
+                # первичному ключу. Свой where + bindparam здесь не работает.
+                await db.execute(update(Lot), updates)
                 found += len(updates)
             await db.commit()
 
