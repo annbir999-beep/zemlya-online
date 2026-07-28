@@ -49,6 +49,26 @@ KEYWORDS_NEGATIVE = [
 ]
 MIN_RELEVANCE = 2  # порог: одно сильное слово («земельн», «кадастр») достаточно
 
+# Жёсткий стоп — земля за пределами РФ. Правило Анны: канал только про российские
+# торги, статьи про чужие страны не публикуем. Не вес, а блокировка: 28.07.2026
+# новость про скупку земли в США набрала высокий скор («земельн», «участок»,
+# «инвест») и ушла на сайт. Потерять пару релевантных новостей дешевле, чем
+# снова выпустить нетематическую.
+KEYWORDS_FOREIGN = [
+    "сша", "америк", "нью-йорк", "калифорни", "техас", "флорид",
+    "евросоюз", "еврокомисс", "герман", "франци", "испани", "итали", "польш",
+    "финлянд", "прибалтик", "латви", "литв", "эстони",
+    "китай", "китайск", "япони", "турци", "оаэ", "дубай", "кипр",
+    "таиланд", "вьетнам", "индонези", "бали",
+    "грузия", "грузии", "армени", "азербайджан", "казахстан", "узбекистан",
+    "беларус", "белорусси", "зарубеж", "за рубежом",
+]
+
+
+def _is_foreign(text: str) -> bool:
+    low = text.lower()
+    return any(k in low for k in KEYWORDS_FOREIGN)
+
 
 def _relevance(text: str) -> int:
     low = text.lower()
@@ -113,7 +133,11 @@ class NewsScoutAgent(BaseAgent):
                 for entry in entries:
                     if not entry["link"] or not entry["title"]:
                         continue
-                    score = _relevance(f"{entry['title']} {entry['description']}")
+                    text = f"{entry['title']} {entry['description']}"
+                    if _is_foreign(text):
+                        stats["foreign"] = stats.get("foreign", 0) + 1
+                        continue
+                    score = _relevance(text)
                     if score < MIN_RELEVANCE:
                         stats["irrelevant"] += 1
                         continue
