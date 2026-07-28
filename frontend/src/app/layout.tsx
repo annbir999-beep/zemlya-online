@@ -24,6 +24,11 @@ export const metadata: Metadata = {
   verification: {
     yandex: "4fbf65c871dcd342",
     google: "4yVGqOhtVT0NwKeg5Umj3cx3hVd95POKTFKKqi83VcE",
+    // Дзен: Настройки канала → Свой сайт → «Метатег». Токен привязан к каналу,
+    // после подтверждения удалять нельзя — Дзен перепроверяет права периодически.
+    other: {
+      "zen-verification": "y1IQJ2JFBbdspCDSj5PI0OOxPxj0vbGq6hIfcDQrFfwAvZRePB8QgF9emrTIqVR",
+    },
   },
 };
 
