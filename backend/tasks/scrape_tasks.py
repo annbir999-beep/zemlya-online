@@ -1251,19 +1251,26 @@ async def _enrich_deposits(batch_size: int):
     # памяти, чем есть на VPS (2 ГБ) — задача висела десятками минут без коммита.
     CHUNK = 500
     processed = found = 0
+    last_id = 0
 
     async with SessionLocal() as db:
         while processed < batch_size:
             take = min(CHUNK, batch_size - processed)
+            # Листаем по id, а не по OFFSET: условие выборки — deposit IS NULL,
+            # и записанные строки выпадают из набора на ходу. Порция, в которой
+            # ничего не нашлось, при листании по смещению возвращалась бы снова
+            # и снова — цикл крутил одни и те же 500 строк до упора в batch_size.
             rows = (await db.execute(
                 select(Lot.id, Lot.full_description, Lot.start_price).where(and_(
                     Lot.status == LotStatus.ACTIVE,
                     Lot.deposit.is_(None),
                     Lot.full_description.isnot(None),
-                )).limit(take)
+                    Lot.id > last_id,
+                )).order_by(Lot.id).limit(take)
             )).all()
             if not rows:
                 break
+            last_id = rows[-1][0]
 
             updates = []
             for lot_id, text, price in rows:
@@ -1274,8 +1281,6 @@ async def _enrich_deposits(batch_size: int):
 
             processed += len(rows)
             if updates:
-                # Условие выборки — deposit IS NULL, поэтому без записи следующая
-                # порция вернула бы те же строки и цикл не сдвинулся бы.
                 await db.execute(
                     update(Lot).where(Lot.id == bindparam("b_id")),
                     updates,
