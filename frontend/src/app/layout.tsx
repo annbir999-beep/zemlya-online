@@ -27,7 +27,7 @@ export const metadata: Metadata = {
     // Дзен: Настройки канала → Свой сайт → «Метатег». Токен привязан к каналу,
     // после подтверждения удалять нельзя — Дзен перепроверяет права периодически.
     other: {
-      "zen-verification": "y1IQJ2JFBbdspCDSj5PI0OOxPxj0vbGq6hIfcDQrFfwAvZRePB8QgF9emrTIqVR",
+      "zen-verification": "y1IQJ2JFBbdpspCDSj5PI0OOxPxj0vbGq6hIfcDQrFfwAvZRePB8QgF9emrTlqVR",
     },
   },
 };
