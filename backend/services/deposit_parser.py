@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import re
+from collections import Counter
 from typing import Optional
 
 # «390 899,00» / «14 700.00» / «1 234 567» — с любыми пробелами-разделителями
@@ -23,7 +24,10 @@ _DIRECT = [
     re.compile(rf"задат\w*\s*[:—–-]?\s*(?:в\s+размере\s+)?{_NUM}\s*(?:\(|руб)", re.I),
     re.compile(rf"размер\s+задатка\s*[:—–-]?\s*{_NUM}\s*(?:\(|руб)", re.I),
     # «Сумма задатка: 100 % от начальной цены предмета торгов – 14 700,00 руб.»
-    re.compile(rf"задат\w*[^.\n]{{0,80}}?[—–-]\s*{_NUM}\s*руб", re.I),
+    # и «Размер задатка для участия в аукционе: 274 289,40 руб.» — между словом
+    # «задаток» и числом бывает вставка, а разделителем может быть двоеточие,
+    # а не тире. Без этого варианта лот 1429602 отдавал пустой задаток.
+    re.compile(rf"задат\w*[^.\n]{{0,80}}?[:—–-]\s*{_NUM}\s*руб", re.I),
 ]
 
 # Процент от начальной цены: «Задаток 20 % от начальной цены»
@@ -59,15 +63,19 @@ def parse_deposit(text: Optional[str], start_price: Optional[float] = None) -> O
 
     candidates: list[float] = []
 
+    # Все совпадения, а не первое: извещение — это десятки тысяч знаков, и до
+    # нужной строки успевают попасться «шаг аукциона», «цена выкупа» и прочие
+    # суммы рядом со словом «задаток». Правильное значение обычно повторяется
+    # в документе несколько раз — на этом и выбираем ниже.
     for rx in _DIRECT:
-        m = rx.search(text)
-        if m:
+        for m in rx.finditer(text):
             val = _to_float(m.group(1))
             if val:
                 candidates.append(val)
 
-    m = _PERCENT.search(text)
-    if m and start_price:
+    for m in _PERCENT.finditer(text):
+        if not start_price:
+            break
         pct = _to_float(m.group(1))
         if pct and 0 < pct <= 100:
             candidates.append(round(start_price * pct / 100, 2))
@@ -87,4 +95,11 @@ def parse_deposit(text: Optional[str], start_price: Optional[float] = None) -> O
 
     # Копеечные значения (< 100 ₽) почти всегда обрывок номера пункта, не сумма
     candidates = [c for c in candidates if c >= 100]
-    return candidates[0] if candidates else None
+    if not candidates:
+        return None
+
+    # Самое частое значение: сумма задатка в извещении повторяется (в разделе
+    # условий, в реквизитах, в форме заявки), а случайно зацепленное число —
+    # обычно одиночное. При равенстве частот берём то, что встретилось раньше.
+    counts = Counter(candidates)
+    return max(counts, key=lambda c: (counts[c], -candidates.index(c)))
