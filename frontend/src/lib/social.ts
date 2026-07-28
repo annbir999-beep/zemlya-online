@@ -18,3 +18,10 @@ export const SOCIAL_LINKS: { name: string; url: string }[] = [
 
 export const CONTACT_EMAIL = "info@torgi-zemli.ru";
 export const CONTACT_TELEGRAM = "https://t.me/torgi_zemli";
+
+/**
+ * Юзернейм бота — без @. Держим в одном месте: при переименовании в BotFather
+ * правится здесь и в TELEGRAM_BOT_USERNAME на бэкенде, а не по всем экранам.
+ */
+export const BOT_USERNAME = "torgi_zemli_bot";
+export const BOT_URL = `https://t.me/${BOT_USERNAME}`;

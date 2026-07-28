@@ -296,13 +296,16 @@ async def create_payment(
             promo_discount = min(promo_obj.discount_fixed, price - 1)
         price = max(1, price - promo_discount)  # минимум 1 ₽ — ЮКасса не принимает 0
 
+    # Назначение платежа видно клиенту в чеке ЮКассы и в выписке банка — бренд актуальный
     if is_one_time:
-        descr = "AI-аудит лота — Земля.ОНЛАЙН" if data.plan == "audit_lot" else "preDD аудит договора — Земля.ОНЛАЙН"
+        descr = "AI-аудит лота — Торги Земли" if data.plan == "audit_lot" else "preDD аудит договора — Торги Земли"
         if data.plan == "audit_lot" and data.lot_id:
-            descr = f"AI-аудит лота #{data.lot_id} — Земля.ОНЛАЙН"
+            descr = f"AI-аудит лота #{data.lot_id} — Торги Земли"
     else:
         plan_label = {"pro": "Pro", "buro": "Бюро", "buro_plus": "Бюро+"}.get(data.plan, data.plan)
-        descr = f"Подписка «{plan_label}» на {months} мес. — Земля.ОНЛАЙН"
+        descr = f"Подписка «{plan_label}» на {months} мес. — Торги Земли"
+
+    _bot = settings.TELEGRAM_BOT_USERNAME.lstrip("@")
 
     # Если ЮКасса не настроена — даём понятное сообщение, не падаем
     if not settings.YUKASSA_SHOP_ID or not settings.YUKASSA_SECRET_KEY \
@@ -310,7 +313,7 @@ async def create_payment(
             or "your_" in settings.YUKASSA_SECRET_KEY.lower():
         raise HTTPException(
             status_code=503,
-            detail="Платёжная система настраивается. Напишите @ZemlyaOnlineBot или anna_zemlya в Telegram — оформим оплату по реквизитам ИП.",
+            detail=f"Платёжная система настраивается. Напишите @{_bot} или anna_zemlya в Telegram — оформим оплату по реквизитам ИП.",
         )
 
     # Payment API ЮКассы — стандартный путь для SaaS-подписок и разовых платежей.
@@ -374,7 +377,7 @@ async def create_payment(
             print(f"[payments] yookassa payment error {resp.status_code}: {resp.text[:300]}")
             raise HTTPException(
                 status_code=503,
-                detail="Платёжная система временно недоступна. Напишите @ZemlyaOnlineBot или anna_zemlya в Telegram — оформим оплату вручную.",
+                detail=f"Платёжная система временно недоступна. Напишите @{_bot} или anna_zemlya в Telegram — оформим оплату вручную.",
             )
         payment = resp.json()
     except HTTPException:
@@ -383,7 +386,7 @@ async def create_payment(
         print(f"[payments] yookassa http error: {type(e).__name__}: {e}")
         raise HTTPException(
             status_code=503,
-            detail="Платёжная система временно недоступна. Напишите @ZemlyaOnlineBot или anna_zemlya в Telegram — оформим оплату вручную.",
+            detail=f"Платёжная система временно недоступна. Напишите @{_bot} или anna_zemlya в Telegram — оформим оплату вручную.",
         )
 
     payment_id = payment.get("id")
@@ -713,7 +716,7 @@ async def submit_enterprise_request(
     from services.notifications import _send_via_resend
 
     body_html = (
-        f"<h2>Новая заявка Enterprise — Земля.ОНЛАЙН</h2>"
+        f"<h2>Новая заявка Enterprise — Торги Земли</h2>"
         f"<p><b>Имя:</b> {data.name}<br>"
         f"<b>Компания:</b> {data.company}<br>"
         f"<b>Email:</b> {data.email}<br>"

@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { isAuthenticated } from "@/lib/auth";
 import { api, UserProfile } from "@/lib/api";
 import { getMe } from "@/lib/auth";
+import { BOT_USERNAME } from "@/lib/social";
 
 // torgi.gov.ru формат: /new/public/lots/lot/{ID}/(lotInfo:info)?fromRec=...
 // Также поддерживаем старый /lotcards/{ID}.
@@ -45,7 +46,7 @@ export default function AuditLotPage() {
         if (msg.includes("torgi.gov") || msg.includes("на torgi")) {
           setError("Лот не найден на torgi.gov. Проверьте ссылку — возможно лот удалён или ID неверный.");
         } else if (msg.includes("не найден")) {
-          setError("Лот не найден. Если ссылка свежая, напишите @ZemlyaOnlineBot — добавим вручную.");
+          setError(`Лот не найден. Если ссылка свежая, напишите @${BOT_USERNAME} — добавим вручную.`);
         } else {
           setError("Ошибка соединения. Попробуйте позже.");
         }

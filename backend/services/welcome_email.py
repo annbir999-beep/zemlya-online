@@ -9,6 +9,7 @@ from models.user import User
 
 
 SITE = settings.SITE_URL
+BOT = settings.TELEGRAM_BOT_USERNAME.lstrip("@")
 
 
 def _build_html(user: User) -> str:
@@ -42,13 +43,13 @@ def _build_html(user: User) -> str:
 
   <h2 style="font-size:18px;font-weight:700;margin:24px 0 12px">С чего начать</h2>
   <ol style="padding-left:22px;line-height:1.7;font-size:14px;color:#374151">
-    <li><b>Откройте карту</b> — увидите 3 600+ активных земельных лотов по всей РФ.<br>
+    <li><b>Откройте карту</b> — увидите 12 000+ активных земельных лотов по всей РФ.<br>
       <a href="{SITE}/" style="color:#0d9488">{SITE}</a>
     </li>
     <li><b>Настройте фильтр</b> — регион, цена, площадь, ВРИ. Сохраните, и мы будем присылать
       уведомления о новых лотах в email и Telegram.
     </li>
-    <li><b>Подключите Telegram-бот</b> @ZemlyaOnlineBot — тогда уведомления приходят мгновенно.
+    <li><b>Подключите Telegram-бот</b> @{BOT} — тогда уведомления приходят мгновенно.
       Привязка — в кабинете.<br>
       <a href="{SITE}/dashboard" style="color:#0d9488">{SITE}/dashboard</a>
     </li>

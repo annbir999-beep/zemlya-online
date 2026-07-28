@@ -47,7 +47,9 @@ class Settings(BaseSettings):
 
     # Telegram
     TELEGRAM_BOT_TOKEN: str = ""
-    TELEGRAM_BOT_USERNAME: str = ""  # без @, например "ZemlyaOnlineBot"
+    # Без @. Единственное место, где живёт юзернейм бота: тексты писем и ошибок
+    # берут его отсюда, чтобы переименование в BotFather не требовало правок в коде.
+    TELEGRAM_BOT_USERNAME: str = "torgi_zemli_bot"
     TELEGRAM_WEBHOOK_SECRET: str = ""  # для проверки X-Telegram-Bot-Api-Secret-Token
     ADMIN_TELEGRAM_CHAT_ID: str = "574728046"  # чат Анны: черновики агентов + кнопки одобрения
 

@@ -164,6 +164,7 @@ async def send_payment_email(user: User, plan: str, amount: float, *,
 
     plan_label = PLAN_LABELS_RU.get(plan, plan)
     is_one_time = plan in ("audit_lot", "predd")
+    _bot = settings.TELEGRAM_BOT_USERNAME.lstrip("@")
 
     if is_one_time:
         subject = f"✅ Оплата получена — {plan_label}"
@@ -194,7 +195,7 @@ async def send_payment_email(user: User, plan: str, amount: float, *,
       </p>
       <hr style="border:none;border-top:1px solid #eee;margin:24px 0;">
       <p style="font-size:12px;color:#888;">Торги Земли — агрегатор земельных аукционов РФ.<br>
-      Вопросы: info@torgi-zemli.ru · <a href="https://t.me/ZemlyaOnlineBot">@ZemlyaOnlineBot</a></p>
+      Вопросы: info@torgi-zemli.ru · <a href="https://t.me/{_bot}">@{_bot}</a></p>
     </div></body></html>"""
 
     try:

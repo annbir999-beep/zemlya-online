@@ -116,7 +116,7 @@ body {{ font-family: "DejaVu", sans-serif; color: #1f2937; font-size: 10.5pt; }}
 <body>
   <div class="head">
     <h1>12 проверок участка перед торгами</h1>
-    <p>Чеклист от Земля.ОНЛАЙН — torgi-zemli.ru</p>
+    <p>Чеклист от Торги Земли — torgi-zemli.ru</p>
   </div>
   <p class="intro">
     Пройдите эти 12 пунктов по каждому лоту до внесения задатка. Большинство дорогих

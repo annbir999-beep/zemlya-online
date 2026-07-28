@@ -1,3 +1,5 @@
+import { BOT_USERNAME, CONTACT_EMAIL } from "@/lib/social";
+
 export const metadata = {
   title: "Публичная оферта — Торги Земли",
   description: "Договор публичной оферты на оказание информационно-аналитических услуг сервиса Торги Земли.",
@@ -136,7 +138,7 @@ export default function OfertaPage() {
         <p>
           ИП Бирюкова Анна Ильинична<br />
           ИНН: 753611302731<br />
-          Контакты: info@torgi-zemli.ru · Telegram: @torgi_zemli · @ZemlyaOnlineBot<br />
+          Контакты: {CONTACT_EMAIL} · Telegram: @torgi_zemli · @{BOT_USERNAME}<br />
           Сайт: torgi-zemli.ru (torgi-zemli.ru)
         </p>
       </article>

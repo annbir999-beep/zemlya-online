@@ -156,7 +156,7 @@ class TgLotOfTheDayAgent(BaseAgent):
 async def publish_to_channel(post_text: str, channel: str = CHANNEL) -> dict:
     """Публикует одобренный пост в TG-канал. Вызывается из API при одобрении.
 
-    Бот @ZemlyaOnlineBot должен быть администратором канала @torgi_zemli.
+    Бот @torgi_zemli_bot должен быть администратором канала @torgi_zemli.
     """
     if not settings.TELEGRAM_BOT_TOKEN:
         raise RuntimeError("TELEGRAM_BOT_TOKEN не задан")

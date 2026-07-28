@@ -98,7 +98,7 @@ class NewsScoutAgent(BaseAgent):
         stats: dict[str, Any] = {"sources": {}, "added": 0, "duplicates": 0, "irrelevant": 0}
 
         async with httpx.AsyncClient(timeout=20, follow_redirects=True, headers={
-            "User-Agent": "Mozilla/5.0 (compatible; ZemlyaOnlineBot/1.0)",
+            "User-Agent": "Mozilla/5.0 (compatible; TorgiZemliBot/1.0)",
         }) as client:
             for source_name, feed_url in SOURCES:
                 try:

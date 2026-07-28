@@ -12,6 +12,7 @@ import NearbyFeaturesCard, { type NearbyFeatures } from "@/components/NearbyFeat
 import OrganizerContactsCard, { type OrganizerContacts } from "@/components/OrganizerContacts";
 import RoiCalculator from "@/components/RoiCalculator";
 import LockedBlock from "@/components/LockedBlock";
+import { BOT_URL } from "@/lib/social";
 import { planRank, RANK_PRO, RANK_INVESTOR } from "@/lib/plan";
 import { compare } from "@/lib/compare";
 import { useCompareIds } from "@/lib/useCompare";
@@ -404,7 +405,7 @@ export default function LotDetailPage({ params }: { params: Promise<{ id: string
             </>
           )}
           <a
-            href={`https://t.me/ZemlyaOnlineBot?start=err_${id}`}
+            href={`${BOT_URL}?start=err_${id}`}
             target="_blank" rel="noopener noreferrer"
             style={{ color: "var(--text-3)", textDecoration: "none", marginLeft: "auto" }}
             title="Сообщить, что данные в лоте устарели или ошибочны"
