@@ -27,11 +27,13 @@ export default function LotPhotos({ lotId, count }: { lotId: number; count: numb
 
   return (
     <div style={{ marginBottom: 24 }}>
+      {/* Ширина ограничена: исходники из извещения мелкие (от 480 px по ширине),
+          на всю колонку они растягиваются в мыло. */}
       <div
         onClick={() => setZoom(true)}
         style={{
-          position: "relative", width: "100%", aspectRatio: "16 / 10",
-          background: "var(--surface-2, #f1f5f4)", border: "1px solid var(--border)",
+          position: "relative", width: "100%", maxWidth: 640, aspectRatio: "16 / 10",
+          background: "var(--surface-2, #eef3f2)", border: "1px solid var(--border)",
           borderRadius: 12, overflow: "hidden", cursor: "zoom-in",
         }}
       >
@@ -41,7 +43,9 @@ export default function LotPhotos({ lotId, count }: { lotId: number; count: numb
           alt={`Фото участка ${current + 1}`}
           loading="lazy"
           onError={() => markBroken(current)}
-          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+          // contain, а не cover: у большинства лотов это спутниковый снимок с
+          // обведённой границей — обрезка может срезать сам контур участка.
+          style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
         />
         <div style={{
           position: "absolute", left: 10, bottom: 10, padding: "4px 10px",
