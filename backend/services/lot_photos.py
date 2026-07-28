@@ -32,6 +32,13 @@ FILE_URL = "https://torgi.gov.ru/new/file-store/v1/{file_id}"
 # перебирать индексы и заодно бережёт диск.
 MAX_PHOTOS = 12
 
+# Организаторы кладут в извещение снимки прямо с фотоаппарата — попадаются по
+# 5-6 МБ. Отдавать такое в браузер нельзя: лот с пятью фото — под 30 МБ трафика,
+# и дисковый кэш на VPS кончится за пару сотен лотов. Поэтому пересжимаем.
+# Набор ширин фиксирован: произвольный ?w= позволил бы забить диск вариантами.
+SIZES = {320: 78, 1400: 82}   # ширина -> качество JPEG
+DEFAULT_SIZE = 1400
+
 _SIGNATURES = {
     b"\xff\xd8\xff": "image/jpeg",
     b"\x89PNG": "image/png",
@@ -57,15 +64,51 @@ def sniff_content_type(blob: bytes) -> Optional[str]:
     return None
 
 
-def _cache_path(file_id: str) -> Path:
-    # Раскладываем по подпапкам: 12 тысяч файлов в одном каталоге тормозят ls
-    # и любой обход директории.
-    return CACHE_DIR / file_id[:2] / file_id
+def _cache_path(file_id: str, width: int) -> Path:
+    # Раскладываем по ширине и подпапкам: 12 тысяч файлов в одном каталоге
+    # тормозят любой обход директории.
+    return CACHE_DIR / str(width) / file_id[:2] / file_id
 
 
-async def fetch_photo(file_id: str) -> Optional[tuple[bytes, str]]:
-    """Байты картинки и её content-type. None — если скачать не удалось."""
-    path = _cache_path(file_id)
+def _shrink(blob: bytes, width: int) -> bytes:
+    """Ужимает под нужную ширину. При ошибке возвращает исходник как есть."""
+    import io
+
+    from PIL import Image, ImageOps
+
+    try:
+        img = Image.open(io.BytesIO(blob))
+        img = ImageOps.exif_transpose(img)   # снимки с телефона бывают повёрнуты
+        if img.mode not in ("RGB", "L"):
+            img = img.convert("RGB")
+        if img.width > width:
+            height = round(img.height * width / img.width)
+            img = img.resize((width, height), Image.LANCZOS)
+        out = io.BytesIO()
+        img.save(out, format="JPEG", quality=SIZES[width], optimize=True, progressive=True)
+        return out.getvalue()
+    except Exception:
+        return blob
+
+
+def _write_atomic(path: Path, blob: bytes) -> None:
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        # Через временный файл: два параллельных запроса на одну картинку иначе
+        # оставят на диске обрезанный файл, и он закэшируется битым.
+        tmp = path.with_name(path.name + ".part")
+        tmp.write_bytes(blob)
+        tmp.replace(path)
+    except OSError:
+        pass  # диск кончился или нет прав — отдать картинку это не мешает
+
+
+async def fetch_photo(file_id: str, width: int = DEFAULT_SIZE) -> Optional[tuple[bytes, str]]:
+    """Байты картинки нужной ширины и её content-type. None — если не вышло."""
+    if width not in SIZES:
+        width = DEFAULT_SIZE
+
+    path = _cache_path(file_id, width)
     if path.exists():
         blob = path.read_bytes()
         return blob, (sniff_content_type(blob) or "image/jpeg")
@@ -75,7 +118,7 @@ async def fetch_photo(file_id: str) -> Optional[tuple[bytes, str]]:
     proxy = f"http://{settings.PROXY_USER}:{settings.PROXY_PASS}@{settings.PROXY_HOST}"
     try:
         async with httpx.AsyncClient(
-            proxy=proxy, verify=False, timeout=45, follow_redirects=True
+            proxy=proxy, verify=False, timeout=60, follow_redirects=True
         ) as client:
             resp = await client.get(FILE_URL.format(file_id=file_id))
         if resp.status_code != 200 or not resp.content:
@@ -83,20 +126,16 @@ async def fetch_photo(file_id: str) -> Optional[tuple[bytes, str]]:
     except Exception:
         return None
 
-    blob = resp.content
-    ctype = sniff_content_type(blob)
-    if not ctype:
+    if not sniff_content_type(resp.content):
         # Не картинка — в извещении по этому id может лежать что угодно.
         return None
 
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        # Пишем через временный файл: два параллельных запроса на одну картинку
-        # иначе оставят на диске обрезанный файл, и он закэшируется битым.
-        tmp = path.with_suffix(".part")
-        tmp.write_bytes(blob)
-        tmp.replace(path)
-    except OSError:
-        pass  # диск кончился или нет прав — отдать картинку это не мешает
+    # Оригинал не храним: он бывает по 6 МБ, а нужен только как заготовка.
+    # Заодно раскладываем сразу обе ширины — второй заход не полезет в сеть.
+    blob = _shrink(resp.content, width)
+    _write_atomic(path, blob)
+    for other in SIZES:
+        if other != width:
+            _write_atomic(_cache_path(file_id, other), _shrink(resp.content, other))
 
-    return blob, ctype
+    return blob, (sniff_content_type(blob) or "image/jpeg")

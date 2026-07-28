@@ -1873,13 +1873,14 @@ async def get_region_data(
 async def get_lot_photo(
     lot_id: int,
     idx: int,
+    w: int = Query(1400, description="Ширина: 320 для миниатюр, 1400 для просмотра"),
     db: AsyncSession = Depends(get_db),
 ):
     """Фото участка из извещения по порядковому номеру.
 
     Открыто всем, включая анонимов: картинка — витрина, а не премиум-данные,
     и она же уходит в og:image соцсетей и поисковикам. Ходит через наш прокси
-    с дисковым кэшем — см. services/lot_photos.
+    с дисковым кэшем и пересжатием — см. services/lot_photos.
     """
     from fastapi.responses import Response
     from services.lot_photos import fetch_photo, photo_ids
@@ -1892,7 +1893,7 @@ async def get_lot_photo(
     if idx < 0 or idx >= len(ids):
         raise HTTPException(status_code=404, detail="Фото не найдено")
 
-    got = await fetch_photo(ids[idx])
+    got = await fetch_photo(ids[idx], width=w)
     if not got:
         raise HTTPException(status_code=404, detail="Фото недоступно")
 

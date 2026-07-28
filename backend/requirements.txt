@@ -57,3 +57,4 @@ orjson==3.10.12
 httptools==0.6.4
 shapely==2.1.0
 numpy>=1.21
+Pillow==12.3.0

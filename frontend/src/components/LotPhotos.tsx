@@ -21,7 +21,10 @@ export default function LotPhotos({ lotId, count }: { lotId: number; count: numb
   if (alive.length === 0) return null;
 
   const current = alive.includes(active) ? active : alive[0];
-  const src = (i: number) => `/api/lots/${lotId}/photo/${i}`;
+  // Ширины фиксированы на бэкенде: 320 для миниатюр, 1400 для просмотра.
+  // Оригиналы из извещений бывают по 5-6 МБ — миниатюры в этом размере
+  // означали бы под 30 МБ на лот с пятью фото.
+  const src = (i: number, w = 1400) => `/api/lots/${lotId}/photo/${i}?w=${w}`;
   const markBroken = (i: number) =>
     setBroken((prev) => new Set(prev).add(i));
 
@@ -71,7 +74,7 @@ export default function LotPhotos({ lotId, count }: { lotId: number; count: numb
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={src(i)} alt="" loading="lazy" onError={() => markBroken(i)}
+                src={src(i, 320)} alt="" loading="lazy" onError={() => markBroken(i)}
                 style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
               />
             </button>
