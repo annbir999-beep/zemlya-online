@@ -17,6 +17,7 @@
 """
 from __future__ import annotations
 
+import asyncio
 import os
 from pathlib import Path
 from typing import Optional
@@ -39,10 +40,16 @@ MAX_PHOTOS = 12
 SIZES = {320: 78, 1400: 82}   # ширина -> качество JPEG
 DEFAULT_SIZE = 1400
 
+# Организаторы кладут в извещения не только JPEG: попадаются BMP (и они не
+# редкость — на первой же сотне лотов их оказались десятки), изредка PNG и TIFF.
+# Неизвестная сигнатура раньше означала «это не картинка» и лот терял фото.
 _SIGNATURES = {
     b"\xff\xd8\xff": "image/jpeg",
     b"\x89PNG": "image/png",
     b"GIF8": "image/gif",
+    b"BM": "image/bmp",
+    b"II*\x00": "image/tiff",
+    b"MM\x00*": "image/tiff",
 }
 
 
@@ -86,9 +93,16 @@ def _shrink(blob: bytes, width: int) -> bytes:
             img = img.resize((width, height), Image.LANCZOS)
         out = io.BytesIO()
         img.save(out, format="JPEG", quality=SIZES[width], optimize=True, progressive=True)
-        return out.getvalue()
+        shrunk = out.getvalue()
     except Exception:
         return blob
+
+    # Если оригинал уже уложился в нужную ширину, перекодирование может выйти
+    # тяжелее исходника — тогда честнее отдать исходник (кроме BMP и прочих
+    # форматов, которые браузер показывает плохо: их конвертируем всегда).
+    if len(shrunk) >= len(blob) and sniff_content_type(blob) == "image/jpeg":
+        return blob
+    return shrunk
 
 
 def _write_atomic(path: Path, blob: bytes) -> None:
@@ -116,17 +130,32 @@ async def fetch_photo(file_id: str, width: int = DEFAULT_SIZE) -> Optional[tuple
     if not settings.PROXY_HOST:
         return None
     proxy = f"http://{settings.PROXY_USER}:{settings.PROXY_PASS}@{settings.PROXY_HOST}"
-    try:
-        async with httpx.AsyncClient(
-            proxy=proxy, verify=False, timeout=60, follow_redirects=True
-        ) as client:
-            resp = await client.get(FILE_URL.format(file_id=file_id))
-        if resp.status_code != 200 or not resp.content:
-            return None
-    except Exception:
+
+    # torgi.gov отдаёт 503 при пачке запросов подряд — на прогреве так терялась
+    # половина картинок. Пара попыток с паузой закрывает почти все такие отказы.
+    resp = None
+    for attempt in range(3):
+        if attempt:
+            await asyncio.sleep(1.5 * attempt)
+        try:
+            async with httpx.AsyncClient(
+                proxy=proxy, verify=False, timeout=60, follow_redirects=True
+            ) as client:
+                r = await client.get(FILE_URL.format(file_id=file_id))
+        except Exception:
+            continue
+        if r.status_code == 200 and r.content:
+            resp = r
+            break
+        if r.status_code not in (429, 500, 502, 503, 504):
+            return None       # 404 и подобное повторять бессмысленно
+    if resp is None:
         return None
 
-    if not sniff_content_type(resp.content):
+    # Тип берём и из заголовка тоже: сигнатур всех форматов не перечислить,
+    # а конвертируем мы всё равно через Pillow.
+    header_type = (resp.headers.get("content-type") or "").split(";")[0].strip().lower()
+    if not header_type.startswith("image/") and not sniff_content_type(resp.content):
         # Не картинка — в извещении по этому id может лежать что угодно.
         return None
 

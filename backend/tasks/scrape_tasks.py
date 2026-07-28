@@ -1283,6 +1283,9 @@ async def _warm_photo_thumbs(limit: int):
             )).limit(limit * 2)
         )).all()
 
+    import asyncio as _asyncio
+    import shutil
+
     for (ids,) in rows:
         if done >= limit:
             break
@@ -1294,11 +1297,20 @@ async def _warm_photo_thumbs(limit: int):
         if _cache_path(fid, 320).exists():
             skipped += 1
             continue
+
+        # Один прогретый лот — это обе ширины, около 200 КБ. Останавливаемся
+        # заранее, чтобы кэш картинок не выел место под бэкапы и образы.
+        if shutil.disk_usage("/app").free < 1_500_000_000:
+            print("[photo-warm] остановка: на диске меньше 1.5 ГБ")
+            break
+
         got = await fetch_photo(fid, width=320)
         if got:
             done += 1
         else:
             failed += 1
+        # Пауза между запросами: без неё torgi.gov начинает отвечать 503
+        await _asyncio.sleep(0.4)
 
     print(f"[photo-warm] прогрето: {done}, уже было: {skipped}, не вышло: {failed}")
     await engine.dispose()
