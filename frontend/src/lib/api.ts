@@ -162,6 +162,8 @@ export interface ContractTermsData {
 
 export interface LotDetail extends LotListItem {
   description?: string;
+  /** Сколько фото у лота; сами картинки — GET /api/lots/{id}/photo/{idx} */
+  photos_count?: number;
   deposit?: number;
   deposit_pct?: number;
   final_price?: number;

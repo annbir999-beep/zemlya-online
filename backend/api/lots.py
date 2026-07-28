@@ -15,6 +15,7 @@ from api.users import get_current_user, get_current_user_optional
 from core.plans import plan_rank, RANK_PRO, RANK_INVESTOR
 from core.ratelimit import limiter
 from services.rubrics import get_all_rubrics, get_rubrics_by_section, get_sections
+from services.lot_photos import photo_ids
 
 router = APIRouter()
 
@@ -219,6 +220,8 @@ class LotDetail(LotListItem):
     contract_terms: Optional[dict] = None
     nearby_features: Optional[dict] = None
     organizer_contacts: Optional[dict] = None
+    # Сколько фото у лота: сами картинки отдаёт /api/lots/{id}/photo/{idx}
+    photos_count: int = 0
 
 
 class LotsResponse(BaseModel):
@@ -1866,6 +1869,42 @@ async def get_region_data(
     return get_regional_data(region_code)
 
 
+@router.get("/{lot_id}/photo/{idx}")
+async def get_lot_photo(
+    lot_id: int,
+    idx: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Фото участка из извещения по порядковому номеру.
+
+    Открыто всем, включая анонимов: картинка — витрина, а не премиум-данные,
+    и она же уходит в og:image соцсетей и поисковикам. Ходит через наш прокси
+    с дисковым кэшем — см. services/lot_photos.
+    """
+    from fastapi.responses import Response
+    from services.lot_photos import fetch_photo, photo_ids
+
+    row = (await db.execute(select(Lot.raw_data).where(Lot.id == lot_id))).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Лот не найден")
+
+    ids = photo_ids(row[0])
+    if idx < 0 or idx >= len(ids):
+        raise HTTPException(status_code=404, detail="Фото не найдено")
+
+    got = await fetch_photo(ids[idx])
+    if not got:
+        raise HTTPException(status_code=404, detail="Фото недоступно")
+
+    blob, ctype = got
+    return Response(
+        content=blob,
+        media_type=ctype,
+        # Файл по id неизменен — можно кэшировать надолго и у клиента, и в CDN
+        headers={"Cache-Control": "public, max-age=2592000, immutable"},
+    )
+
+
 @router.get("/{lot_id}", response_model=LotDetail)
 async def get_lot(
     lot_id: int,
@@ -1925,4 +1964,5 @@ async def get_lot(
         contract_terms=contract,
         nearby_features=lot.nearby_features if isinstance(lot.nearby_features, dict) else None,
         organizer_contacts=contacts,
+        photos_count=len(photo_ids(lot.raw_data)),
     )

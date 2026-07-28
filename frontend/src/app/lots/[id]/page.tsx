@@ -12,6 +12,7 @@ import NearbyFeaturesCard, { type NearbyFeatures } from "@/components/NearbyFeat
 import OrganizerContactsCard, { type OrganizerContacts } from "@/components/OrganizerContacts";
 import RoiCalculator from "@/components/RoiCalculator";
 import LockedBlock from "@/components/LockedBlock";
+import LotPhotos from "@/components/LotPhotos";
 import { BOT_URL } from "@/lib/social";
 import { planRank, RANK_PRO, RANK_INVESTOR } from "@/lib/plan";
 import { compare } from "@/lib/compare";
@@ -413,6 +414,9 @@ export default function LotDetailPage({ params }: { params: Promise<{ id: string
             ⚠️ Сообщить об ошибке
           </a>
         </div>
+
+        {/* Фото участка из извещения — до цифр: сначала показываем, что покупают */}
+        {!!lot.photos_count && <LotPhotos lotId={lot.id} count={lot.photos_count} />}
 
         {/* Key metrics */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 24 }}>

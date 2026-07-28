@@ -44,3 +44,6 @@ marketing/video/clip-library/
 marketing/video/covers/
 frontend/public/edu/*.mp4
 frontend/tsconfig.tsbuildinfo
+
+# Кэш фото лотов (качается с torgi.gov, восстанавливается сам)
+backend/media/
