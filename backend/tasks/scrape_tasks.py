@@ -1281,8 +1281,14 @@ async def _enrich_deposits(batch_size: int):
 
             processed += len(rows)
             if updates:
+                # synchronize_session=None обязателен: без него SQLAlchemy пытается
+                # синхронизировать сессию с bulk-update по своему WHERE и падает
+                # с InvalidRequestError. Нам синхронизация не нужна — объекты в
+                # сессию не грузим, работаем колонками.
                 await db.execute(
-                    update(Lot).where(Lot.id == bindparam("b_id")),
+                    update(Lot).where(Lot.id == bindparam("b_id")).execution_options(
+                        synchronize_session=None
+                    ),
                     updates,
                 )
                 found += len(updates)
