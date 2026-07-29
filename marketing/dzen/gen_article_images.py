@@ -97,6 +97,36 @@ def timeline_card(title, rows, out_name):
     return path
 
 
+def numbers_card(title, rows, footnote, out_name):
+    """Крупные цифры: покупка / продажа / разница. Для кейсов со сделкой."""
+    img = Image.new("RGB", (W, H), CREAM)
+    d = ImageDraw.Draw(img)
+
+    d.text((64, 56), title, font=_f(46), fill=INK)
+    d.line((64, 128, 124, 128), fill=TEAL, width=4)
+
+    f_lbl, f_big = _f(30), _f(64)
+    y = 190
+    for label, value, accent in rows:
+        d.text((64, y + 22), label, font=f_lbl, fill=GREY)
+        col = TEAL if accent else INK
+        w = d.textlength(value, font=f_big)
+        d.text((W - 64 - w, y), value, font=f_big, fill=col)
+        y += 96
+        if accent:                       # итог отделяем линией сверху
+            continue
+        d.line((64, y - 18, W - 64, y - 18), fill=(226, 234, 232), width=2)
+
+    for i, line in enumerate(_wrap(d, footnote, _f(26), W - 128)):
+        d.text((64, H - 150 + i * 36), line, font=_f(26), fill=GREY)
+
+    d.text((64, H - 62), "torgi-zemli.ru", font=_f(24), fill=GREY)
+    os.makedirs(OUT, exist_ok=True)
+    path = os.path.join(OUT, out_name)
+    img.save(path, quality=94)
+    return path
+
+
 if __name__ == "__main__":
     print(steps_card(
         "Путь до участка: 5 шагов",
@@ -108,6 +138,28 @@ if __name__ == "__main__":
             "Подписать договор и зарегистрировать право в Росреестре",
         ],
         "01-5-shagov.jpg",
+    ))
+    # Статья №2 — кейс сделки
+    print(numbers_card(
+        "Математика сделки",
+        [
+            ("Покупка на аукционе", "180 000 ₽", False),
+            ("Продажа через 14 месяцев", "950 000 ₽", False),
+            ("Разница", "+770 000 ₽", True),
+        ],
+        "Без вычета затрат на межевание и подключение света — по региону это "
+        "обычно от 60 до 150 тысяч рублей суммарно.",
+        "02-matematika.jpg",
+    ))
+    print(steps_card(
+        "Что подняло цену участка",
+        [
+            "Инфраструктура была на месте: асфальт и электролиния по границе",
+            "Межевание — уточнённые границы снимают вопросы у покупателя",
+            "Свет заведён на участок, а не «проходит рядом»",
+            "Аукцион с двумя участниками вместо десяти — цена ушла недалеко от старта",
+        ],
+        "02-chto-podnyalo-cenu.jpg",
     ))
     print(timeline_card(
         "Сколько занимает по времени",
