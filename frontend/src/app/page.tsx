@@ -5,7 +5,7 @@ import FilterSidebar from "@/components/FilterSidebar";
 import LotCard from "@/components/LotCard";
 import {
   FiltersState, filtersToQueryString,
-  DEADLINE_PRESETS, DEFAULT_DEADLINE_PRESET,
+  DEADLINE_PRESETS, DEFAULT_DEADLINE_PRESET, RESET_DEADLINE_PRESET,
 } from "@/lib/filters";
 import type { LotListItem, LotsResponse } from "@/lib/api";
 import { authFetch } from "@/lib/api";
@@ -106,7 +106,9 @@ export default function MapPage() {
   const handleFiltersChange = (f: FiltersState) => setFilters(f);
   const handleReset = () => {
     setFilters(buildDefaultFilters());
-    setDeadlinePreset(DEFAULT_DEADLINE_PRESET);
+    // «Все сроки», а не умолчание: сброс должен снимать фильтры, иначе
+    // счётчик не двигается и это выглядит поломкой (см. filters.ts)
+    setDeadlinePreset(RESET_DEADLINE_PRESET);
   };
 
   const toggleCompare = (id: number) => {

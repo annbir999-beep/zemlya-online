@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import FilterSidebar from "@/components/FilterSidebar";
 import {
   FiltersState, filtersToQueryString, SORT_OPTIONS,
-  DEADLINE_PRESETS, DEFAULT_DEADLINE_PRESET,
+  DEADLINE_PRESETS, DEFAULT_DEADLINE_PRESET, RESET_DEADLINE_PRESET,
 } from "@/lib/filters";
 import type { LotListItem, LotsResponse, UserProfile } from "@/lib/api";
 import { authFetch } from "@/lib/api";
@@ -140,7 +140,8 @@ export default function CatalogPage() {
         onChange={setFilters}
         onReset={() => {
           setFilters(buildDefaultFilters());
-          setDeadlinePreset(DEFAULT_DEADLINE_PRESET);
+          // «Все сроки»: сброс снимает фильтры, а не возвращает умолчание
+          setDeadlinePreset(RESET_DEADLINE_PRESET);
         }}
       />
 

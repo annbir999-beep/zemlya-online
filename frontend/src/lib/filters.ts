@@ -36,7 +36,14 @@ export const DEADLINE_PRESETS = [
   { value: "all",      label: "Все сроки",                 from_days: null, to_days: null },
 ];
 
+// Первый заход открывается с «Оптимально»: новый человек должен увидеть лоты,
+// по которым ещё реально успеть подать заявку, а не весь архив.
 export const DEFAULT_DEADLINE_PRESET = "optimal";
+
+// А вот кнопка «сбросить» должна убирать фильтры, а не возвращать их к
+// умолчанию: раньше она восстанавливала «Оптимально», счётчик не менялся
+// (12 268 активных против 4 952 в окне 3-14 дней) и это читалось как поломка.
+export const RESET_DEADLINE_PRESET = "all";
 
 export const SOURCES = [
   { value: "torgi_gov", label: "torgi.gov" },
