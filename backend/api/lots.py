@@ -1917,6 +1917,7 @@ async def get_lot_photo(
     lot_id: int,
     idx: int,
     w: int = Query(1400, description="Ширина: 320 для миниатюр, 1400 для просмотра"),
+    cached: bool = Query(False, description="Только из кэша, без похода в сеть"),
     db: AsyncSession = Depends(get_db),
 ):
     """Фото участка из извещения по порядковому номеру.
@@ -1940,7 +1941,7 @@ async def get_lot_photo(
     if idx < 0 or idx >= len(ids):
         raise HTTPException(status_code=404, detail="Фото не найдено")
 
-    got = await fetch_photo(ids[idx], width=w)
+    got = await fetch_photo(ids[idx], width=w, cached_only=cached)
     if not got:
         raise HTTPException(status_code=404, detail="Фото недоступно")
 

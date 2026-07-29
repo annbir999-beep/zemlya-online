@@ -4,6 +4,7 @@ import { ScoreCircle, ScoreBadges, DiscountTag } from "./ScoreBadge";
 import { compare } from "@/lib/compare";
 import { useCompareIds } from "@/lib/useCompare";
 import { hectareProgram, HECTARE_LABEL, HECTARE_TITLE } from "@/lib/hectare";
+import LotThumb from "./LotThumb";
 
 const PURPOSE_LABEL: Record<string, string> = {
   izhs: "ИЖС", snt: "СНТ", lpkh: "ЛПХ", agricultural: "Сельхоз",
@@ -68,6 +69,8 @@ export default function LotCard({ lot, selected, compareIds, onSelect, onToggleC
   return (
     <div className={`lot-card ${selected ? "selected" : ""}`} onClick={() => onSelect(lot)}>
       <div style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 6 }}>
+        {/* Фото участка из извещения — у лотов torgi.gov оно есть почти всегда */}
+        {!!lot.photos_count && <LotThumb lotId={lot.id} />}
         <ScoreCircle score={lot.score} size={36} />
         <div style={{ flex: 1, minWidth: 0 }}>
           {/* Заголовок — ссылка на карточку лота: раньше был просто текстом,

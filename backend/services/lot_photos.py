@@ -117,8 +117,17 @@ def _write_atomic(path: Path, blob: bytes) -> None:
         pass  # диск кончился или нет прав — отдать картинку это не мешает
 
 
-async def fetch_photo(file_id: str, width: int = DEFAULT_SIZE) -> Optional[tuple[bytes, str]]:
-    """Байты картинки нужной ширины и её content-type. None — если не вышло."""
+async def fetch_photo(file_id: str, width: int = DEFAULT_SIZE,
+                      cached_only: bool = False) -> Optional[tuple[bytes, str]]:
+    """Байты картинки нужной ширины и её content-type. None — если не вышло.
+
+    cached_only=True отдаёт только уже лежащее на диске и никогда не лезет в
+    сеть. Нужно для каталога: там два десятка карточек на страницу, и промах
+    по каждой означал бы одновременную закачку двадцати оригиналов по 5-6 МБ
+    через прокси — torgi.gov на такую пачку отвечает 503. Каталог показывает
+    то, что успел прогреть ночной warm_photo_thumbs, остальные карточки просто
+    без фото.
+    """
     if width not in SIZES:
         width = DEFAULT_SIZE
 
@@ -126,6 +135,8 @@ async def fetch_photo(file_id: str, width: int = DEFAULT_SIZE) -> Optional[tuple
     if path.exists():
         blob = path.read_bytes()
         return blob, (sniff_content_type(blob) or "image/jpeg")
+    if cached_only:
+        return None
 
     if not settings.PROXY_HOST:
         return None

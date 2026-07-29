@@ -90,6 +90,8 @@ export const api = {
 // Типы
 export interface LotListItem {
   id: number;
+  /** Сколько фото у лота; сами картинки — GET /api/lots/{id}/photo/{idx}?w= */
+  photos_count?: number;
   external_id: string;
   title: string;
   cadastral_number?: string;
@@ -162,8 +164,6 @@ export interface ContractTermsData {
 
 export interface LotDetail extends LotListItem {
   description?: string;
-  /** Сколько фото у лота; сами картинки — GET /api/lots/{id}/photo/{idx} */
-  photos_count?: number;
   deposit?: number;
   deposit_pct?: number;
   final_price?: number;
