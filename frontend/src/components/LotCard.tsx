@@ -80,7 +80,12 @@ export default function LotCard({ lot, selected, compareIds, onSelect, onToggleC
             target="_blank"
             rel="noopener noreferrer"
             className="lot-card-title lot-card-title-link"
-            style={{ marginBottom: 4, display: "block" }}
+            // display НЕ задаём: класс ставит -webkit-box, без которого не
+            // работает обрезка до двух строк. Инлайновый display:block её
+            // ломал, и юридический заголовок с torgi.gov разворачивался
+            // на десять строк, выдавливая весь список вниз.
+            style={{ marginBottom: 4 }}
+            title={lot.title || undefined}
             onClick={(e) => e.stopPropagation()}
           >
             {lot.title || "Земельный участок"}
