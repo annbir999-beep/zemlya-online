@@ -356,8 +356,13 @@ async def _reparse_contract_terms(batch_size: int):
                         updated += 1
                 except Exception as e:
                     print(f"[reparse-contract] lot={lot.id} error: {type(e).__name__}: {str(e)[:80]}")
+                # Коммитим каждый лот, а не раз в 20: внутри итерации два похода
+                # в сеть (карточка лота + скачивание PDF), и при пакетном коммите
+                # транзакция висела открытой минутами. Даже «просто читающая»
+                # сессия держит ACCESS SHARE на lots и блокирует любой ALTER TABLE —
+                # ровно на этом 29.07 встало добавление колонки photo_ids.
+                await db.commit()
                 if i % 20 == 0:
-                    await db.commit()
                     print(f"[reparse-contract] {i}/{len(lots)} обработано, обновлено: {updated}, нет PDF: {no_pdf}")
                 await _asyncio.sleep(1.0)
             await db.commit()
@@ -969,31 +974,49 @@ async def _enrich_nearby_features(batch_size: int):
         )
         rows = result.all()
 
+        from sqlalchemy import update
+
         updated = 0
+        fails_in_row = 0
         for i, r in enumerate(rows, 1):
+            # Сеть — строго ВНЕ транзакции. Раньше запрос в Overpass шёл между
+            # UPDATE и коммитом (коммит был раз в 20 лотов), и при недоступности
+            # сервиса транзакция висела открытой десятки минут, держа блокировки
+            # на lots. Из-за этого 29.07 не проходил даже ALTER TABLE, а в базе
+            # копились сессии «idle in transaction» по три часа.
             try:
                 features = await fetch_nearby_features(r.lat, r.lng)
-                # Обновляем через UPDATE — у нас нет полного объекта Lot
-                from sqlalchemy import update
+                fails_in_row = 0
+            except Exception as e:
+                fails_in_row += 1
+                print(f"[nearby] lot={r.id} error: {type(e).__name__}: {e}")
+                # Overpass лежит — дальше идти бессмысленно, только жечь время
+                # и растить очередь. Следующий запуск по расписанию попробует снова.
+                if fails_in_row >= 5:
+                    print("[nearby] Overpass недоступен 5 раз подряд — прерываю прогон")
+                    break
+                await _asyncio.sleep(2.5)
+                continue
+
+            try:
                 await db.execute(
-                    update(Lot)
-                    .where(Lot.id == r.id)
-                    .values(
+                    update(Lot).where(Lot.id == r.id).values(
                         nearby_features=features or {},
                         nearby_features_at=datetime.now(timezone.utc),
                     )
                 )
+                await db.commit()      # коммитим сразу: запись крошечная, а лок дорог
                 if features:
                     updated += 1
-                if i % 20 == 0:
-                    await db.commit()
-                    print(f"[nearby] {i}/{len(rows)} обработано, найдено: {updated}")
             except Exception as e:
-                print(f"[nearby] lot={r.id} error: {type(e).__name__}: {e}")
+                await db.rollback()
+                print(f"[nearby] lot={r.id} запись не прошла: {type(e).__name__}: {e}")
+
+            if i % 20 == 0:
+                print(f"[nearby] {i}/{len(rows)} обработано, найдено: {updated}")
             # Уважаем лимит Overpass — пауза между запросами
             await _asyncio.sleep(2.5)
 
-        await db.commit()
         print(f"[nearby] Готово. Обогащено: {updated}/{len(rows)}")
 
     await engine.dispose()

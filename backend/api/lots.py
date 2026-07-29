@@ -141,7 +141,48 @@ async def status_health(db: AsyncSession = Depends(get_db)):
             "sublease_possible": rs.sub_possible,
             "sublease_possible_pct": _lpct(rs.sub_possible),
         },
+        # Свежесть обогащений: когда каждое последний раз что-то записывало.
+        # Нужно потому, что молчащая задача выглядит как работающая: 26.07 встал
+        # nearby_features (Overpass не отвечал), и это заметили только 29-го,
+        # случайно читая логи воркера. Показатель — часы с последней записи.
+        "freshness": await _enrichment_freshness(db, now),
         "server_time": now.isoformat(),
+    }
+
+
+async def _enrichment_freshness(db: AsyncSession, now: datetime) -> dict:
+    """Часы с последней успешной записи по каждому обогащению + покрытие."""
+    row = (await db.execute(select(
+        func.max(Lot.nearby_features_at).label("nearby"),
+        func.max(Lot.pdf_parsed_at).label("pdf"),
+        func.max(Lot.ai_assessed_at).label("ai"),
+        func.max(Lot.score_updated_at).label("score"),
+        func.count().filter(Lot.nearby_features.isnot(None)).label("c_nearby"),
+        func.count().filter(Lot.deposit.isnot(None)).label("c_deposit"),
+        func.count().filter(Lot.photo_ids.isnot(None)).label("c_photos"),
+        func.count().label("total"),
+    ).where(and_(
+        Lot.source == LotSource.TORGI_GOV,
+        Lot.status == LotStatus.ACTIVE,
+    )))).one()
+
+    def hours(ts):
+        if not ts:
+            return None
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        return round((now - ts).total_seconds() / 3600, 1)
+
+    def pct(n):
+        return round(n / row.total * 100, 1) if row.total else 0.0
+
+    return {
+        "nearby_features": {"hours_ago": hours(row.nearby), "coverage_pct": pct(row.c_nearby)},
+        "pdf_parsed": {"hours_ago": hours(row.pdf)},
+        "ai_assessment": {"hours_ago": hours(row.ai)},
+        "score": {"hours_ago": hours(row.score)},
+        "deposit": {"coverage_pct": pct(row.c_deposit)},
+        "photo_ids": {"coverage_pct": pct(row.c_photos)},
     }
 
 

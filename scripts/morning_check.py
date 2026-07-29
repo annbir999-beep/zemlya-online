@@ -266,7 +266,40 @@ def main():
         signal("green" if with_disc >= 60 else "yellow",
                "Регионов с avg_discount_pct", str(with_disc), ">=60")
 
-    # ─── 10. ИТОГ ──────────────────────────────────────────────────────
+    # ─── 10. СВЕЖЕСТЬ ОБОГАЩЕНИЙ ───────────────────────────────────────
+    # Молчащая задача выглядит точно как работающая: 26.07 встало обогащение
+    # «что рядом» (Overpass перестал отвечать), и заметили это только 29-го,
+    # случайно читая логи воркера. Здесь смотрим, когда каждое обогащение
+    # последний раз что-то записало.
+    section("СВЕЖЕСТЬ ОБОГАЩЕНИЙ")
+    fr = h.get("freshness", {}) if "_error" not in h else {}
+    if not fr:
+        signal("yellow", "Данные свежести", "недоступны")
+    else:
+        # Пороги = периодичность задачи с запасом: nearby и pdf ходят по кругу
+        # часами, скор пересчитывается ночью, AI — по графику пачками.
+        LIMITS = {"nearby_features": 36, "pdf_parsed": 36, "score": 30,
+                  "ai_assessment": 72}
+        NAMES = {"nearby_features": "Что рядом (Overpass)", "pdf_parsed": "Разбор PDF извещений",
+                 "score": "Пересчёт скоринга", "ai_assessment": "AI-оценка"}
+        for key, limit in LIMITS.items():
+            hrs = (fr.get(key) or {}).get("hours_ago")
+            if hrs is None:
+                signal("red", NAMES[key], "ни разу не обновлялось")
+                issues.append(f"{NAMES[key]}: нет ни одной записи")
+                continue
+            lvl = "green" if hrs <= limit else ("yellow" if hrs <= limit * 2 else "red")
+            signal(lvl, NAMES[key], f"{hrs} ч назад", f"<={limit} ч")
+            if lvl == "red":
+                issues.append(f"{NAMES[key]} молчит {hrs} ч (порог {limit})")
+        for key, name in (("deposit", "Задаток"), ("photo_ids", "Фото лотов"),
+                          ("nearby_features", "Что рядом")):
+            cov = (fr.get(key) or {}).get("coverage_pct")
+            if cov is not None:
+                signal("green" if cov >= 40 else "yellow",
+                       f"Покрытие: {name}", f"{cov}%", ">=40%")
+
+    # ─── 11. ИТОГ ──────────────────────────────────────────────────────
     section("ИТОГ")
     if not issues:
         print(f"{GREEN}{BOLD}✓ ВСЁ В ПОРЯДКЕ{END}")
