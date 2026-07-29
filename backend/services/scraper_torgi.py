@@ -500,7 +500,12 @@ class TorgiGovScraper:
         etp_code = raw.get("etpCode") or ""
         etp_name = ETP_NAMES.get(etp_code, etp_code) if etp_code else None
 
-        # Извлекаем задаток %
+        # Извлекаем задаток %.
+        # ВНИМАНИЕ: ключа "deposit" в ответе torgi.gov НЕТ — сумма живёт только
+        # в тексте извещения, её достаёт enrich_deposits (services/deposit_parser).
+        # Поэтому ниже задаток НЕЛЬЗЯ обнулять, когда API его не прислал: иначе
+        # каждый скрейп (раз в 2 часа) стирает всё, что нашёл парсер. Так и было:
+        # 29.07.2026 покрытие откатилось с 42% до 16% за ночь.
         deposit_val = raw.get("deposit")
         deposit_pct = None
         if deposit_val and start_price and start_price > 0:
@@ -562,8 +567,11 @@ class TorgiGovScraper:
         lot.cadastral_number = cadastral_raw or raw.get("cadastralNumber") or None
         lot.notice_number = str(notice_number)[:200] if notice_number else None
         lot.start_price = start_price
-        lot.deposit = float(deposit_val) if deposit_val else None
-        lot.deposit_pct = deposit_pct
+        # Перезаписываем только если API реально что-то прислал — иначе
+        # сохраняем то, что достал парсер из текста извещения (см. выше)
+        if deposit_val:
+            lot.deposit = float(deposit_val)
+            lot.deposit_pct = deposit_pct
         lot.area_sqm = area_sqm
         lot.area_ha = round(area_sqm / 10000, 4) if area_sqm else None
         lot.price_per_sqm = round(start_price / area_sqm, 2) if (start_price and area_sqm and area_sqm > 0) else None
