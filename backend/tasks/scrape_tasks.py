@@ -1299,11 +1299,14 @@ async def _warm_photo_thumbs(limit: int):
 
     done = skipped = failed = 0
     async with SessionLocal() as db:
+        # Сначала лоты с высоким скором: именно они наверху выдачи и на карте,
+        # значит их превью увидят раньше всего. Греть в произвольном порядке
+        # значит показывать фото у тех, до кого никто не доскроллит.
         rows = (await db.execute(
             select(Lot.photo_ids).where(and_(
                 Lot.status == LotStatus.ACTIVE,
                 Lot.photo_ids.isnot(None),
-            )).limit(limit * 2)
+            )).order_by(Lot.score.desc().nulls_last()).limit(limit * 2)
         )).all()
 
     import asyncio as _asyncio
