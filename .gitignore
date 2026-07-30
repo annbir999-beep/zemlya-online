@@ -47,3 +47,10 @@ frontend/tsconfig.tsbuildinfo
 
 # Кэш фото лотов (качается с torgi.gov, восстанавливается сам)
 backend/media/
+marketing/video/with-cover/
+marketing/video/fixes/_tmp_v3/
+marketing/video/fixes/_tmp_revoice/
+
+# Соцграфика и сторис-видео — генерируются скриптами, в git только тексты и промпты
+marketing/posts-90days/images/
+marketing/instagram/highlight-videos/
