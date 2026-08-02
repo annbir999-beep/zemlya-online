@@ -143,6 +143,106 @@ def _draft(text: str, region: str | None, pitch: str) -> str:
             f"Если скажете район и бюджет, подскажу, на что смотреть в первую очередь.")
 
 
+FORUM_FEEDS = [
+    # ForumHouse — крупнейший российский форум по частному строительству.
+    # Лента новых тем по всем разделам, фильтруем по теме уже у себя.
+    ("ForumHouse", "https://www.forumhouse.ru/forums/-/index.rss"),
+]
+# Темы форума и группы ВК читаем в inbox_messages: там уже есть уникальный
+# индекс (source, external_id), значит дедуп между прогонами достаётся даром,
+# а скоринг и черновик считает общий код.
+
+
+async def _ingest_external(db: AsyncSession) -> dict[str, str]:
+    """Забирает форумы и группы ВК в общий инбокс. Возвращает статус источников."""
+    import hashlib
+    from lxml import etree
+
+    status: dict[str, str] = {}
+
+    async def add(source: str, ext_id: str, author: str, text: str, url: str) -> bool:
+        exists = (await db.execute(
+            select(InboxMessage.id).where(
+                InboxMessage.source == source, InboxMessage.external_id == ext_id
+            ).limit(1)
+        )).scalar_one_or_none()
+        if exists:
+            return False
+        db.add(InboxMessage(
+            source=source, event_type="comment", external_id=ext_id[:120],
+            author_name=(author or "")[:200], text=text[:5000],
+            post_ref=url[:400], status="new",
+        ))
+        return True
+
+    async with httpx.AsyncClient(timeout=25, follow_redirects=True, headers={
+        "User-Agent": "Mozilla/5.0 (compatible; TorgiZemliBot/1.0)"
+    }) as client:
+        for name, url in FORUM_FEEDS:
+            try:
+                r = await client.get(url)
+                r.raise_for_status()
+                root = etree.fromstring(
+                    r.content, parser=etree.XMLParser(recover=True, encoding=None)
+                )
+                added = 0
+                for item in (root.iter("item") if root is not None else []):
+                    def val(tag: str) -> str:
+                        el = item.find(tag)
+                        return (el.text or "").strip() if el is not None and el.text else ""
+
+                    link, title = val("link"), val("title")
+                    if not link or not title:
+                        continue
+                    body = f"{title}. {val('description')}"
+                    if _score(body) < MIN_SCORE:      # мимо темы — даже не храним
+                        continue
+                    ext = hashlib.sha256(link.encode()).hexdigest()[:40]
+                    if await add("forum", ext, val("author") or name, body, link):
+                        added += 1
+                status[name] = f"ок, новых тем: {added}"
+            except Exception as e:
+                status[name] = f"ошибка: {type(e).__name__}"
+
+        # ВК: сообщества по земле и ИЖС. Групповой токен для чужих стен не
+        # годится (ошибка 27), нужен сервисный ключ приложения — пока его нет,
+        # источник просто молчит.
+        vk_token = os.getenv("VK_SERVICE_TOKEN")
+        vk_groups = [g for g in (os.getenv("VK_SCOUT_GROUPS") or "").split(",") if g.strip()]
+        if not vk_token:
+            status["ВКонтакте"] = "нужен сервисный ключ (VK_SERVICE_TOKEN)"
+        elif not vk_groups:
+            status["ВКонтакте"] = "не заданы сообщества (VK_SCOUT_GROUPS)"
+        else:
+            added = 0
+            for group in vk_groups:
+                try:
+                    r = await client.get("https://api.vk.com/method/wall.get", params={
+                        "domain": group.strip(), "count": 30,
+                        "access_token": vk_token, "v": "5.199",
+                    })
+                    data = r.json()
+                    if "error" in data:
+                        status["ВКонтакте"] = f"ошибка {data['error'].get('error_code')}"
+                        break
+                    for post in data.get("response", {}).get("items", []):
+                        text = post.get("text") or ""
+                        if _score(text) < MIN_SCORE:
+                            continue
+                        ext = f"{post.get('owner_id')}_{post.get('id')}"
+                        link = f"https://vk.com/wall{ext}"
+                        if await add("vk_group", ext, group, text, link):
+                            added += 1
+                except Exception as e:
+                    status["ВКонтакте"] = f"ошибка: {type(e).__name__}"
+                    break
+            else:
+                status["ВКонтакте"] = f"ок, новых постов: {added}"
+
+    await db.commit()
+    return status
+
+
 async def _from_inbox(db: AsyncSession, regions: list[str]) -> list[dict[str, Any]]:
     rows = (await db.execute(
         select(InboxMessage)
@@ -248,15 +348,24 @@ async def _notify(leads: list[dict[str, Any]], run_id: int | None) -> None:
         })
         for x in leads[:10]:
             region = x["регион"] or "регион не указан"
-            text = (
+            # Двумя сообщениями: в первом кто и о чём, во втором — только текст
+            # ответа. Так его копируют одним касанием, не выцепляя из карточки.
+            head = (
                 f"👤 {x['автор'] or 'без имени'} · {x['источник']}\n"
                 f"Готовность: {x['оценка']} из 100 · {region}\n\n"
-                f"Вопрос:\n«{x['текст']}»\n\n"
-                f"{x['ссылка'] or ''}\n\n"
-                f"Черновик ответа (скопируйте и отправьте от себя):\n"
-                f"<code>{x['черновик']}</code>"
+                f"«{x['текст']}»\n\n"
+                f"{x['ссылка'] or ''}"
             )
-            payload = {"chat_id": chat, "text": text, "parse_mode": "HTML",
+            try:
+                await client.post(api, json={
+                    "chat_id": chat, "text": head,
+                    "disable_web_page_preview": True,
+                })
+            except Exception as e:
+                print(f"[lead_scout] карточка не ушла: {type(e).__name__}: {e}")
+                continue
+
+            payload = {"chat_id": chat, "text": x["черновик"],
                        "disable_web_page_preview": True}
             if run_id:
                 payload["reply_markup"] = {"inline_keyboard": [[
@@ -266,7 +375,7 @@ async def _notify(leads: list[dict[str, Any]], run_id: int | None) -> None:
             try:
                 await client.post(api, json=payload)
             except Exception as e:
-                print(f"[lead_scout] карточка не ушла: {type(e).__name__}: {e}")
+                print(f"[lead_scout] ответ не ушёл: {type(e).__name__}: {e}")
 
 
 class LeadScoutAgent(BaseAgent):
@@ -275,6 +384,8 @@ class LeadScoutAgent(BaseAgent):
     async def execute(self, db: AsyncSession) -> tuple[dict[str, Any], bool]:
         regions = await _regions(db)
 
+        # Сначала забираем внешние источники в инбокс, потом скорим всё разом
+        sources = await _ingest_external(db)
         leads = await _from_inbox(db, regions)
         try:
             leads += await _from_youtube(db, regions)
@@ -285,6 +396,7 @@ class LeadScoutAgent(BaseAgent):
         leads.sort(key=lambda x: x["оценка"], reverse=True)
 
         out = {
+            "источники": sources,
             "найдено": len(leads),
             "горячих": sum(1 for x in leads if x["оценка"] >= HOT_SCORE),
             "лиды": leads[:15],          # больше 15 за раз всё равно не обработать
