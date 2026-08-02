@@ -267,10 +267,14 @@ async def _from_inbox(db: AsyncSession, regions: list[str]) -> list[dict[str, An
     for m in rows:
         # Форумная тема и пост в сообществе — это уже заявленный интерес,
         # человек не мимо проходил; комментарий под роликом слабее
-        bonus = 20 if m.source in ("forum", "vk_group") else 0
-        score = _score(m.text or "", bonus)
+        # Тема из земельного раздела форума уже отобрана самим разделом, и
+        # заголовок у неё короткий («Стоимость аренды участка у государства
+        # после аукциона») — по словам столько же, сколько наберёт пустой
+        # комментарий. Поэтому и надбавка, и порог ниже.
+        from_forum = m.source in ("forum", "vk_group")
+        score = _score(m.text or "", 20 if from_forum else 0)
         m.score = score                       # скоринг сохраняем всегда
-        if score < MIN_SCORE:
+        if score < (30 if from_forum else MIN_SCORE):
             continue
         region = _find_region(m.text or "", regions)
         pitch = await _region_pitch(db, region)
