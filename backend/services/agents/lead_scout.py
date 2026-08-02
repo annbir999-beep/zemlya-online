@@ -349,13 +349,16 @@ async def _notify(leads: list[dict[str, Any]], run_id: int | None) -> None:
     api = f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/sendMessage"
     chat = settings.ADMIN_TELEGRAM_CHAT_ID
 
-    async with httpx.AsyncClient(timeout=15) as client:
-        await client.post(api, json={
-            "chat_id": chat,
-            "text": f"🔎 Разведчик спроса: найдено {len(leads)} "
-                    f"(горячих {sum(1 for x in leads if x['оценка'] >= HOT_SCORE)}). "
-                    f"Ниже карточки — ответ пишете вы, агент ничего не отправляет.",
-        })
+    async with httpx.AsyncClient(timeout=20) as client:
+        try:
+            await client.post(api, json={
+                "chat_id": chat,
+                "text": f"🔎 Разведчик спроса: найдено {len(leads)} "
+                        f"(горячих {sum(1 for x in leads if x['оценка'] >= HOT_SCORE)}). "
+                        f"Ниже карточки — ответ пишете вы, агент ничего не отправляет.",
+            })
+        except Exception as e:
+            print(f"[lead_scout] сводка не ушла: {type(e).__name__}: {e}")
         for x in leads[:10]:
             region = x["регион"] or "регион не указан"
             # Двумя сообщениями: в первом кто и о чём, во втором — только текст
@@ -394,8 +397,15 @@ class LeadScoutAgent(BaseAgent):
     async def execute(self, db: AsyncSession) -> tuple[dict[str, Any], bool]:
         regions = await _regions(db)
 
-        # Сначала забираем внешние источники в инбокс, потом скорим всё разом
-        sources = await _ingest_external(db)
+        # Сначала забираем внешние источники в инбокс, потом скорим всё разом.
+        # Недоступный источник не должен ронять прогон: 02.08 форум не ответил
+        # из контейнера, и агент упал целиком, потеряв и лидов с YouTube.
+        try:
+            sources = await _ingest_external(db)
+        except Exception as e:
+            sources = {"внешние источники": f"сбор упал: {type(e).__name__}"}
+            await db.rollback()
+
         leads = await _from_inbox(db, regions)
         try:
             leads += await _from_youtube(db, regions)
