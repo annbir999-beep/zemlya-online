@@ -472,6 +472,8 @@ a.lot-card-title-link:hover {
 }
 
 @media (max-width: 768px) {
+  /* Кнопка канала уступает место входу и регистрации — в подвале ссылка есть */
+  .header-tg { display: none !important; }
   .header-nav { display: none !important; }
   .header-burger { display: inline-flex !important; }
   .header-actions { gap: 6px !important; flex-shrink: 0; }

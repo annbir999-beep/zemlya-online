@@ -60,6 +60,11 @@ class Settings(BaseSettings):
     INBOX_TELEGRAM_CHAT_ID: str = "" # чат/группа для входящих; пусто = ADMIN_TELEGRAM_CHAT_ID
     YOUTUBE_API_KEY: str = ""        # Google Cloud API key с включённым YouTube Data API v3
     YOUTUBE_CHANNEL_ID: str = "UCej045eSV8VJjK6Om9XXWzA"  # канал «ТОРГИ ЗЕМЛИ»
+    # OAuth для ОТВЕТОВ на комменты (scope youtube.force-ssl). Refresh-токен
+    # получается один раз через tools/youtube_oauth.py — согласие даёт Анна в браузере.
+    YOUTUBE_OAUTH_CLIENT_ID: str = ""
+    YOUTUBE_OAUTH_CLIENT_SECRET: str = ""
+    YOUTUBE_OAUTH_REFRESH_TOKEN: str = ""
     MAX_BOT_TOKEN: str = ""          # токен бота Max (создаётся у @MasterBot)
     OK_GROUP_TOKEN: str = ""         # токен Bot API группы ОК (Настройки → Работа с API)
 

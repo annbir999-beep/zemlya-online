@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { getMe, logout } from "@/lib/auth";
 import type { UserProfile } from "@/lib/api";
 import { useCompareIds } from "@/lib/useCompare";
+import { TG_CHANNEL_URL } from "@/lib/social";
 
 const PLAN_LABEL: Record<string, string> = {
   free: "Free", personal: "Личный", expert: "Эксперт", landlord: "Лендлорд",
@@ -153,6 +154,18 @@ export default function Header() {
       )}
 
       <div className="header-actions">
+        {/* Канал в шапке: подписка не требует регистрации, поэтому это самый
+            низкий барьер для человека, который зашёл посмотреть и уйти.
+            На узких экранах прячется (см. .header-tg в globals.css). */}
+        <a
+          href={TG_CHANNEL_URL}
+          target="_blank"
+          rel="noopener"
+          className="btn btn-secondary btn-sm header-tg"
+          title="Горячие лоты и новости торгов в Telegram"
+        >
+          ✈ Канал
+        </a>
         {compareIds.length > 0 && (
           <Link
             href={`/compare?ids=${compareIds.join(",")}`}

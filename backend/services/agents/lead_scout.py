@@ -76,12 +76,17 @@ YT_PER_QUERY = 8          # роликов на запрос
 YT_COMMENTS_PER_VIDEO = 40
 
 
-def _score(text: str) -> int:
-    """0-100: насколько человек похож на готового покупателя."""
+def _score(text: str, bonus: int = 0) -> int:
+    """0-100: насколько человек похож на готового покупателя.
+
+    bonus — надбавка за сам факт источника. Тема на форуме заводится ради
+    вопроса, но заголовок у неё короткий («Выбор участка») и по словам добирает
+    мало, поэтому без надбавки живые темы отсеивались все до одной.
+    """
     low = text.lower()
     if any(k in low for k in INTENT_NEGATIVE):
         return 0
-    score = 0
+    score = bonus
     if any(k in low for k in INTENT_STRONG):
         score += 45
     score += min(25, sum(5 for k in INTENT_WEAK if k in low))
@@ -195,7 +200,9 @@ async def _ingest_external(db: AsyncSession) -> dict[str, str]:
                     if not link or not title:
                         continue
                     body = f"{title}. {val('description')}"
-                    if _score(body) < MIN_SCORE:      # мимо темы — даже не храним
+                    # На входе фильтр мягкий — по теме, а не по готовности:
+                    # решать, лид это или нет, будет общий скоринг ниже
+                    if not any(k in body.lower() for k in INTENT_WEAK):
                         continue
                     ext = hashlib.sha256(link.encode()).hexdigest()[:40]
                     if await add("forum", ext, val("author") or name, body, link):
@@ -253,7 +260,10 @@ async def _from_inbox(db: AsyncSession, regions: list[str]) -> list[dict[str, An
 
     found = []
     for m in rows:
-        score = _score(m.text or "")
+        # Форумная тема и пост в сообществе — это уже заявленный интерес,
+        # человек не мимо проходил; комментарий под роликом слабее
+        bonus = 20 if m.source in ("forum", "vk_group") else 0
+        score = _score(m.text or "", bonus)
         m.score = score                       # скоринг сохраняем всегда
         if score < MIN_SCORE:
             continue

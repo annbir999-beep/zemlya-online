@@ -101,6 +101,11 @@ async def _send_reply(msg: InboxMessage, reply: str) -> bool:
             res = await _vk_api("wall.createComment", params)
             return "response" in res
 
+        if msg.source == "youtube":
+            from services.youtube_reply import reply_to_comment
+            # external_id — id комментария верхнего уровня, он же parentId ветки
+            return await reply_to_comment(msg.external_id, reply)
+
         if msg.source == "max":
             from services.max_bot import send_message as max_send
             return await max_send((raw or {}).get("chat_id"), reply)
@@ -199,7 +204,7 @@ async def _classify(msg: InboxMessage, history: str) -> Optional[dict]:
     channel = {"vk": "VK", "tg_comment": "комментарий в Telegram-канале",
                "tg_dm": "личка Telegram-бота", "site": "форма на сайте",
                "mail": "почта",
-               "youtube": "комментарий на YouTube (автоответ невозможен — только оценить и зафиксировать)",
+               "youtube": "комментарий под роликом на YouTube — ответ уйдёт публичной веткой под тем же комментарием, пиши коротко и по делу",
                "ok": "Одноклассники", "max": "мессенджер Max"}.get(msg.source, msg.source)
     kind = "комментарий под постом" if msg.event_type == "comment" else (
         "заявка с формы" if msg.event_type == "lead_form" else "личное сообщение")

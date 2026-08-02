@@ -16,6 +16,10 @@ export const SOCIAL_LINKS: { name: string; url: string }[] = [
   { name: "Max", url: "https://max.ru/id753611302731_biz" },
 ];
 
+// Канал — отдельной константой: он вынесен в шапку и на карточку лота, а не
+// только в подвал. Подписка не требует регистрации, это самый низкий барьер.
+export const TG_CHANNEL_URL = "https://t.me/torgi_zemli";
+
 export const CONTACT_EMAIL = "info@torgi-zemli.ru";
 export const CONTACT_TELEGRAM = "https://t.me/torgi_zemli";
 
