@@ -69,12 +69,27 @@ def agent_article_writer(self):
         raise self.retry(exc=exc)
 
 
+@celery_app.task(bind=True, max_retries=1, default_retry_delay=600)
+def agent_lead_scout(self):
+    """Агент «Разведчик спроса» — публичные вопросы про покупку земли.
+
+    Ничего никому не пишет: только находит, оценивает и готовит черновик
+    ответа. Отправляет человек — иначе это рассылка со всеми последствиями.
+    """
+    try:
+        _run(_run_simple_agent("lead_scout"))
+    except Exception as exc:
+        raise self.retry(exc=exc)
+
+
 async def _run_simple_agent(name: str):
     from db.database import AsyncSessionLocal
     from services.agents.news_scout import NewsScoutAgent
     from services.agents.article_writer import ArticleWriterAgent
+    from services.agents.lead_scout import LeadScoutAgent
 
-    agents = {"news_scout": NewsScoutAgent, "article_writer": ArticleWriterAgent}
+    agents = {"news_scout": NewsScoutAgent, "article_writer": ArticleWriterAgent,
+              "lead_scout": LeadScoutAgent}
     async with AsyncSessionLocal() as db:
         run = await agents[name]().run(db)
         print(f"[agent:{name}] run #{run.id} → {run.status}")
