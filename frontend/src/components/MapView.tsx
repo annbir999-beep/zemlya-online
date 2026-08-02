@@ -613,7 +613,7 @@ export default function MapView({ points, selectedId, heatmap, mode = "points" }
 
       {/* Мониторинг области — рисование полигона (только режим точек) */}
       {mode !== "heatmap" && (
-        <div style={{
+        <div className="map-tools" style={{
           position: "absolute", top: 78, left: 10, zIndex: 1000,
           display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-start",
         }}>
@@ -673,7 +673,7 @@ export default function MapView({ points, selectedId, heatmap, mode = "points" }
       )}
 
       {/* Легенда */}
-      <div style={{
+      <div className="map-legend" style={{
         position: "absolute", bottom: 28, right: 10, zIndex: 1000,
         background: "rgba(255,255,255,0.93)", borderRadius: 8,
         padding: "8px 12px", boxShadow: "0 1px 6px rgba(0,0,0,.2)",

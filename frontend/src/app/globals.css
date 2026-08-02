@@ -150,6 +150,12 @@ html, body { overflow-x: hidden; max-width: 100vw; }
   flex: 1;
   position: relative;
   overflow: hidden;
+  /* Свой слой: внутри карты кнопки и легенда сидят на z-index 1000 (так требует
+     Leaflet), и без изоляции они соперничают с модалками и мобильным drawer на
+     общем уровне — а карта в разметке идёт последней и выигрывает. Из-за этого
+     на телефоне легенда и переключатели лезли поверх панели фильтров. */
+  isolation: isolate;
+  z-index: 0;
 }
 
 /* ── Catalog (right panel / list mode) ── */
@@ -443,6 +449,26 @@ a.lot-card-title-link:hover {
 
 @media (max-width: 900px) {
   .mobile-filters-btn { display: inline-block !important; }
+
+  /* Обвязка карты на телефоне. В углы 375x390 всё это не помещается и лезет
+     друг на друга: селект срока уезжал за левый край и накрывал зум, плашка
+     покрытия сталкивалась с переключателем режима. Раскладываем по строкам,
+     легенду убираем — на маленькой карте она съедала треть экрана.
+     Позиции заданы инлайном в JSX, поэтому здесь !important. */
+  .map-mode { top: 8px !important; right: 8px !important; }
+  .map-deadline {
+    top: 50px !important; right: 8px !important; left: 56px !important;
+    /* без width:auto класс .select задаёт width:100%, и правый край уезжает
+       за экран: при заданных left+width значение right браузер игнорирует */
+    width: auto !important; max-width: none !important;
+  }
+  .map-tools { top: 88px !important; }
+  .map-coverage {
+    top: auto !important; bottom: 24px !important;
+    left: 64px !important; right: 8px !important;
+    max-width: none !important; font-size: 11px !important;
+  }
+  .map-legend { display: none !important; }
 }
 
 @media (max-width: 768px) {

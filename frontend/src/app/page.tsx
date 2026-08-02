@@ -195,8 +195,10 @@ export default function MapPage() {
         {/* Плашка о покрытии карты — показываем, когда часть лотов из списка
             не видна на карте из-за отсутствия координат (ждут обогащения PKK) */}
         {mapMode === "points" && total > 0 && mapPoints.length < total && (
-          <div style={{
-            position: "absolute", top: 12, left: 12, zIndex: 1000,
+          <div className="map-coverage" style={{
+            // left 56, а не 12: слева в углу стоят кнопки зума Leaflet, плашка
+            // их перекрывала
+            position: "absolute", top: 12, left: 56, zIndex: 1000,
             background: "rgba(255,255,255,0.96)", borderRadius: 8,
             padding: "8px 12px", boxShadow: "0 2px 8px rgba(0,0,0,.15)",
             border: "1px solid var(--border)",
@@ -214,12 +216,14 @@ export default function MapPage() {
         {/* Срок до закрытия окна — пресеты. Тот же селектор, что в /lots, чтобы
             пользователь мог быстро переключиться между «Срочно / Оптимально / Все». */}
         <select
-          className="select"
+          className="select map-deadline"
           value={deadlinePreset}
           onChange={e => applyDeadlinePreset(e.target.value)}
           title="Сколько дней осталось до закрытия приёма заявок"
           style={{
-            position: "absolute", top: 12, right: 170, zIndex: 1000,
+            // 200 = 12 (отступ) + 179 (ширина переключателя режима) + 9 (зазор):
+            // при 170 селект налезал на «Точки/Плотность»
+            position: "absolute", top: 12, right: 200, zIndex: 1000,
             height: 32, fontSize: 12, padding: "0 10px",
             background: "var(--surface)", color: "var(--text)",
             border: "1px solid var(--border)", borderRadius: 8,
@@ -231,7 +235,7 @@ export default function MapPage() {
         </select>
 
         {/* Переключатель режима карты */}
-        <div style={{
+        <div className="map-mode" style={{
           position: "absolute", top: 12, right: 12, zIndex: 1000,
           display: "flex", background: "var(--surface)", borderRadius: 8,
           boxShadow: "0 1px 4px rgba(0,0,0,.15)", overflow: "hidden",
