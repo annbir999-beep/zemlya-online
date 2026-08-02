@@ -26,6 +26,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import edge_tts
@@ -89,6 +90,10 @@ JOBS = [
         "index": 4,
         "new": "Почему? Двенадцать тысяч лотов по стране — за всеми уследить невозможно.",
         "cover": REPO / "covers" / "one-bidder-aerial-v2-cover.png",
+        # Последний клип ровно 8 с, а финальная реплика 8.64 с — картинка
+        # кончается раньше голоса, и слову «ЗЕМЛИ» не на чем прожечься.
+        # Растягиваем хвост: кадр медленный, 8% замедления не видно.
+        "tail": (49.512, 8.64 / 8.0),
     },
 ]
 
@@ -129,6 +134,20 @@ async def synth(text: str):
     return bytes(audio), words
 
 
+def say(text: str, tries: int = 4):
+    """synth с повтором: сервис Microsoft периодически рвёт соединение
+    (NoAudioReceived), при этом на том же тексте со второй попытки отвечает."""
+    for n in range(tries):
+        try:
+            return asyncio.run(synth(text))
+        except Exception as e:
+            if n == tries - 1:
+                raise
+            wait = 3 * 2 ** n
+            print(f"    синтез не удался ({type(e).__name__}), повтор через {wait} с")
+            time.sleep(wait)
+
+
 def mp3s(folder: Path) -> list[Path]:
     return sorted(folder.glob("edge_*.mp3"), key=lambda p: int(p.stem.split("_")[1]))
 
@@ -152,7 +171,7 @@ def check(job) -> bool:
     for i, (f, text) in enumerate(zip(files, scenes)):
         real = dur(f)
         tmp = WORK / "_probe.mp3"
-        audio, _ = asyncio.run(synth(text))
+        audio, _ = say(text)
         tmp.write_bytes(audio)
         mine = dur(tmp)
         diff = abs(mine - real)
@@ -175,8 +194,22 @@ def build(job) -> Path:
     idx, new_text = job["index"], job["new"]
     target = dur(files[idx])
 
+    # --- 0. хвост картинки короче звука: замедляем последнюю сцену ---
+    source = job["video"]
+    if job.get("tail"):
+        at, factor = job["tail"]
+        fixed = work / "source.mp4"
+        run(["ffmpeg", "-v", "error", "-y", "-i", source, "-filter_complex",
+             f"[0:v]trim=0:{at:.3f},setpts=PTS-STARTPTS[head];"
+             f"[0:v]trim={at:.3f},setpts=(PTS-STARTPTS)*{factor:.6f}[tail];"
+             "[head][tail]concat=n=2:v=1[v]",
+             "-map", "[v]", "-an", "-c:v", "libx264", "-preset", "medium",
+             "-crf", "18", "-pix_fmt", "yuv420p", fixed])
+        print(f"  хвост: {dur(source):.3f} с -> {dur(fixed):.3f} с картинки")
+        source = fixed
+
     # --- 1. новая реплика тем же голосом, подогнанная в длину старой ---
-    audio, _ = asyncio.run(synth(new_text))
+    audio, _ = say(new_text)
     raw = work / "new_raw.mp3"
     raw.write_bytes(audio)
     got = dur(raw)
@@ -198,7 +231,7 @@ def build(job) -> Path:
             run(["ffmpeg", "-v", "error", "-y", "-i", f, "-ac", "2", "-ar", "48000", wav])
         parts.append(wav)
 
-    vdur = dur(job["video"])
+    vdur = dur(source)
     args = ["ffmpeg", "-v", "error", "-y"]
     for p in parts:
         args += ["-i", p]
@@ -212,7 +245,7 @@ def build(job) -> Path:
 
     # --- 3. подмена звука, картинка без перекодирования ---
     final = work / "Final.mp4"
-    run(["ffmpeg", "-v", "error", "-y", "-i", job["video"], "-i", voice,
+    run(["ffmpeg", "-v", "error", "-y", "-i", source, "-i", voice,
          "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy",
          "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", final])
 
@@ -222,7 +255,7 @@ def build(job) -> Path:
     offset = 0.0
     for i, (f, text) in enumerate(zip(files, scenes)):
         real = dur(f)                      # у правленой сцены длина та же
-        _, words = asyncio.run(synth(text))
+        _, words = say(text)
         if words:
             span = max(e for _, e, _ in words)
             scale = real / span if span > 0 else 1.0
@@ -287,6 +320,9 @@ if __name__ == "__main__":
         all_ok = all(check(j) for j in JOBS)
         print("\nтексты сходятся" if all_ok else "\nесть расхождения — править тексты сцен")
         sys.exit(0 if all_ok else 1)
+    only = sys.argv[sys.argv.index("--only") + 1] if "--only" in sys.argv else None
     for job in JOBS:
+        if only and only not in job["name"]:
+            continue
         print(f"\n=== {job['name']} ===")
         place(job, build(job))
