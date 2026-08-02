@@ -186,7 +186,9 @@ async def _from_youtube(db: AsyncSession, regions: list[str]) -> list[dict[str, 
                 r = await client.get(YT_SEARCH, params={
                     "part": "id", "q": query, "type": "video",
                     "maxResults": YT_PER_QUERY,
-                    "order": "date", "relevanceLanguage": "ru", "key": key,
+                    # relevance, а не date: свежие ролики почти без комментариев,
+                    # а спрос живёт под популярными — там сотни вопросов
+                    "order": "relevance", "relevanceLanguage": "ru", "key": key,
                 })
                 r.raise_for_status()
                 video_ids = [i["id"]["videoId"] for i in r.json().get("items", [])]
@@ -198,7 +200,7 @@ async def _from_youtube(db: AsyncSession, regions: list[str]) -> list[dict[str, 
                     c = await client.get(YT_COMMENTS, params={
                         "part": "snippet", "videoId": vid,
                         "maxResults": YT_COMMENTS_PER_VIDEO,
-                        "order": "time", "textFormat": "plainText", "key": key,
+                        "order": "relevance", "textFormat": "plainText", "key": key,
                     })
                     if c.status_code != 200:      # комментарии часто закрыты
                         continue
