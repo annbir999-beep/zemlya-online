@@ -161,6 +161,13 @@ celery_app.conf.update(
         #     "task": "tasks.ai_batch_tasks.ai_batch_analyze",
         #     "schedule": crontab(minute=30, hour=6),
         # },
+        # Разведчик спроса: раз в сутки в 10:00 МСК ищет публичные вопросы про
+        # покупку земли и готовит черновики ответов. Ничего не отправляет —
+        # результат уходит в agent_runs со статусом waiting_approval.
+        "lead-scout": {
+            "task": "tasks.agent_tasks.agent_lead_scout",
+            "schedule": crontab(minute=0, hour=10),
+        },
         # Еженедельный email-дайджест: воскресенье 10:00 МСК — топ-10 лотов недели
         "weekly-digest": {
             "task": "tasks.digest_tasks.send_weekly_digest",
