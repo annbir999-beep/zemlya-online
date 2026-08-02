@@ -283,6 +283,23 @@ async def _handle_agent_callback(db: AsyncSession, callback: dict) -> None:
         await answer(f"Запуск #{run_id} не найден")
         return
 
+    # Лиды разведчика спроса — отдельная ветка: публиковать нечего, человек
+    # отвечает сам. Кнопка лишь снимает карточку с очереди.
+    if action in ("lead_done", "lead_skip"):
+        run.status = "done"
+        await db.commit()
+        await answer("Отмечено")
+        if chat_id and message_id:
+            mark = "✅ Ответила" if action == "lead_done" else "❌ Пропущено"
+            async with _tg_client(timeout=10) as client:
+                await client.post(
+                    f"https://api.telegram.org/bot{_settings.TELEGRAM_BOT_TOKEN}/editMessageReplyMarkup",
+                    json={"chat_id": chat_id, "message_id": message_id,
+                          "reply_markup": {"inline_keyboard": [[
+                              {"text": mark, "callback_data": "noop"}]]}},
+                )
+        return
+
     from services.agents.publishing import PublishError, approve_and_publish, skip_run
     try:
         if action == "agent_pub":

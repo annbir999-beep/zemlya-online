@@ -61,8 +61,19 @@ URGENCY = ["срочно", "до конца месяца", "в этом году
 
 YT_SEARCH = "https://www.googleapis.com/youtube/v3/search"
 YT_COMMENTS = "https://www.googleapis.com/youtube/v3/commentThreads"
-YT_QUERIES = ["земельный аукцион участок", "купить участок с торгов",
-              "торги земля ижс", "аукцион земли администрация"]
+# Запросы под разные формулировки одного и того же спроса. Каждый поиск стоит
+# 100 единиц квоты YouTube из 10 000 бесплатных в сутки — 12 запросов это 1200,
+# с запасом на всё остальное.
+YT_QUERIES = [
+    "земельный аукцион участок", "купить участок с торгов",
+    "торги земля ижс", "аукцион земли администрация",
+    "как купить землю у государства", "участок за копейки торги",
+    "выкуп земельного участка аукцион", "торги по банкротству земля",
+    "аренда земли у администрации", "земля под ижс дешево",
+    "как найти земельный участок для покупки", "кадастровая стоимость выкуп участка",
+]
+YT_PER_QUERY = 8          # роликов на запрос
+YT_COMMENTS_PER_VIDEO = 40
 
 
 def _score(text: str) -> int:
@@ -173,7 +184,8 @@ async def _from_youtube(db: AsyncSession, regions: list[str]) -> list[dict[str, 
         for query in YT_QUERIES:
             try:
                 r = await client.get(YT_SEARCH, params={
-                    "part": "id", "q": query, "type": "video", "maxResults": 5,
+                    "part": "id", "q": query, "type": "video",
+                    "maxResults": YT_PER_QUERY,
                     "order": "date", "relevanceLanguage": "ru", "key": key,
                 })
                 r.raise_for_status()
@@ -184,7 +196,8 @@ async def _from_youtube(db: AsyncSession, regions: list[str]) -> list[dict[str, 
             for vid in video_ids:
                 try:
                     c = await client.get(YT_COMMENTS, params={
-                        "part": "snippet", "videoId": vid, "maxResults": 20,
+                        "part": "snippet", "videoId": vid,
+                        "maxResults": YT_COMMENTS_PER_VIDEO,
                         "order": "time", "textFormat": "plainText", "key": key,
                     })
                     if c.status_code != 200:      # комментарии часто закрыты
@@ -214,6 +227,46 @@ async def _from_youtube(db: AsyncSession, regions: list[str]) -> list[dict[str, 
     return found
 
 
+async def _notify(leads: list[dict[str, Any]], run_id: int | None) -> None:
+    """Карточки лидов в Telegram Анне. Ответ пишет она — кнопки только
+    закрывают карточку, никакой автоотправки."""
+    from core.config import settings
+
+    if not settings.TELEGRAM_BOT_TOKEN or not leads:
+        return
+    api = f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/sendMessage"
+    chat = settings.ADMIN_TELEGRAM_CHAT_ID
+
+    async with httpx.AsyncClient(timeout=15) as client:
+        await client.post(api, json={
+            "chat_id": chat,
+            "text": f"🔎 Разведчик спроса: найдено {len(leads)} "
+                    f"(горячих {sum(1 for x in leads if x['оценка'] >= HOT_SCORE)}). "
+                    f"Ниже карточки — ответ пишете вы, агент ничего не отправляет.",
+        })
+        for x in leads[:10]:
+            region = x["регион"] or "регион не указан"
+            text = (
+                f"👤 {x['автор'] or 'без имени'} · {x['источник']}\n"
+                f"Готовность: {x['оценка']} из 100 · {region}\n\n"
+                f"Вопрос:\n«{x['текст']}»\n\n"
+                f"{x['ссылка'] or ''}\n\n"
+                f"Черновик ответа (скопируйте и отправьте от себя):\n"
+                f"<code>{x['черновик']}</code>"
+            )
+            payload = {"chat_id": chat, "text": text, "parse_mode": "HTML",
+                       "disable_web_page_preview": True}
+            if run_id:
+                payload["reply_markup"] = {"inline_keyboard": [[
+                    {"text": "✅ Ответила", "callback_data": f"lead_done:{run_id}"},
+                    {"text": "❌ Пропустить", "callback_data": f"lead_skip:{run_id}"},
+                ]]}
+            try:
+                await client.post(api, json=payload)
+            except Exception as e:
+                print(f"[lead_scout] карточка не ушла: {type(e).__name__}: {e}")
+
+
 class LeadScoutAgent(BaseAgent):
     name = "lead_scout"
 
@@ -234,5 +287,6 @@ class LeadScoutAgent(BaseAgent):
             "горячих": sum(1 for x in leads if x["оценка"] >= HOT_SCORE),
             "лиды": leads[:15],          # больше 15 за раз всё равно не обработать
         }
+        await _notify(out["лиды"], self.current_run.id if self.current_run else None)
         # Одобрение нужно всегда: отправляет ответы человек, не агент.
         return out, bool(leads)
