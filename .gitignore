@@ -54,3 +54,6 @@ marketing/video/fixes/_tmp_revoice/
 # Соцграфика и сторис-видео — генерируются скриптами, в git только тексты и промпты
 marketing/posts-90days/images/
 marketing/instagram/highlight-videos/
+
+# Лог автопроверки токена gws (пересоздаётся при каждом запуске)
+tools/gws_token_check.log
