@@ -251,6 +251,8 @@ async def _ingest_external(db: AsyncSession) -> dict[str, str]:
             else:
                 status["ВКонтакте"] = f"ок, новых постов: {added}"
 
+    status["YouTube"] = await _ingest_youtube(db, add)
+
     await db.commit()
     return status
 
@@ -262,6 +264,11 @@ async def _from_inbox(db: AsyncSession, regions: list[str]) -> list[dict[str, An
         .order_by(InboxMessage.created_at.desc())
         .limit(200)
     )).scalars().all()
+
+    # Источники, которые агент собирает сам. Их строки он вправе закрывать:
+    # это не переписка с клиентом, а сырьё разведки. Сообщения из наших
+    # собственных каналов (ВК, сайт, личка) закрывать нельзя — их читает Анна.
+    SCOUTED = {"forum", "vk_group", "youtube_ext"}
 
     found = []
     for m in rows:
@@ -275,11 +282,15 @@ async def _from_inbox(db: AsyncSession, regions: list[str]) -> list[dict[str, An
         score = _score(m.text or "", 20 if from_forum else 0)
         m.score = score                       # скоринг сохраняем всегда
         if score < (30 if from_forum else MIN_SCORE):
+            # Не лид: своё сырьё закрываем, чтобы не пересматривать каждый день
+            if m.source in SCOUTED:
+                m.status = "closed"
             continue
         region = _find_region(m.text or "", regions)
         pitch = await _region_pitch(db, region)
-        if score >= HOT_SCORE:
-            m.status = "escalated"
+        # Показали Анне — значит передали. Иначе один и тот же комментарий
+        # приходил бы карточкой каждое утро (так и было 02.08).
+        m.status = "escalated"
         found.append({
             "источник": m.source,
             "автор": m.author_name or m.author_id,
@@ -292,13 +303,17 @@ async def _from_inbox(db: AsyncSession, regions: list[str]) -> list[dict[str, An
     return found
 
 
-async def _from_youtube(db: AsyncSession, regions: list[str]) -> list[dict[str, Any]]:
-    """Комментарии под чужими роликами по теме — там нас ещё не знают."""
+async def _ingest_youtube(db: AsyncSession, add) -> str:
+    """Комментарии под чужими роликами по теме — там нас ещё не знают.
+
+    Складываем в тот же инбокс, что форумы: без этого один и тот же комментарий
+    приходил карточкой каждый день, потому что нигде не оставалось следа.
+    """
     key = os.getenv("YOUTUBE_API_KEY")
     if not key:
-        return []
+        return "нет ключа YOUTUBE_API_KEY"
 
-    found: list[dict[str, Any]] = []
+    added = 0
     async with httpx.AsyncClient(timeout=20) as client:
         for query in YT_QUERIES:
             try:
@@ -330,22 +345,13 @@ async def _from_youtube(db: AsyncSession, regions: list[str]) -> list[dict[str, 
                 for t in threads:
                     sn = t["snippet"]["topLevelComment"]["snippet"]
                     text = sn.get("textDisplay", "")
-                    score = _score(text)
-                    if score < MIN_SCORE:
+                    if not text or _score(text) < MIN_SCORE:
                         continue
-                    region = _find_region(text, regions)
-                    found.append({
-                        "источник": "youtube (чужой ролик)",
-                        "автор": sn.get("authorDisplayName"),
-                        "ссылка": f"https://www.youtube.com/watch?v={vid}"
-                                  f"&lc={t['id']}",
-                        "текст": text[:300],
-                        "регион": region,
-                        "оценка": score,
-                        "черновик": _draft(text, region,
-                                           await _region_pitch(db, region)),
-                    })
-    return found
+                    link = f"https://www.youtube.com/watch?v={vid}&lc={t['id']}"
+                    if await add("youtube_ext", t["id"],
+                                 sn.get("authorDisplayName") or "", text, link):
+                        added += 1
+    return f"ок, новых комментариев: {added}"
 
 
 async def _notify(leads: list[dict[str, Any]], run_id: int | None) -> None:
@@ -416,11 +422,6 @@ class LeadScoutAgent(BaseAgent):
             await db.rollback()
 
         leads = await _from_inbox(db, regions)
-        try:
-            leads += await _from_youtube(db, regions)
-        except Exception as e:
-            print(f"[lead_scout] youtube пропущен: {type(e).__name__}: {e}")
-
         await db.commit()
         leads.sort(key=lambda x: x["оценка"], reverse=True)
 
