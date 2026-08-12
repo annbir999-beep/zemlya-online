@@ -34,13 +34,19 @@ async def _with_engine_cleanup(coro):
 
 
 @contextmanager
-def _single_flight(name: str, ttl: int = 3600 * 4):
+def _single_flight(name: str, ttl: int = 3300):
     """Redis-лок: не даёт двум копиям одной periodic-задачи стартовать
     одновременно. Без этого при runtime > интервала beat-расписания задачи
     складываются друг на друга и забивают все worker'ы (concurrency=4),
     голодая scrape_torgi_gov и остальные periodic-задачи (найдено 08.07,
     enrich_with_rosreestr шёл ~100 мин вместо расчётных ~12).
-    Если лок уже занят — просто пропускаем этот запуск (yield False)."""
+    Если лок уже занят — просто пропускаем этот запуск (yield False).
+
+    TTL меньше интервала beat (55 мин при часовом расписании) намеренно. Жёсткое
+    снятие по task_time_limit убивает процесс, минуя finally, и лок остаётся
+    висеть. С прежними четырьмя часами это стопорило задачу на полдня: 12.08
+    координаты не обновлялись двое суток, каждый час в логах «предыдущий прогон
+    ещё идёт», при том что активных задач не было вовсе."""
     import redis
     from core.config import settings
 
@@ -106,12 +112,16 @@ async def _scrape_avito(region_codes: list = None, pages_per_region: int = 3):
 
 
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=600)
-def enrich_with_rosreestr(self, batch_size: int = 2000):
+def enrich_with_rosreestr(self, batch_size: int = 800):
     """Обогащаем участки данными из Росреестра (кадастровые данные).
 
-    batch_size — сколько лотов брать за один прогон. Дефолт 2000 — при паузе
-    0.35с между запросами PKK даёт ~12 минут на цикл, помещается в часовой beat.
-    Был 500/6ч — слишком медленно для 12000+ backlog без координат.
+    batch_size — сколько лотов брать за один прогон. 800 при паузе 0.35с даёт
+    ~5 минут расчётного времени и с запасом влезает в task_soft_time_limit
+    (20 минут), даже когда PKK отвечает втрое медленнее обычного.
+
+    Было 2000: по расчёту 12 минут, но на живом PKK прогон упирался в жёсткий
+    лимит 25 минут и умирал, не сохранив прогресс и оставив висеть лок. Лучше
+    восемь коротких успешных прогонов, чем один длинный убитый.
     """
     with _single_flight("enrich_with_rosreestr") as acquired:
         if not acquired:
