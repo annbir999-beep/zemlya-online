@@ -48,6 +48,58 @@ POST_PROMPT = """Ты — SMM-редактор Telegram-канала про зе
 Верни только текст поста, без пояснений и без ссылок."""
 
 
+def _platform_variants(lot, lot_url: str) -> dict[str, str]:
+    """Тот же лот под остальные площадки.
+
+    Без обращения к ИИ: фактура у лота одна и та же, а различаются площадки
+    длиной и формой призыва. Тратить деньги и время на генерацию четырёх
+    пересказов одного и того же незачем — достаточно собрать из полей.
+
+    Публикацией занимается агент Анны, поэтому здесь только тексты: наша часть
+    заканчивается на готовой заготовке.
+    """
+    area = f"{lot.area_sqm / 100:.1f}".rstrip("0").rstrip(".") if lot.area_sqm else None
+    price = f"{lot.start_price:,.0f} ₽".replace(",", " ") if lot.start_price else None
+    where = lot.region_name or "Россия"
+    disc = (f"это на {lot.discount_to_market_pct:.0f}% ниже средней цены похожих участков рядом"
+            if lot.discount_to_market_pct and 10 <= lot.discount_to_market_pct <= 95 else None)
+    head = " · ".join(filter(None, [
+        f"{area} соток" if area else None, where, f"старт {price}" if price else None,
+    ]))
+    deadline = (f"Приём заявок до {lot.submission_end:%d.%m}"
+                if getattr(lot, "submission_end", None) else None)
+
+    short = "\n".join(filter(None, [
+        f"🌱 {head}",
+        disc and disc[0].upper() + disc[1:] + ".",
+        deadline and deadline + ".",
+        f"Подробности и документы: {lot_url}",
+    ]))
+
+    mid = "\n\n".join(filter(None, [
+        f"Участок с государственных торгов: {head}.",
+        disc and (disc[0].upper() + disc[1:] +
+                  ". Считаем сравнением стартовой цены за метр с медианой предложений в регионе."),
+        "Проверили по кадастру: вид разрешённого использования, обременения, охранные зоны. "
+        + (deadline + "." if deadline else ""),
+        f"Карточка лота со всеми документами: {lot_url}",
+    ]))
+
+    caption = "\n".join(filter(None, [
+        f"{area} соток за {price}" if area and price else head,
+        where,
+        disc and "Дешевле рынка.",
+        "Ссылка в профиле — там все действующие аукционы страны на карте.",
+        "#земельныйучасток #торги #земля #ижс #торгиземли",
+    ]))
+
+    return {
+        "vk_ok_max": short,
+        "dzen_site": mid,
+        "instagram_tiktok": caption,
+    }
+
+
 class TgLotOfTheDayAgent(BaseAgent):
     name = "tg_lot_of_the_day"
 
@@ -122,6 +174,7 @@ class TgLotOfTheDayAgent(BaseAgent):
             "lot_url": lot_url,
             "post_text": post_text,
             "channel": CHANNEL,
+            "variants": _platform_variants(lot, lot_url),
         }
 
         # Публикуем сами, если лот прошёл проверку качества. Ручное одобрение
@@ -143,6 +196,16 @@ class TgLotOfTheDayAgent(BaseAgent):
                 output["published"] = True
                 await self._notify_admin(
                     "📣 Опубликовано в канале автоматически:\n\n" + post_text,
+                    lot_url, with_buttons=False,
+                )
+                # Заготовки для остальных площадок — отдельным сообщением,
+                # чтобы копировались одним касанием и не мешали читать пост
+                v = output["variants"]
+                await self._notify_admin(
+                    "📋 Тот же лот для остальных площадок.\n\n"
+                    "— ВК, Одноклассники, Max —\n" + v["vk_ok_max"] +
+                    "\n\n— Дзен, сайт —\n" + v["dzen_site"] +
+                    "\n\n— Instagram, TikTok —\n" + v["instagram_tiktok"],
                     lot_url, with_buttons=False,
                 )
                 return output, False
