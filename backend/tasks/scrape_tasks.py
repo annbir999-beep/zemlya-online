@@ -946,7 +946,7 @@ async def _enrich_nearby_features(batch_size: int):
     from sqlalchemy import select, or_, and_, func
     from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
     from core.config import settings
-    from models.lot import Lot, LotStatus
+    from models.lot import Lot, LotStatus, LotSource
     from services.osm_features import fetch_nearby_features
 
     engine = create_async_engine(settings.DATABASE_URL, pool_pre_ping=True, pool_size=5, max_overflow=0)
@@ -964,6 +964,11 @@ async def _enrich_nearby_features(batch_size: int):
             )
             .where(
                 and_(
+                    # Только аукционные лоты: Avito и ЦИАН — рыночные объявления
+                    # для сравнения цены, окружение им не нужно. Без этого
+                    # фильтра часовой бюджет Overpass уходил на них, и у 7422
+                    # активных лотов torgi.gov окружения не было вовсе.
+                    Lot.source == LotSource.TORGI_GOV,
                     Lot.status == LotStatus.ACTIVE,
                     Lot.location.isnot(None),
                     or_(Lot.nearby_features_at.is_(None), Lot.nearby_features_at < cutoff),
