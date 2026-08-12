@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import ServiceLeadForm from "@/components/ServiceLeadForm";
 import { PRICE_SELECT, PRICE_TURNKEY_FROM, SUCCESS_FEE_PCT, money } from "@/lib/servicePricing";
+import { regionIn } from "@/lib/regionCase";
 
 /* Региональный лендинг услуги: /services/moskovskaya-oblast
  *
@@ -41,7 +42,7 @@ export async function generateMetadata({ params }: { params: Promise<{ region: s
   const d = await fetchRegion(region);
   if (!d) return { title: "Подбор земельных участков на торгах" };
   return {
-    title: `Купить землю на торгах в ${d.name} — подбор и сопровождение`,
+    title: `Купить землю на торгах в ${regionIn(d.name)} — подбор и сопровождение`,
     description: `Сейчас в регионе ${d.count} действующих земельных аукционов. ` +
       `Подберём участок под вашу задачу, проверим по кадастру и проведём торги. ` +
       `Подбор от ${money(PRICE_SELECT)}.`,
@@ -67,7 +68,7 @@ export default async function RegionServicePage({ params }: { params: Promise<{ 
 
         <h1 style={{ fontSize: 32, fontWeight: 800, lineHeight: 1.25, marginBottom: 14 }}>
           Подберём участок на торгах в{" "}
-          <span style={{ color: "var(--primary)" }}>{d.name}</span> — и доведём до договора
+          <span style={{ color: "var(--primary)" }}>{regionIn(d.name)}</span> — и доведём до договора
         </h1>
 
         <p style={{ fontSize: 17, color: "var(--text-2)", lineHeight: 1.65, marginBottom: 28 }}>
