@@ -63,7 +63,7 @@ export default function ServiceLeadForm({
         <div style={{ fontSize: 32, marginBottom: 8 }}>✅</div>
         <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 6 }}>Заявка принята</div>
         <div style={{ color: "var(--text-2)", lineHeight: 1.6 }}>
-          Свяжусь с вами в течение дня. Если удобнее сразу — пишите в Telegram{" "}
+          Свяжемся с вами в течение рабочего дня. Если удобнее сразу — пишите в Telegram{" "}
           <a href="https://t.me/torgi_zemli" style={{ color: "var(--primary)" }}>@torgi_zemli</a>.
         </div>
       </div>
@@ -107,7 +107,7 @@ export default function ServiceLeadForm({
         {sending ? "Отправляю…" : "Отправить заявку"}
       </button>
       <div style={{ fontSize: 12.5, color: "var(--text-2)", lineHeight: 1.5 }}>
-        Отвечаю лично в течение дня. Ничего не списываем и не подписываем без вашего согласия.
+        Отвечаем в течение рабочего дня. Ничего не списываем и не подписываем без вашего согласия.
       </div>
     </form>
   );
