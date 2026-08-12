@@ -15,7 +15,9 @@ from sqlalchemy import select, desc, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import settings
-from models.lot import Lot, LotStatus
+from datetime import datetime, timezone
+
+from models.lot import Lot, LotSource, LotStatus
 from models.agent_run import AgentRun
 from services.agents.base import BaseAgent
 from services.ai_assessment import client as anthropic_client
@@ -70,9 +72,16 @@ class TgLotOfTheDayAgent(BaseAgent):
         q = (
             select(Lot)
             .where(
+                # Только аукционные лоты: Avito и ЦИАН — рыночные объявления для
+                # сравнения цены, а не то, на что можно подать заявку. Пост про
+                # такой «лот» подорвал бы доверие к каналу мгновенно.
+                Lot.source == LotSource.TORGI_GOV,
                 Lot.status == LotStatus.ACTIVE,
                 Lot.score.isnot(None),
                 Lot.start_price.isnot(None),
+                Lot.start_price > 0,
+                # Приём заявок ещё идёт — иначе зовём туда, куда уже не попасть
+                Lot.submission_end > datetime.now(timezone.utc),
             )
             .order_by(desc(Lot.score))
             .limit(50)
@@ -115,12 +124,37 @@ class TgLotOfTheDayAgent(BaseAgent):
             "channel": CHANNEL,
         }
 
-        # Шлём черновик Анне на одобрение
+        # Публикуем сами, если лот прошёл проверку качества. Ручное одобрение
+        # звучало разумно, но на деле убило канал: с 14.06 накопилось 44
+        # неопубликованных поста — контент делался каждый день и умирал в
+        # ожидании нажатия. Пусть лучше выходит хороший лот без спроса, чем
+        # не выходит ничего.
+        discount = lot.discount_to_market_pct
+        good = (
+            (lot.score or 0) >= 60
+            # Дисконт либо не посчитан, либо правдоподобный: «скидка 99%» почти
+            # всегда означает кривую рыночную медиану, а не удачу
+            and (discount is None or 10 <= discount <= 95)
+        )
+
+        if good:
+            try:
+                await publish_to_channel(post_text)
+                output["published"] = True
+                await self._notify_admin(
+                    "📣 Опубликовано в канале автоматически:\n\n" + post_text,
+                    lot_url, with_buttons=False,
+                )
+                return output, False
+            except Exception as e:
+                print(f"[agent:tg_lot_of_the_day] публикация не удалась: {e}")
+
+        # Не прошёл проверку или публикация упала — на ручное решение
         await self._notify_admin(post_text, lot_url)
+        return output, True
 
-        return output, True  # requires_approval=True
-
-    async def _notify_admin(self, post_text: str, lot_url: str) -> None:
+    async def _notify_admin(self, post_text: str, lot_url: str,
+                            with_buttons: bool = True) -> None:
         """Отправляет черновик поста админу в Telegram с кнопками одобрения."""
         admin_chat_id = settings.ADMIN_TELEGRAM_CHAT_ID
         if not settings.TELEGRAM_BOT_TOKEN:
@@ -136,7 +170,7 @@ class TgLotOfTheDayAgent(BaseAgent):
             "parse_mode": "Markdown",
             "disable_web_page_preview": True,
         }
-        if run_id:
+        if run_id and with_buttons:
             payload["reply_markup"] = {
                 "inline_keyboard": [[
                     {"text": "✅ Опубликовать", "callback_data": f"agent_pub:{run_id}"},
