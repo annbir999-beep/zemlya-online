@@ -312,6 +312,14 @@ export default function MapView({ points, selectedId, heatmap, mode = "points" }
         zoomControl: true,
       });
 
+      // Своя подпись библиотеки вместо стандартной: с версии 1.9 Leaflet
+      // подмешивает в неё флаг Украины. Ссылка на разработчиков остаётся,
+      // атрибуция OpenStreetMap ниже тоже — она обязательна по лицензии,
+      // а флаг к лицензии отношения не имеет.
+      map.attributionControl.setPrefix(
+        '<a href="https://leafletjs.com" target="_blank" rel="noopener">Leaflet</a>'
+      );
+
       // Переключаемые базовые слои (как в навигаторе: схема/спутник/гибрид/топо).
       // Схема — стандартный OSM: яркий, с русскими подписями в РФ.
       const osmAttr = '© <a href="https://openstreetmap.org">OpenStreetMap</a>';
