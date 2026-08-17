@@ -214,9 +214,12 @@ class MorningCheckAgent(BaseAgent):
             f"• Банкротных: {bankrupt:,}\n".replace(",", " ") +
             f"• Ingest 30ч: " + ", ".join(f"{l} +{c}" for l, c in ingest_by_source.items()) + "\n"
             f"• Очередь: {queue_depth}\n\n" +
+            # Блок отделён `+` намеренно: соседние f-строки склеиваются в один
+            # литерал, и `.replace(",", " ")` из блока про деньги (он для разрядов
+            # в выручке) съедал запятую в «(79%), свободно».
             f"🖥 *Сервер*\n"
             f"• Диск: {disk_used_gb:.1f} / {disk_total_gb:.1f} ГБ ({disk_pct}%), "
-            f"свободно {disk_free_gb:.1f} ГБ\n\n"
+            f"свободно {disk_free_gb:.1f} ГБ\n\n" +
             f"💰 *Деньги за сутки*\n"
             f"• Платежей: {pay_count}\n"
             f"• Выручка: {pay_sum:,.0f} ₽\n\n".replace(",", " ")
