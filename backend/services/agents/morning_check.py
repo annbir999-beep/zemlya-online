@@ -53,11 +53,43 @@ _BACKUP_DIR = "/backups"
 _BACKUP_MAX_AGE_H = 48          # cron суточный, 48ч = один пропущенный прогон терпим
 _BACKUP_MIN_MB = 50             # дамп ~475 МБ; собственный порог скрипта (10 КБ) слишком мягкий
 
+# Расписание root смонтировано как /crontabs:ro (каталог, не файл — см. compose).
+_CRONTAB_PATH = "/crontabs/root"
+_CRON_BACKUP_MARKER = "backup_db.sh"
+
 
 def _pct(part: int, total: int) -> str:
     if not total:
         return "0%"
     return f"{round(part / total * 100)}%"
+
+
+def _check_cron() -> dict[str, Any]:
+    """Цело ли расписание cron — и на месте ли в нём строка бэкапа.
+
+    Проверка бэкап-файлов ловит пропажу только постфактум: возраст перевалит за
+    48ч через двое суток. Здесь ловим причину сразу — 27.07.2026 исчезла именно
+    строка из `crontab -l`, и узнали об этом на 45-й день. Заодно считаем все
+    задания: тогда `crontab -` без предварительного `crontab -l` затёр список
+    целиком, а не одну строку.
+
+    Чего эта проверка НЕ видит: остановленный демон cron (у контейнера свой
+    PID namespace). Такой случай подберёт возраст последнего дампа.
+    """
+    info: dict[str, Any] = {"readable": False, "jobs": 0, "backup_job": False}
+    try:
+        lines = Path(_CRONTAB_PATH).read_text(errors="replace").splitlines()
+        info["readable"] = True
+        # Задание = не комментарий и не присваивание переменной (MAILTO=, PATH=)
+        jobs = [
+            s for ln in lines
+            if (s := ln.strip()) and not s.startswith("#") and "=" not in s.split()[0]
+        ]
+        info["jobs"] = len(jobs)
+        info["backup_job"] = any(_CRON_BACKUP_MARKER in s for s in jobs)
+    except Exception as e:
+        info["error"] = f"{type(e).__name__}: {e}"
+    return info
 
 
 def _check_backups() -> dict[str, Any]:
@@ -191,8 +223,9 @@ class MorningCheckAgent(BaseAgent):
         except Exception as e:
             print(f"[agent:morning_check] disk check failed: {e}")
 
-        # ── Бэкапы БД ──
+        # ── Бэкапы БД и расписание cron ──
         backup = _check_backups()
+        cron = _check_cron()
 
         metrics = {
             "active_lots": active,
@@ -215,6 +248,7 @@ class MorningCheckAgent(BaseAgent):
             "disk_free_gb": round(disk_free_gb, 1),
             "disk_pct": disk_pct,
             "backup": backup,
+            "cron": cron,
         }
 
         # ── Сборка отчёта ──
@@ -241,6 +275,22 @@ class MorningCheckAgent(BaseAgent):
             warnings.append(
                 f"⚠️ Очередь Celery раздута: {queue_depth} задач — проверить, не стакаются ли "
                 f"periodic-задачи (inspect active)"
+            )
+        if cron.get("error"):
+            warnings.append(
+                f"⚠️ Не читается crontab: {cron['error']} — смонтирован ли "
+                f"/crontabs в контейнер воркера (docker-compose.yml)?"
+            )
+        elif cron["jobs"] == 0:
+            warnings.append(
+                "⚠️ Crontab пуст — задания стёрты целиком. Так уже было 27.07 "
+                "(`crontab -` без предварительного `crontab -l` затирает список)"
+            )
+        elif not cron["backup_job"]:
+            warnings.append(
+                f"⚠️ В crontab НЕТ строки бэкапа ({_CRON_BACKUP_MARKER}) при "
+                f"{cron['jobs']} других заданиях — вернуть: (crontab -l; echo "
+                f"\"30 2 * * * /app/scripts/backup_db.sh >> /var/log/sotka-backup.log 2>&1\") | crontab -"
             )
         if backup.get("error"):
             warnings.append(
@@ -295,6 +345,16 @@ class MorningCheckAgent(BaseAgent):
         else:
             backup_line = "НЕТ ФАЙЛОВ — проверить cron"
 
+        if not cron.get("readable"):
+            cron_line = "н/д (не читается расписание)"
+        elif cron["jobs"] == 0:
+            cron_line = "ПУСТ — задания стёрты"
+        else:
+            cron_line = (
+                f"{cron['jobs']} заданий, "
+                f"{'бэкап на месте' if cron['backup_job'] else 'СТРОКИ БЭКАПА НЕТ'}"
+            )
+
         report = (
             f"☀️ *Утренний отчёт — Торги Земли*\n"
             f"{now.strftime('%d.%m.%Y')}\n\n"
@@ -314,7 +374,8 @@ class MorningCheckAgent(BaseAgent):
             f"🖥 *Сервер*\n"
             f"• Диск: {disk_used_gb:.1f} / {disk_total_gb:.1f} ГБ ({disk_pct}%), "
             f"свободно {disk_free_gb:.1f} ГБ\n"
-            f"• Бэкап БД: {backup_line}\n\n" +
+            f"• Бэкап БД: {backup_line}\n"
+            f"• Cron: {cron_line}\n\n" +
             f"💰 *Деньги за сутки*\n"
             f"• Платежей: {pay_count}\n"
             f"• Выручка: {pay_sum:,.0f} ₽\n\n".replace(",", " ")
