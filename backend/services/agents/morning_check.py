@@ -64,6 +64,18 @@ def _pct(part: int, total: int) -> str:
     return f"{round(part / total * 100)}%"
 
 
+def _plural(n: int, one: str, few: str, many: str) -> str:
+    """Согласование существительного с числом: 1 задание, 2 задания, 5 заданий."""
+    if 11 <= n % 100 <= 14:
+        return many
+    tail = n % 10
+    if tail == 1:
+        return one
+    if 2 <= tail <= 4:
+        return few
+    return many
+
+
 def _check_cron() -> dict[str, Any]:
     """Цело ли расписание cron — и на месте ли в нём строка бэкапа.
 
@@ -288,8 +300,8 @@ class MorningCheckAgent(BaseAgent):
             )
         elif not cron["backup_job"]:
             warnings.append(
-                f"⚠️ В crontab НЕТ строки бэкапа ({_CRON_BACKUP_MARKER}) при "
-                f"{cron['jobs']} других заданиях — вернуть: (crontab -l; echo "
+                f"⚠️ В crontab НЕТ строки бэкапа ({_CRON_BACKUP_MARKER}), "
+                f"остальных заданий: {cron['jobs']} — вернуть: (crontab -l; echo "
                 f"\"30 2 * * * /app/scripts/backup_db.sh >> /var/log/sotka-backup.log 2>&1\") | crontab -"
             )
         if backup.get("error"):
@@ -340,7 +352,8 @@ class MorningCheckAgent(BaseAgent):
             }.get(backup.get("s3"), "S3 н/д")
             backup_line = (
                 f"{backup['size_mb']} МБ, {backup['age_hours']:.0f}ч назад, "
-                f"копий {backup['count']}, {s3_label}"
+                f"{backup['count']} {_plural(backup['count'], 'копия', 'копии', 'копий')}, "
+                f"{s3_label}"
             )
         else:
             backup_line = "НЕТ ФАЙЛОВ — проверить cron"
@@ -351,7 +364,7 @@ class MorningCheckAgent(BaseAgent):
             cron_line = "ПУСТ — задания стёрты"
         else:
             cron_line = (
-                f"{cron['jobs']} заданий, "
+                f"{cron['jobs']} {_plural(cron['jobs'], 'задание', 'задания', 'заданий')}, "
                 f"{'бэкап на месте' if cron['backup_job'] else 'СТРОКИ БЭКАПА НЕТ'}"
             )
 
