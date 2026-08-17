@@ -59,7 +59,9 @@ class AlertCreateRequest(BaseModel):
 
 def _check_polygon_plan(filters_dict: dict, user: User) -> None:
     """Полигон-мониторинг доступен только Инвестор+. Иначе — 402 с апселлом."""
-    if filters_dict.get("polygon") and user.subscription_plan not in POLYGON_PLANS:
+    # effective_plan, а не subscription_plan: истёкшая подписка = FREE.
+    from core.plans import effective_plan
+    if filters_dict.get("polygon") and effective_plan(user) not in POLYGON_PLANS:
         raise HTTPException(
             status_code=402,
             detail="Мониторинг области на карте доступен с тарифа «Инвестор». Обновите подписку.",

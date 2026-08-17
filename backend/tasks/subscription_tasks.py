@@ -39,6 +39,55 @@ def notify_expiring_subscriptions():
 PLAN_LABELS = {"personal": "Pro", "investor": "Инвестор", "expert": "Бюро", "landlord": "Бюро+", "enterprise": "Enterprise"}
 
 
+@celery_app.task
+def downgrade_expired_subscriptions():
+    """Перевод истёкших подписок на free — то, что обещано в письме-напоминании.
+
+    Гейты и так считают истёкшую подписку за free (core.plans.effective_plan), эта
+    задача приводит в порядок саму запись: план, лимит фильтров. Бессрочные выдачи
+    (subscription_expires_at IS NULL, Enterprise/партнёры) не трогаем.
+    """
+    return _run(_downgrade_expired())
+
+
+async def _downgrade_expired() -> int:
+    from datetime import datetime, timezone
+    from sqlalchemy import select, update, and_
+    from db.database import AsyncSessionLocal
+    from models.user import User, SubscriptionPlan
+    from api.users import PLAN_FILTER_LIMITS
+
+    now = datetime.now(timezone.utc)
+    free_limit = PLAN_FILTER_LIMITS[SubscriptionPlan.FREE]
+
+    async with AsyncSessionLocal() as db:
+        rows = (await db.execute(
+            select(User.id, User.email, User.subscription_plan).where(
+                and_(
+                    User.subscription_plan != SubscriptionPlan.FREE,
+                    User.subscription_expires_at.isnot(None),
+                    User.subscription_expires_at < now,
+                )
+            )
+        )).all()
+        if not rows:
+            return 0
+        await db.execute(
+            update(User)
+            .where(User.id.in_([r.id for r in rows]))
+            .values(
+                subscription_plan=SubscriptionPlan.FREE,
+                saved_filters_limit=free_limit,
+            )
+        )
+        await db.commit()
+        for r in rows:
+            plan = r.subscription_plan.value if r.subscription_plan else "?"
+            print(f"[sub-downgrade] {r.email}: {plan} → free")
+        print(f"[sub-downgrade] понижено: {len(rows)}")
+        return len(rows)
+
+
 async def _notify_expiring():
     from datetime import datetime, timezone, timedelta
     from sqlalchemy import select, and_

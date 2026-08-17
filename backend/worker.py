@@ -65,6 +65,12 @@ celery_app.conf.update(
             "task": "tasks.subscription_tasks.notify_expiring_subscriptions",
             "schedule": crontab(minute=0, hour=11),
         },
+        # Перевод истёкших подписок на free — 00:20 МСК. Гейты и так видят истёкшую
+        # подписку как free (core.plans.effective_plan), задача чистит саму запись.
+        "downgrade-expired-subscriptions": {
+            "task": "tasks.subscription_tasks.downgrade_expired_subscriptions",
+            "schedule": crontab(minute=20, hour=0),
+        },
         # Ежедневный re-parse PDF договоров обновлёнными regex'ами contract_parser.
         # Берёт лоты, у которых contract_terms ещё пуст / неполный — повторно скачивает
         # contract.pdf и применяет новые патерны. ~500 лотов за прогон = ~10 минут.

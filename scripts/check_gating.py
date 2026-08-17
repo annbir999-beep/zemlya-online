@@ -89,6 +89,35 @@ def main() -> int:
         if r3.status_code == 200:
             failures.append("GET /api/lots/export отдал 200 анониму (должен быть 401/403)")
 
+        # 6. Премиум-сортировка анониму должна игнорироваться (иначе топ по дисконту
+        #    отдаётся в обход обнуления фильтров — аудит 17.08.2026)
+        r4 = c.get(
+            f"{base}/api/lots",
+            # sort_order намеренно дефолтный (asc): при рабочем гейте sort_by падает
+            # на auction_end_date и порядок обязан совпасть с проверкой №1
+            params={"per_page": 20, "status": "active",
+                    "sort_by": "discount_to_market"},
+        )
+        if r4.status_code == 200:
+            sorted_ids = [i["id"] for i in r4.json().get("items", [])]
+            if sorted_ids and sorted_ids != [i["id"] for i in items]:
+                failures.append(
+                    "премиум-сортировка sort_by=discount_to_market сработала у анонима "
+                    "(порядок отличается от дефолтного)"
+                )
+
+        # 7. Попап карты — то же зеркало гейта, что и список (свой набор полей,
+        #    поэтому раньше был слепой зоной этого скрипта)
+        r5 = c.get(f"{base}/api/lots/{items[0]['id']}/map-popup")
+        if r5.status_code == 200:
+            popup = r5.json()
+            for field in ("discount_to_market_pct", "pct"):
+                if popup.get(field) is not None:
+                    failures.append(
+                        f"утечка премиум-поля «{field}» анониму в /map-popup "
+                        f"(лот {items[0]['id']})"
+                    )
+
     print(f"Проверено лотов: {len(items)}, всего в выдаче: {total_plain}")
     for n in notes:
         print(f"  ~ {n}")

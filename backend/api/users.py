@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from core.config import settings
+from core.plans import effective_plan
 from db.database import get_db
 from models.user import User, SubscriptionPlan
 from core.security import hash_password, verify_password, create_access_token, create_refresh_token, decode_token, decode_refresh_token, oauth2_scheme, oauth2_scheme_optional
@@ -306,7 +307,9 @@ async def get_me(user: User = Depends(get_current_user)):
         name=user.name,
         phone=user.phone,
         telegram_id=user.telegram_id,
-        subscription_plan=user.subscription_plan.value,
+        # Фактический тариф (истёкшая подписка = free), чтобы фронт-зеркало plan.ts
+        # не рисовало открытыми блоки, которые бэкенд уже закрыл.
+        subscription_plan=effective_plan(user).value,
         subscription_expires_at=user.subscription_expires_at.isoformat() if user.subscription_expires_at else None,
         saved_filters_limit=user.saved_filters_limit,
         notification_email=user.notification_email,
@@ -343,7 +346,9 @@ async def update_profile(
         name=user.name,
         phone=user.phone,
         telegram_id=user.telegram_id,
-        subscription_plan=user.subscription_plan.value,
+        # Фактический тариф (истёкшая подписка = free), чтобы фронт-зеркало plan.ts
+        # не рисовало открытыми блоки, которые бэкенд уже закрыл.
+        subscription_plan=effective_plan(user).value,
         subscription_expires_at=user.subscription_expires_at.isoformat() if user.subscription_expires_at else None,
         saved_filters_limit=user.saved_filters_limit,
         notification_email=user.notification_email,

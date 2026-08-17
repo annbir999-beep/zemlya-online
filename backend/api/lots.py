@@ -10,7 +10,7 @@ import math
 from core.config import settings
 from db.database import get_db
 from models.lot import Lot, LotStatus, LandPurpose, AuctionType, LotSource, AuctionForm, DealType, AreaDiscrepancy, ResaleType
-from models.user import User, SubscriptionPlan
+from models.user import User
 from api.users import get_current_user, get_current_user_optional
 from core.plans import plan_rank, RANK_PRO, RANK_INVESTOR
 from core.ratelimit import limiter
@@ -640,20 +640,14 @@ def _get_tor_zone(region_code):
 #                        площадей, даты подачи, % задатка — аналитика.
 #   rank>=2 (Инвестор+): % НЦ/КС, % КС/Рынок, переуступка/субаренда —
 #                        стратегические, сразу показывают схему заработка.
-PLAN_RANK = {
-    SubscriptionPlan.FREE: 0,
-    SubscriptionPlan.PRO: 1,
-    SubscriptionPlan.INVESTOR: 2,
-    SubscriptionPlan.BURO: 3,
-    SubscriptionPlan.BURO_PLUS: 4,
-    SubscriptionPlan.ENTERPRISE: 5,
-}
+# Ранги — только из core.plans (там же учёт истечения подписки). Локальной копии
+# PLAN_RANK здесь больше нет: две таблицы расходились при правке одной из них.
 
-
-def _plan_rank(user) -> int:
-    if user is None:
-        return 0
-    return PLAN_RANK.get(user.subscription_plan, 0)
+# Премиум-сортировки. Ранжирование по премиум-полю = та же ценность, что и фильтр по
+# нему, поэтому гейт зеркальный: иначе ?sort_by=discount_to_market выдавал анониму топ
+# по дисконту в обход обнуления фильтров.
+PREMIUM_SORTS = {"score", "discount_to_market", "price_drop", "deposit_pct"}       # Pro+
+INVESTOR_SORTS = {"pct_cadastral", "resale_priority"}                              # Инвестор+
 
 
 @router.get("", response_model=LotsResponse)
@@ -739,9 +733,9 @@ async def get_lots(
     user: Optional[User] = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db),
 ):
-    # Двухуровневый гейт премиум-фильтров (см. PLAN_RANK)
-    rank = _plan_rank(user)
-    if rank < 1:  # Pro+
+    # Двухуровневый гейт премиум-фильтров (см. core.plans)
+    rank = plan_rank(user)
+    if rank < RANK_PRO:  # Pro+
         score_min = badges_min = None
         liquidity = None
         discount_min = None
@@ -751,10 +745,14 @@ async def get_lots(
         deposit_pct_min = deposit_pct_max = None
         submission_start_from = submission_start_to = None
         submission_end_from = submission_end_to = None
-    if rank < 2:  # Инвестор+
+        if sort_by in PREMIUM_SORTS:
+            sort_by = "auction_end_date"
+    if rank < RANK_INVESTOR:  # Инвестор+
         pct_cadastral_min = pct_cadastral_max = None
         cadastral_to_market_min = cadastral_to_market_max = None
         sublease_allowed = assignment_allowed = None
+        if sort_by in INVESTOR_SORTS:
+            sort_by = "auction_end_date"
 
     conditions = build_filters(
         status=status, region_codes=region,
@@ -836,9 +834,9 @@ async def lot_pdf_report(
     from io import BytesIO
     from fastapi.responses import StreamingResponse
     from xhtml2pdf import pisa
-    from models.user import SubscriptionPlan as _SP
 
-    if user.subscription_plan == _SP.FREE:
+    # Гейт через plan_rank, а не сравнением с FREE: так учитывается истечение подписки.
+    if plan_rank(user) < RANK_PRO:
         raise HTTPException(
             status_code=403,
             detail="PDF-отчёт доступен с тарифа Pro. Перейдите в /pricing.",
@@ -1223,8 +1221,8 @@ async def export_lots_csv(
 
     Доступно для Pro+ (включая Бюро/Бюро+/Enterprise).
     """
-    from models.user import SubscriptionPlan as _SP
-    if user.subscription_plan == _SP.FREE:
+    # Гейт через plan_rank, а не сравнением с FREE: так учитывается истечение подписки.
+    if plan_rank(user) < RANK_PRO:
         raise HTTPException(
             status_code=403,
             detail="Экспорт CSV доступен с тарифа Pro. Перейдите в /pricing.",
@@ -1597,16 +1595,16 @@ async def get_lots_for_map(
     user: Optional[User] = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db),
 ):
-    # Двухуровневый гейт премиум-фильтров (см. PLAN_RANK)
-    rank = _plan_rank(user)
-    if rank < 1:  # Pro+
+    # Двухуровневый гейт премиум-фильтров (см. core.plans)
+    rank = plan_rank(user)
+    if rank < RANK_PRO:  # Pro+
         score_min = badges_min = None
         liquidity = None
         discount_min = None
         price_drop_min = None
         is_bankruptcy = None
         submission_end_from = submission_end_to = None
-    if rank < 2:  # Инвестор+
+    if rank < RANK_INVESTOR:  # Инвестор+
         pct_cadastral_min = pct_cadastral_max = None
         cadastral_to_market_min = cadastral_to_market_max = None
         sublease_allowed = assignment_allowed = None
@@ -1704,7 +1702,8 @@ async def get_lot_map_popup(
         "lot_url": row.lot_url,
         "region_name": row.region_name,
         "score": row.score,
-        "discount_to_market_pct": row.discount_to_market_pct,
+        # Дисконт к рынку — Pro+ (зеркало _lot_to_item: в списке он тоже зануляется)
+        "discount_to_market_pct": row.discount_to_market_pct if plan_rank(user) >= RANK_PRO else None,
         "score_badges": row.score_badges if isinstance(row.score_badges, list) else None,
     }
 

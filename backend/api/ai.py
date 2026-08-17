@@ -6,6 +6,7 @@ from sqlalchemy import select, update
 from datetime import datetime, timezone
 
 from db.database import get_db
+from core.plans import effective_plan, plan_rank, RANK_PRO
 from models.lot import Lot
 from models.user import User, SubscriptionPlan
 from api.users import get_current_user, get_current_user_optional
@@ -38,24 +39,34 @@ async def request_assessment(
     if not lot:
         raise HTTPException(status_code=404, detail="Лот не найден")
 
-    # Кэш — без списания. Бюро/Бюро+/Enterprise — без лимита и кэша.
-    is_cached = False
     # Кэш по отпечатку: если ключевые поля лота не менялись и оценка не старше 30 дней —
     # отдаём кэш и не тратим API. Раньше был 24-часовой TTL без учёта данных — каждое утро
     # одни и те же лоты пере-оценивались (~500₽/сутки лишних).
     from services.ai_assessment import compute_ai_fingerprint
     current_fp = compute_ai_fingerprint(lot)
+    cache_hit = False
     if lot.ai_assessment and lot.ai_assessed_at and lot.ai_assessment_hash == current_fp:
         age_days = (datetime.now(timezone.utc) - lot.ai_assessed_at).total_seconds() / 86400
-        if age_days < 30:
-            is_cached = True
-            await _record_audit_purchase(db, user.id, lot_id)
-            return {"lot_id": lot_id, "assessment": lot.ai_assessment, "cached": True}
+        cache_hit = age_days < 30
+
+    # Кэш БЕСПЛАТНО — только тем, кому оценка положена по тарифу (Pro+), либо тем, кто
+    # уже оплатил аудит этого лота. Раньше кэш-ветка стояла до проверки лимита и без
+    # проверки тарифа: ночной батч ai_batch_analyze заранее считает оценки по топовым
+    # лотам, и free-аккаунт перебором lot_id выкачивал всю витрину «ИИ-разборы»
+    # (закрытую на Pro+ в /api/lots/ai-picks), да ещё получал постоянный доступ через
+    # запись AiAuditPurchase. Теперь free платит аудитом и за кэш.
+    if cache_hit and (
+        plan_rank(user) >= RANK_PRO
+        or await _has_audit_purchase(db, user.id, lot_id)
+    ):
+        await _record_audit_purchase(db, user.id, lot_id)
+        return {"lot_id": lot_id, "assessment": lot.ai_assessment, "cached": True}
 
     # Лимиты: Free/Pro расходуют free_audits_left; Бюро+ — без лимита.
     # Списание АТОМАРНОЕ (UPDATE ... WHERE free_audits_left > 0): иначе параллельные
     # запросы проходят проверку до декремента и жгут больше платных AI-вызовов, чем лимит.
-    if user.subscription_plan not in UNLIMITED_PLANS:
+    unlimited = effective_plan(user) in UNLIMITED_PLANS
+    if not unlimited:
         res = await db.execute(
             update(User)
             .where(User.id == user.id, User.free_audits_left > 0)
@@ -69,13 +80,19 @@ async def request_assessment(
             )
         await db.commit()
 
+    # Кэш есть, но по тарифу он не положен — аудит уже списан, отдаём готовую оценку
+    # без платного вызова провайдера.
+    if cache_hit:
+        await _record_audit_purchase(db, user.id, lot_id)
+        return {"lot_id": lot_id, "assessment": lot.ai_assessment, "cached": True}
+
     # Если AI-провайдер недоступен (нет баланса / rate limit / упал сервер) —
     # возвращаем free_audits_left обратно и говорим пользователю понятным текстом.
     try:
         assessment = await assess_lot(lot_to_ai_dict(lot))
     except Exception as e:
         # Откат списанного free-аудита при сбое AI (атомарно, без гонки).
-        if user.subscription_plan not in UNLIMITED_PLANS:
+        if not unlimited:
             await db.execute(
                 update(User)
                 .where(User.id == user.id)
@@ -105,6 +122,18 @@ async def request_assessment(
     await _record_audit_purchase(db, user.id, lot_id)
 
     return {"lot_id": lot_id, "assessment": assessment, "cached": False}
+
+
+async def _has_audit_purchase(db: AsyncSession, user_id: int, lot_id: int) -> bool:
+    """Пользователь уже оплатил (или потратил квоту на) аудит этого лота."""
+    from models.user import AiAuditPurchase
+    found = (await db.execute(
+        select(AiAuditPurchase.id).where(
+            AiAuditPurchase.user_id == user_id,
+            AiAuditPurchase.lot_id == lot_id,
+        )
+    )).scalar_one_or_none()
+    return found is not None
 
 
 async def _record_audit_purchase(db: AsyncSession, user_id: int, lot_id: int) -> None:
@@ -141,16 +170,8 @@ async def get_assessment(
         raise HTTPException(status_code=404, detail="Лот не найден")
     if not lot.ai_assessment:
         return {"lot_id": lot_id, "assessment": None}
-    from core.plans import plan_rank, RANK_PRO
     if plan_rank(user) < RANK_PRO:
-        from models.user import AiAuditPurchase
-        purchased = (await db.execute(
-            select(AiAuditPurchase.id).where(
-                AiAuditPurchase.user_id == user.id,
-                AiAuditPurchase.lot_id == lot_id,
-            )
-        )).scalar_one_or_none()
-        if purchased is None:
+        if not await _has_audit_purchase(db, user.id, lot_id):
             # locked=true — фронт показывает CTA «потратить аудит / купить Pro»
             return {"lot_id": lot_id, "assessment": None, "locked": True}
     return {"lot_id": lot_id, "assessment": lot.ai_assessment}
