@@ -40,16 +40,33 @@ services:
         condition: service_started
     volumes:
       - ./backend:/app
+    environment:
+      # Тот же ambient-cwd, что подвёл воркер (см. celery_worker): uvicorn тоже
+      # console-script, полагаться на подстановку cwd незачем.
+      PYTHONPATH: /app
     extra_hosts:
       # Принудительно резолвим api.telegram.org в IPv4 — у docker-сети нет
       # IPv6-маршрутизации, AAAA-резолв даёт ENETUNREACH/timeout
       - "api.telegram.org:149.154.167.220"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
   celery_worker:
     build: ./backend
     container_name: sotka_celery
     env_file: .env
+    environment:
+      # /app в sys.path попадал только через cwd, который celery подставляет при
+      # загрузке приложения. Модулям вроде core/services/models это сходило с рук —
+      # к моменту вызова задачи они уже в sys.modules, их импортировали соседние
+      # задачи при старте воркера. А `api` в воркере не нужен больше никому,
+      # поэтому единственный реальный поиск по sys.path — импорт api.seo внутри
+      # ping_indexnow — падал с ModuleNotFoundError каждый день в 08:00 МСК.
+      PYTHONPATH: /app
     depends_on:
       db:
         condition: service_healthy
@@ -59,16 +76,30 @@ services:
       - ./backend:/app
     extra_hosts:
       - "api.telegram.org:149.154.167.220"
+    # Логи по умолчанию не ротируются: json.log воркера дорос до 182 МБ и вместе
+    # с build-кэшем и journald подвёл диск к 93%.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     command: celery -A worker.celery_app worker --loglevel=info --concurrency=4 --max-tasks-per-child=200 --max-memory-per-child=300000
 
   celery_beat:
     build: ./backend
     container_name: sotka_beat
     env_file: .env
+    environment:
+      PYTHONPATH: /app
     depends_on:
       - redis
     volumes:
       - ./backend:/app
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     command: celery -A worker.celery_app beat --loglevel=info
 
   frontend:
@@ -79,6 +110,11 @@ services:
       - "127.0.0.1:3000:3000"
     depends_on:
       - backend
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   postgres_data:
