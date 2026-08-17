@@ -1,5 +1,6 @@
 import asyncio
 from contextlib import contextmanager
+from celery.exceptions import SoftTimeLimitExceeded
 from worker import celery_app
 from services.scraper_torgi import TorgiGovScraper
 from services.scraper_avito import AvitoScraper
@@ -60,13 +61,31 @@ def _single_flight(name: str, ttl: int = 3300):
             client.delete(key)
 
 
-@celery_app.task(bind=True, max_retries=3, default_retry_delay=300)
+# Полный проход по torgi.gov — это ~45 минут, в глобальный лимит 20 минут
+# (task_soft_time_limit в worker.py) он не влезает. Выглядело это не как
+# «лимит мал», а как «задача падает и ретраится»: 17.08 за ночь было четыре
+# захода одним task_id (01:00, 01:20, 01:45, 02:10 МСК), каждый начинал скрейп
+# с нуля, успевал первые страницы и умирал на том же лимите; четвёртый добил
+# max_retries и ушёл в ERROR. Успешных завершений за сутки — ноль, лоты
+# доезжали обрывками (126 за сутки), и всё это жгло память вчетверо.
+# Отсюда: свой лимит с запасом на полный проход, single-flight от наложения
+# заходов и никаких retry по таймауту — повтор сжёг бы то же время впустую,
+# а недобранное подхватит следующий запуск по расписанию (01:00 и 04:00 МСК).
+@celery_app.task(bind=True, max_retries=3, default_retry_delay=300,
+                 soft_time_limit=3300, time_limit=3600)
 def scrape_torgi_gov(self):
     """Основной парсинг torgi.gov — земельные аукционы"""
-    try:
-        _run(_scrape_torgi())
-    except Exception as exc:
-        raise self.retry(exc=exc)
+    with _single_flight("scrape_torgi_gov", ttl=3600) as acquired:
+        if not acquired:
+            print("[torgi.gov] предыдущий прогон ещё идёт — пропускаем")
+            return
+        try:
+            _run(_scrape_torgi())
+        except SoftTimeLimitExceeded:
+            print("[torgi.gov] прогон не уложился в лимит — доберём следующим запуском")
+            raise
+        except Exception as exc:
+            raise self.retry(exc=exc)
 
 
 async def _scrape_torgi():
@@ -1046,8 +1065,24 @@ async def _enrich_nearby_features(batch_size: int):
     await engine.dispose()
 
 
-async def _update_geo_comms():
-    from sqlalchemy import select
+async def _update_geo_comms(batch_size: int = 500):
+    """Ближайший город + коммуникации из описания — порциями, без ORM-объектов.
+
+    Раньше задача поднимала в память все лоты torgi.gov целиком: select(Lot) на
+    12.9к строк вместе с raw_data (JSONB с полным ответом API, десятки КБ на
+    лот), правила атрибуты и коммитила одним куском в конце. На VPS с 2 ГБ это
+    стоило ~1.1 ГБ RSS — 17.08 ядро убило форк воркера через 16 минут после
+    старта (OOM, signal 9), и добрая половина суточных ERROR'ов celery была
+    свитой этого падения: WorkerLostError у соседних задач, «Task was destroyed
+    but it is pending».
+
+    Теперь тянем только нужные колонки (raw_data не участвует вовсе), только
+    строки, которым чего-то не хватает, и порциями по batch_size с коммитом на
+    порцию. Пагинация по возрастанию id (keyset), а не OFFSET: строки внутри
+    прогона обновляются и из выборки выпадают, OFFSET на такой выборке
+    перескакивал бы через необработанное.
+    """
+    from sqlalchemy import and_, func, or_, select, update
     from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
     from core.config import settings
     from models.lot import Lot, LotSource
@@ -1057,38 +1092,86 @@ async def _update_geo_comms():
     engine = create_async_engine(settings.DATABASE_URL, echo=False, pool_pre_ping=True)
     SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
-    async with SessionLocal() as db:
-        q = select(Lot).where(Lot.source == LotSource.TORGI_GOV)
-        lots = (await db.execute(q)).scalars().all()
-        from shapely import wkb
-        updated_geo = 0
-        updated_comms = 0
-        for lot in lots:
-            # Геолокация → ближайший город
-            if lot.location and not lot.nearest_city_name:
-                try:
-                    point = wkb.loads(bytes(lot.location.data))
-                    city = find_nearest_city(point.y, point.x, lot.region_code)
-                    if city:
-                        lot.nearest_city_name = city["name"]
-                        lot.nearest_city_distance_km = city["distance_km"]
-                        lot.nearest_city_population = city["population"]
-                        updated_geo += 1
-                except Exception:
-                    pass
+    updated_geo = 0
+    updated_comms = 0
+    seen = 0
+    last_id = 0
 
-            # Коммуникации из описания
-            if not lot.communications:
-                comms = parse_communications(lot.description, lot.title, lot.vri_tg)
-                if comms:
-                    lot.communications = comms
-                    updated_comms += 1
-            db.add(lot)
+    try:
+        async with SessionLocal() as db:
+            while True:
+                # lat/lng через ST_Y/ST_X — иначе пришлось бы тащить geometry
+                # и распаковывать shapely.wkb на каждый лот.
+                rows = (await db.execute(
+                    select(
+                        Lot.id,
+                        func.ST_Y(Lot.location).label("lat"),
+                        func.ST_X(Lot.location).label("lng"),
+                        Lot.region_code,
+                        Lot.nearest_city_name,
+                        Lot.communications,
+                        Lot.description,
+                        Lot.title,
+                        Lot.vri_tg,
+                    )
+                    .where(
+                        and_(
+                            Lot.source == LotSource.TORGI_GOV,
+                            Lot.id > last_id,
+                            or_(
+                                and_(
+                                    Lot.location.isnot(None),
+                                    Lot.nearest_city_name.is_(None),
+                                ),
+                                Lot.communications.is_(None),
+                            ),
+                        )
+                    )
+                    .order_by(Lot.id)
+                    .limit(batch_size)
+                )).all()
 
-        await db.commit()
-        print(f"[geo-comms] Города: {updated_geo}, коммуникации: {updated_comms}")
+                if not rows:
+                    break
 
-    await engine.dispose()
+                last_id = rows[-1].id
+                seen += len(rows)
+
+                for r in rows:
+                    values = {}
+
+                    # Геолокация → ближайший город
+                    if r.lat is not None and not r.nearest_city_name:
+                        try:
+                            city = find_nearest_city(r.lat, r.lng, r.region_code)
+                        except Exception:
+                            city = None
+                        if city:
+                            values["nearest_city_name"] = city["name"]
+                            values["nearest_city_distance_km"] = city["distance_km"]
+                            values["nearest_city_population"] = city["population"]
+                            updated_geo += 1
+
+                    # Коммуникации из описания
+                    if not r.communications:
+                        comms = parse_communications(r.description, r.title, r.vri_tg)
+                        if comms:
+                            values["communications"] = comms
+                            updated_comms += 1
+
+                    if values:
+                        await db.execute(
+                            update(Lot).where(Lot.id == r.id).values(**values)
+                        )
+
+                await db.commit()
+                print(f"[geo-comms] обработано {seen} (до id={last_id}): "
+                      f"города {updated_geo}, коммуникации {updated_comms}")
+
+            print(f"[geo-comms] Готово. Просмотрено: {seen}, "
+                  f"города: {updated_geo}, коммуникации: {updated_comms}")
+    finally:
+        await engine.dispose()
 
 
 async def _update_scores():

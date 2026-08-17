@@ -1,4 +1,11 @@
 import asyncio
+import os
+
+# ДО импорта задач (и, через них, db.database): в воркере engine работает без
+# пула — иначе соединение из чужого, уже закрытого event loop'а всплывает в
+# следующей задаче («attached to a different loop», см. db/database.py).
+os.environ.setdefault("SOTKA_DB_NULLPOOL", "1")
+
 from celery import Celery
 from celery.schedules import crontab
 from celery.signals import worker_process_init
