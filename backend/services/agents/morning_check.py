@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import shutil
 from datetime import datetime, timezone, timedelta
 from typing import Any
 
@@ -30,6 +31,14 @@ _INGEST_SOURCES = [
     (LotSource.TORGI_GOV, "torgi.gov", 30),
     (LotSource.CIAN, "ЦИАН", 30),
 ]
+
+
+# Порог занятости диска. 17.08.2026 диск дошёл до 93% (свободно 2.1 ГБ из 29) и
+# никто об этом не знал: рос не объём данных, а вещи без лимитов — journald без
+# SystemMaxUse (2.8 ГБ), docker build cache (2.9 ГБ) и json.log контейнера
+# воркера (182 МБ, в compose не было logging.max-size). На таком остатке падает
+# билд фронта. 85% даёт запас в недели: это ~4 ГБ свободного места.
+_DISK_WARN_PCT = 85
 
 
 def _pct(part: int, total: int) -> str:
@@ -122,6 +131,22 @@ class MorningCheckAgent(BaseAgent):
         except Exception:
             pass
 
+        # ── Диск ──
+        # Считаем из контейнера: / у него overlay поверх того же /dev/sda1, что и
+        # у хоста, цифры совпадают (сверено 17.08: 79% против 80% — разница на
+        # резервных блоках). Отдельного доступа к хосту для этого не нужно.
+        disk_total_gb = disk_used_gb = disk_free_gb = 0.0
+        disk_pct = 0
+        try:
+            usage = shutil.disk_usage("/")
+            gb = 1024 ** 3
+            disk_total_gb = usage.total / gb
+            disk_used_gb = usage.used / gb
+            disk_free_gb = usage.free / gb
+            disk_pct = round(usage.used / usage.total * 100)
+        except Exception as e:
+            print(f"[agent:morning_check] disk check failed: {e}")
+
         metrics = {
             "active_lots": active,
             "stale_active": stale_active,
@@ -138,6 +163,10 @@ class MorningCheckAgent(BaseAgent):
             "failed_agents_24h": failed_agents,
             "ingest_by_source": ingest_by_source,
             "queue_depth": queue_depth,
+            "disk_total_gb": round(disk_total_gb, 1),
+            "disk_used_gb": round(disk_used_gb, 1),
+            "disk_free_gb": round(disk_free_gb, 1),
+            "disk_pct": disk_pct,
         }
 
         # ── Сборка отчёта ──
@@ -165,6 +194,12 @@ class MorningCheckAgent(BaseAgent):
                 f"⚠️ Очередь Celery раздута: {queue_depth} задач — проверить, не стакаются ли "
                 f"periodic-задачи (inspect active)"
             )
+        if disk_pct >= _DISK_WARN_PCT:
+            warnings.append(
+                f"⚠️ Диск занят на {disk_pct}% (свободно {disk_free_gb:.1f} ГБ) — на исходе "
+                f"места падает билд фронта. Чистить: docker builder prune -af, "
+                f"journalctl --vacuum-size=200M, docker system df"
+            )
 
         report = (
             f"☀️ *Утренний отчёт — Торги Земли*\n"
@@ -179,6 +214,9 @@ class MorningCheckAgent(BaseAgent):
             f"• Банкротных: {bankrupt:,}\n".replace(",", " ") +
             f"• Ingest 30ч: " + ", ".join(f"{l} +{c}" for l, c in ingest_by_source.items()) + "\n"
             f"• Очередь: {queue_depth}\n\n" +
+            f"🖥 *Сервер*\n"
+            f"• Диск: {disk_used_gb:.1f} / {disk_total_gb:.1f} ГБ ({disk_pct}%), "
+            f"свободно {disk_free_gb:.1f} ГБ\n\n"
             f"💰 *Деньги за сутки*\n"
             f"• Платежей: {pay_count}\n"
             f"• Выручка: {pay_sum:,.0f} ₽\n\n".replace(",", " ")
