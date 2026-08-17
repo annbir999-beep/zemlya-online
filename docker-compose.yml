@@ -70,6 +70,13 @@ services:
       # поэтому единственный реальный поиск по sys.path — импорт api.seo внутри
       # ping_indexnow — падал с ModuleNotFoundError каждый день в 08:00 МСК.
       PYTHONPATH: /app
+      # Engine без пула: соединение не должно переживать event loop задачи (см.
+      # db/database.py). worker.py выставляет это и сам, но только для себя —
+      # разовые скрипты через `docker compose exec ... python -c` импортируют
+      # db.database мимо worker.py и получали пул: два asyncio.run() в одном
+      # процессе тут же дают «attached to a different loop». Здесь — на весь
+      # контейнер, независимо от точки входа.
+      SOTKA_DB_NULLPOOL: "1"
     depends_on:
       db:
         condition: service_healthy
@@ -94,6 +101,7 @@ services:
     env_file: .env
     environment:
       PYTHONPATH: /app
+      SOTKA_DB_NULLPOOL: "1"
     depends_on:
       - redis
     volumes:
