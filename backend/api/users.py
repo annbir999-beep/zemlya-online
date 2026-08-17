@@ -114,18 +114,25 @@ PLAN_FILTER_LIMITS = {
 async def register(request: Request, data: RegisterRequest, db: AsyncSession = Depends(get_db)):
     import secrets as _s
 
+    # Требование к паролю — то же, что при сбросе (там проверка уже была, а при
+    # регистрации любой символ проходил).
+    if len(data.password or "") < 8:
+        raise HTTPException(status_code=400, detail="Пароль должен быть не короче 8 символов")
+
     existing = await db.execute(select(User).where(User.email == data.email))
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Email уже зарегистрирован")
 
-    # Реферальный код пригласившего → находим его и даём бонус +1 аудит обоим
+    # Реферальный код пригласившего → фиксируем связь (referred_by).
+    # Бонус пригласившему НЕ начисляем здесь: регистрация ничего не стоит, и пачка
+    # почтовых ящиков превращалась в фарм бесплатных аудитов на свой же аккаунт.
+    # Он начисляется при первой УСПЕШНОЙ покупке приглашённого —
+    # payments._credit_referrer_first_purchase.
     referrer = None
     if data.referral_code:
         ref_norm = data.referral_code.strip().upper()
         referrer_q = await db.execute(select(User).where(User.referral_code == ref_norm))
         referrer = referrer_q.scalar_one_or_none()
-        if referrer:
-            referrer.free_audits_left = (referrer.free_audits_left or 0) + 1
 
     # Свой реферальный код (8 символов URL-safe, в верхнем регистре)
     own_code = _s.token_urlsafe(6).rstrip("-_=")[:8].upper()

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import func, select
 from pydantic import BaseModel
 from datetime import datetime, timezone, timedelta
 from typing import Optional
@@ -17,6 +17,30 @@ router = APIRouter()
 
 yookassa.Configuration.account_id = settings.YUKASSA_SHOP_ID
 yookassa.Configuration.secret_key = settings.YUKASSA_SECRET_KEY
+
+
+def _safe_return_url(raw: Optional[str]) -> str:
+    """Адрес возврата после оплаты — только на свои домены.
+
+    Клиент присылает return_url сам, и без проверки это открытый редирект с
+    платёжной страницы: ссылка выглядит как оплата на torgi-zemli.ru, а возврат
+    уводит на чужой сайт. Origin сверяем с ALLOWED_ORIGINS (тот же список, что у CORS).
+    """
+    default = f"{settings.SITE_URL}/dashboard"
+    if not raw:
+        return default
+    from urllib.parse import urlsplit
+    try:
+        parts = urlsplit(raw)
+    except ValueError:
+        return default
+    if parts.scheme not in ("http", "https") or not parts.netloc:
+        return default
+    origin = f"{parts.scheme}://{parts.netloc}"
+    if origin not in settings.ALLOWED_ORIGINS:
+        print(f"[payments] return_url вне allowlist отклонён: {origin}")
+        return default
+    return raw
 
 # Тарифы по roadmap M1-M19: (плановый id, кол-во месяцев) -> цена в рублях.
 # Внутренние коды совпадают с enum-value в БД (personal/expert/landlord),
@@ -277,8 +301,24 @@ async def create_payment(
             raise HTTPException(status_code=400, detail="Промокод не найден или отключён")
         if promo_obj.valid_until and promo_obj.valid_until < datetime.now(timezone.utc):
             raise HTTPException(status_code=400, detail="Промокод истёк")
-        if promo_obj.max_uses is not None and (promo_obj.used_count or 0) >= promo_obj.max_uses:
-            raise HTTPException(status_code=400, detail="Промокод закончился")
+        if promo_obj.max_uses is not None:
+            # used_count инкрементится только в вебхуке (иначе брошенные корзины выжигают
+            # лимит), поэтому к нему добавляем «резервы» — уже выданные, но ещё не
+            # оплаченные корзины за последний час. Без этого пачка одновременных
+            # создаваемых платежей уносила скидку сверх max_uses.
+            from models.promo import PromoUsage as _PU
+            from models.alert import Subscription as _Sub2
+            reserved = (await db.execute(
+                select(_func.count()).select_from(_PU)
+                .join(_Sub2, _Sub2.id == _PU.subscription_id)
+                .where(
+                    _PU.promo_code_id == promo_obj.id,
+                    _Sub2.status == "pending",
+                    _PU.used_at >= datetime.now(timezone.utc) - timedelta(hours=1),
+                )
+            )).scalar() or 0
+            if (promo_obj.used_count or 0) + reserved >= promo_obj.max_uses:
+                raise HTTPException(status_code=400, detail="Промокод закончился")
         if promo_obj.plan_filter and promo_obj.plan_filter != data.plan:
             raise HTTPException(status_code=400, detail=f"Промокод действует только для тарифа «{promo_obj.plan_filter}»")
         if promo_obj.new_users_only:
@@ -340,7 +380,7 @@ async def create_payment(
         "amount": {"value": f"{price:.2f}", "currency": "RUB"},
         "confirmation": {
             "type": "redirect",
-            "return_url": data.return_url or f"{settings.SITE_URL}/dashboard",
+            "return_url": _safe_return_url(data.return_url),
         },
         "capture": True,
         "description": descr[:128],  # ЮКасса лимитит 128 символов
@@ -531,7 +571,15 @@ async def yukassa_webhook(request: Request, db: AsyncSession = Depends(get_db)):
             md_user_id = 0
         md_plan = md.get("plan")
         if md_user_id and md_plan:
-            result = await db.execute(
+            # Сумма из ответа ЮКассы — обязательное условие матча. Без неё «последняя
+            # pending-корзина» могла оказаться другой: оплата за 1 месяц активировала
+            # брошенный заказ на 12. Сравниваем в копейках, чтобы не ловить float.
+            paid_kop = None
+            try:
+                paid_kop = round(float((payment_obj.get("amount") or {}).get("value")) * 100)
+            except (TypeError, ValueError):
+                paid_kop = None
+            q = (
                 select(Subscription)
                 .where(
                     Subscription.user_id == md_user_id,
@@ -541,7 +589,15 @@ async def yukassa_webhook(request: Request, db: AsyncSession = Depends(get_db)):
                 .order_by(Subscription.id.desc())
                 .limit(1)
             )
+            if paid_kop is not None:
+                q = q.where(func.round(Subscription.amount * 100) == paid_kop)
+            result = await db.execute(q)
             sub = result.scalar_one_or_none()
+            if sub is None:
+                print(
+                    f"[payment-webhook] fallback без матча: user={md_user_id} "
+                    f"plan={md_plan} сумма={paid_kop} коп — подписка не активирована"
+                )
 
     if not sub:
         return {"status": "already_processed"}

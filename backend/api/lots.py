@@ -861,30 +861,38 @@ async def lot_pdf_report(
         if v >= 10_000: return f"{v/10_000:.2f} га"
         return f"{int(v):,} м²".replace(",", " ")
 
+    # Данные лота приходят из torgi.gov (и AI-ответа), а отчёт — это HTML для
+    # xhtml2pdf: любую строку из внешнего источника экранируем, иначе кавычка или тег
+    # в названии участка ломает вёрстку отчёта, а то и рендер.
+    import html as _html
+
+    def esc(v, limit: int = 300) -> str:
+        return _html.escape(str(v)[:limit]) if v not in (None, "") else ""
+
     contacts = lot.organizer_contacts or {}
-    phones = "<br/>".join(contacts.get("phones", []) or []) or "—"
-    emails = "<br/>".join(contacts.get("emails", []) or []) or "—"
+    phones = "<br/>".join(esc(p, 40) for p in (contacts.get("phones") or [])) or "—"
+    emails = "<br/>".join(esc(e, 80) for e in (contacts.get("emails") or [])) or "—"
     nearby = lot.nearby_features or {}
     nearby_lines = []
     if nearby.get("water"):
         w = nearby["water"]
-        nearby_lines.append(f"🌊 {w.get('name', 'Водоём')} — {int(w.get('distance_m', 0))} м")
+        nearby_lines.append(f"🌊 {esc(w.get('name'), 80) or 'Водоём'} — {int(w.get('distance_m', 0))} м")
     if nearby.get("forest"):
         nearby_lines.append(f"🌲 Лес — {int(nearby['forest']['distance_m'])} м")
     if nearby.get("settlement"):
         s = nearby["settlement"]
-        nearby_lines.append(f"🏘 {s.get('name', 'Посёлок')} — {int(s.get('distance_m', 0))} м")
+        nearby_lines.append(f"🏘 {esc(s.get('name'), 80) or 'Посёлок'} — {int(s.get('distance_m', 0))} м")
     nearby_html = "<br/>".join(nearby_lines) or "—"
 
     ai = lot.ai_assessment or {}
-    ai_summary = ai.get("summary", "") if isinstance(ai, dict) else ""
-    ai_strategy = ai.get("best_strategy", "") if isinstance(ai, dict) else ""
+    ai_summary = esc(ai.get("summary", ""), 3000) if isinstance(ai, dict) else ""
+    ai_strategy = esc(ai.get("best_strategy", ""), 300) if isinstance(ai, dict) else ""
     ai_score = ai.get("score") if isinstance(ai, dict) else None
-    pros = ai.get("pros", []) if isinstance(ai, dict) else []
-    cons = ai.get("cons", []) if isinstance(ai, dict) else []
+    pros = [esc(p, 300) for p in (ai.get("pros") or [])] if isinstance(ai, dict) else []
+    cons = [esc(c, 300) for c in (ai.get("cons") or [])] if isinstance(ai, dict) else []
 
     SITE = settings.SITE_URL
-    title = (lot.title or "Земельный участок")[:200]
+    title = esc(lot.title, 200) or "Земельный участок"
 
     AUCTION_TYPE_RU = {"sale": "Продажа", "rent": "Аренда", "priv": "Приватизация"}
     AUCTION_FORM_RU = {
@@ -955,8 +963,8 @@ h1 {{ font-size: 14pt; margin: 0 0 6px; }}
 
 <h1>{title}</h1>
 <div class="meta">
-  Кадастровый номер: <b>{lot.cadastral_number or "—"}</b><br/>
-  {lot.region_name or ""}{(" · " + lot.address) if lot.address else ""}
+  Кадастровый номер: <b>{esc(lot.cadastral_number, 40) or "—"}</b><br/>
+  {esc(lot.region_name, 120)}{(" · " + esc(lot.address, 300)) if lot.address else ""}
 </div>
 
 <div class="kpi">
@@ -987,8 +995,8 @@ h1 {{ font-size: 14pt; margin: 0 0 6px; }}
   <div class="row"><span class="label">Сделка:</span> {deal_type_ru}</div>
   <div class="row"><span class="label">Срок подачи заявок:</span> {lot.submission_end.strftime("%d.%m.%Y %H:%M") if lot.submission_end else "—"}</div>
   <div class="row"><span class="label">Задаток:</span> {fmt_p(lot.deposit)}</div>
-  <div class="row"><span class="label">Категория земель:</span> {lot.category_tg or "—"}</div>
-  <div class="row"><span class="label">ВРИ:</span> {(lot.vri_tg or "")[:200]}</div>
+  <div class="row"><span class="label">Категория земель:</span> {esc(lot.category_tg, 120) or "—"}</div>
+  <div class="row"><span class="label">ВРИ:</span> {esc(lot.vri_tg, 200)}</div>
 </div>
 
 <div class="section">
@@ -998,12 +1006,12 @@ h1 {{ font-size: 14pt; margin: 0 0 6px; }}
 
 <div class="section">
   <h2>🏛 Контакты администрации</h2>
-  <div class="row"><b>{lot.organizer_name or "—"}</b></div>
+  <div class="row"><b>{esc(lot.organizer_name, 200) or "—"}</b></div>
   <div class="row"><span class="label">Телефон:</span> {phones}</div>
   <div class="row"><span class="label">Email:</span> {emails}</div>
-  {f'<div class="row"><span class="label">Ответственный:</span> {contacts.get("contact_person", "")}</div>' if contacts.get("contact_person") else ""}
-  {f'<div class="row"><span class="label">ИНН:</span> {contacts.get("inn", "")}</div>' if contacts.get("inn") else ""}
-  {f'<div class="row"><span class="label">Адрес:</span> {contacts.get("address", "")}</div>' if contacts.get("address") else ""}
+  {f'<div class="row"><span class="label">Ответственный:</span> {esc(contacts.get("contact_person"), 200)}</div>' if contacts.get("contact_person") else ""}
+  {f'<div class="row"><span class="label">ИНН:</span> {esc(contacts.get("inn"), 20)}</div>' if contacts.get("inn") else ""}
+  {f'<div class="row"><span class="label">Адрес:</span> {esc(contacts.get("address"), 300)}</div>' if contacts.get("address") else ""}
 </div>
 
 <div class="footer">

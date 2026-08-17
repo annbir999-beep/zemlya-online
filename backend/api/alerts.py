@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import func, select
 from pydantic import BaseModel
 from typing import Optional, List
 
@@ -140,9 +140,13 @@ async def create_alert(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    # Проверяем лимит по тарифу
-    result = await db.execute(select(Alert).where(Alert.user_id == user.id))
-    existing_count = len(result.scalars().all())
+    # Лимит проверяем под блокировкой строки пользователя: без неё параллельные POST
+    # проходили проверку одновременно (count-then-insert) и создавали фильтров больше
+    # лимита тарифа. Блокировка держится до commit в конце запроса.
+    await db.execute(select(User.id).where(User.id == user.id).with_for_update())
+    existing_count = (await db.execute(
+        select(func.count()).select_from(Alert).where(Alert.user_id == user.id)
+    )).scalar() or 0
 
     if existing_count >= user.saved_filters_limit:
         raise HTTPException(
