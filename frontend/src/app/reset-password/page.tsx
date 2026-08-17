@@ -2,8 +2,7 @@
 import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import Cookies from "js-cookie";
-import { api } from "@/lib/api";
+import { api, setTokens } from "@/lib/api";
 
 function ResetForm() {
   const router = useRouter();
@@ -33,8 +32,7 @@ function ResetForm() {
         { token, password },
       );
       // Бэкенд сразу возвращает пару токенов — логинимся, чтобы не вводить пароль дважды.
-      Cookies.set("access_token", res.access_token, { expires: 30 });
-      Cookies.set("refresh_token", res.refresh_token, { expires: 30 });
+      setTokens(res.access_token, res.refresh_token);
       router.push("/dashboard");
     } catch (err) {
       setError((err as Error).message);

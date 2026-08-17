@@ -3,6 +3,10 @@ from typing import List
 
 
 class Settings(BaseSettings):
+    # Окружение: "production" на сервере (закрывает /docs, включает fail-fast по
+    # SECRET_KEY ниже), любое другое значение = локальная разработка.
+    ENVIRONMENT: str = "development"
+
     # Database
     DATABASE_URL: str = "postgresql+asyncpg://sotka:sotka_secret@db:5432/sotka"
 
@@ -97,8 +101,7 @@ settings = Settings()
 # Защита: дефолтный SECRET_KEY = любой может подделать JWT (HS256, ключ известен)
 # и стать любым пользователем, включая is_admin. В проде запуск с дефолтом запрещён.
 if settings.SECRET_KEY in ("", "change_me"):
-    import os
-    if os.getenv("ENVIRONMENT", "").lower() in ("production", "prod"):
+    if settings.ENVIRONMENT.lower() in ("production", "prod"):
         raise RuntimeError(
             "SECRET_KEY не задан в проде (дефолт 'change_me') — отказ запуска: риск подделки JWT."
         )

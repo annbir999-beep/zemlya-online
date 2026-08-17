@@ -1,12 +1,13 @@
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
 from datetime import datetime, timezone
 
 from db.database import get_db
 from core.plans import effective_plan, plan_rank, RANK_PRO
+from core.ratelimit import limiter
 from models.lot import Lot
 from models.user import User, SubscriptionPlan
 from api.users import get_current_user, get_current_user_optional
@@ -23,7 +24,11 @@ UNLIMITED_PLANS = {SubscriptionPlan.BURO, SubscriptionPlan.BURO_PLUS, Subscripti
 
 
 @router.post("/assess/{lot_id}")
+# Каждый промах кэша — платный вызов провайдера. Квота free_audits_left держит расход
+# у Free/Pro, но у Бюро/Бюро+/Enterprise лимита нет — потолок по IP страхует от скрипта.
+@limiter.limit("40/hour")
 async def request_assessment(
+    request: Request,
     lot_id: int,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),

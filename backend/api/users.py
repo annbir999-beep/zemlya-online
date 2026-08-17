@@ -288,9 +288,28 @@ async def reset_password(
     )
 
 
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+
 @router.post("/refresh", response_model=TokenResponse)
-async def refresh_token(refresh_token: str, db: AsyncSession = Depends(get_db)):
-    user_id = decode_refresh_token(refresh_token)
+@limiter.limit("60/hour")
+async def refresh_token(
+    request: Request,
+    data: Optional[RefreshRequest] = None,
+    refresh_token: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """Обмен refresh-токена на новую пару.
+
+    Токен ждём В ТЕЛЕ запроса: в query-строке он попадал в access-логи Nginx и в
+    Referer. Query-параметр пока принимается для уже открытых сессий на старом
+    фронте — удалить после того, как везде разойдётся новый билд.
+    """
+    token = (data.refresh_token if data else None) or refresh_token
+    if not token:
+        raise HTTPException(status_code=422, detail="Нужен refresh_token в теле запроса")
+    user_id = decode_refresh_token(token)
     if not user_id:
         raise HTTPException(status_code=401, detail="Невалидный refresh токен")
     return TokenResponse(

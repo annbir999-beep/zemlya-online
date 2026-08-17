@@ -11,6 +11,7 @@ from models.user import User, SubscriptionPlan
 from models.alert import Subscription
 from api.users import get_current_user
 from core.config import settings
+from core.ratelimit import limiter
 
 router = APIRouter()
 
@@ -654,7 +655,11 @@ async def _credit_referrer_first_purchase(db, user, current_sub_id: int):
 # ── Промокоды: проверка перед оплатой ──────────────────────────────────────────
 
 @router.post("/promo/validate")
+# Ответы различают «не найден» / «истёк» / «кончился» — без лимита это оракул для
+# перебора промокодов.
+@limiter.limit("20/hour")
 async def validate_promo(
+    request: Request,
     data: PromoValidateRequest,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -705,7 +710,10 @@ class EnterpriseRequest(BaseModel):
 
 
 @router.post("/enterprise/request")
+# Публичная форма, письмо уходит владельцу: лимит от спама/фишинга в свой же ящик.
+@limiter.limit("3/hour;10/day")
 async def submit_enterprise_request(
+    request: Request,
     data: EnterpriseRequest,
     db: AsyncSession = Depends(get_db),
 ):
@@ -713,23 +721,32 @@ async def submit_enterprise_request(
 
     На M3 это просто email-уведомление; в M13 здесь будет CRM с воронкой.
     """
+    import html as _html
+
     from services.notifications import _send_via_resend
+
+    # Форма публичная, письмо читает владелец — экранируем всё, что пришло от клиента,
+    # иначе в письмо вставляются любые теги и ссылки от имени сервиса.
+    def esc(v, limit: int = 500) -> str:
+        return _html.escape(str(v)[:limit])
 
     body_html = (
         f"<h2>Новая заявка Enterprise — Торги Земли</h2>"
-        f"<p><b>Имя:</b> {data.name}<br>"
-        f"<b>Компания:</b> {data.company}<br>"
-        f"<b>Email:</b> {data.email}<br>"
-        f"<b>Телефон:</b> {data.phone or '—'}<br>"
-        f"<b>Сотрудников:</b> {data.estimated_users or '—'}</p>"
-        f"<p><b>Комментарий:</b><br>{(data.comment or '—').replace(chr(10), '<br>')}</p>"
+        f"<p><b>Имя:</b> {esc(data.name, 200)}<br>"
+        f"<b>Компания:</b> {esc(data.company, 200)}<br>"
+        f"<b>Email:</b> {esc(data.email, 200)}<br>"
+        f"<b>Телефон:</b> {esc(data.phone) if data.phone else '—'}<br>"
+        f"<b>Сотрудников:</b> {esc(data.estimated_users) if data.estimated_users else '—'}</p>"
+        f"<p><b>Комментарий:</b><br>"
+        f"{esc(data.comment, 2000).replace(chr(10), '<br>') if data.comment else '—'}</p>"
     )
 
     owner_inbox = "annbir999@gmail.com"  # куда падают заявки
     try:
         await _send_via_resend(
             to=owner_inbox,
-            subject=f"💼 Enterprise-заявка от {data.company}",
+            # Тема — одной строкой: перевод строки в заголовке письма клиенту не отдаём
+            subject=f"💼 Enterprise-заявка от {str(data.company)[:120].replace(chr(10), ' ').replace(chr(13), ' ')}",
             html=body_html,
         )
     except Exception as e:

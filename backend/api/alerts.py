@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
 from typing import Optional, List
 
+from core.ratelimit import limiter
 from db.database import get_db
 from models.alert import Alert, AlertChannel
 from models.user import User, SubscriptionPlan
@@ -228,7 +229,10 @@ async def delete_alert(alert_id: int, user: User = Depends(get_current_user), db
 
 
 @router.post("/{alert_id}/test")
-async def send_test_notification(alert_id: int, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+# Каждый вызов — реальное письмо Resend и/или сообщение в TG: лимит от рассылки спама
+# через свой же аккаунт (и от расхода квоты Resend).
+@limiter.limit("10/hour")
+async def send_test_notification(request: Request, alert_id: int, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Отправляет одноразовое тестовое уведомление — не списывает алерт, не трогает last_triggered_at.
 
     Берёт 3 самых свежих лота под фильтр (или просто 3 свежих active лота, если ничего не нашлось),

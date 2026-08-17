@@ -2,20 +2,37 @@ import Cookies from "js-cookie";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 
+// Атрибуты cookie с токенами: только по HTTPS и без отправки на чужие origin.
+// httpOnly здесь недоступен (cookie ставит JS), поэтому это защита от перехвата
+// в сети и CSRF, но не от XSS.
+const TOKEN_COOKIE = {
+  expires: 30,
+  secure: typeof window !== "undefined" && window.location.protocol === "https:",
+  sameSite: "strict" as const,
+  path: "/",
+};
+
+export function setTokens(accessToken: string, refreshToken: string) {
+  // Cookie живёт 30 дней; JWT внутри истекает через 12ч и обновляется через tryRefresh.
+  Cookies.set("access_token", accessToken, TOKEN_COOKIE);
+  Cookies.set("refresh_token", refreshToken, TOKEN_COOKIE);
+}
+
 // Обмен refresh-токена на свежую пару. true — успех, токены обновлены.
 async function tryRefresh(): Promise<boolean> {
   const rt = Cookies.get("refresh_token");
   if (!rt) return false;
   try {
-    const res = await fetch(
-      `${API_URL}/api/users/refresh?refresh_token=${encodeURIComponent(rt)}`,
-      { method: "POST" },
-    );
+    // Токен — в теле, не в query: из query-строки он попадал в access-логи Nginx
+    // и в заголовок Referer при переходах.
+    const res = await fetch(`${API_URL}/api/users/refresh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: rt }),
+    });
     if (!res.ok) return false;
     const data = await res.json();
-    // Cookie живёт 30 дней; JWT внутри истекает через 12ч и обновляется этим же flow.
-    Cookies.set("access_token", data.access_token, { expires: 30 });
-    Cookies.set("refresh_token", data.refresh_token, { expires: 30 });
+    setTokens(data.access_token, data.refresh_token);
     return true;
   } catch {
     return false;

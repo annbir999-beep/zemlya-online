@@ -1,5 +1,5 @@
 import Cookies from "js-cookie";
-import { api, UserProfile } from "./api";
+import { api, setTokens, UserProfile } from "./api";
 
 export async function login(email: string, password: string): Promise<void> {
   const form = new URLSearchParams();
@@ -15,9 +15,7 @@ export async function login(email: string, password: string): Promise<void> {
     throw new Error(err.detail || "Неверный email или пароль");
   }
   const data = await res.json();
-  // Cookie живёт 30 дней; JWT внутри истекает через 12ч и продлевается авто-refresh'ем в api.ts.
-  Cookies.set("access_token", data.access_token, { expires: 30 });
-  Cookies.set("refresh_token", data.refresh_token, { expires: 30 });
+  setTokens(data.access_token, data.refresh_token);
 }
 
 export async function register(email: string, password: string, name?: string): Promise<void> {
@@ -47,9 +45,7 @@ export async function register(email: string, password: string, name?: string): 
     throw new Error(err.detail || "Ошибка регистрации");
   }
   const data = await res.json();
-  // Cookie живёт 30 дней; JWT внутри истекает через 12ч и продлевается авто-refresh'ем в api.ts.
-  Cookies.set("access_token", data.access_token, { expires: 30 });
-  Cookies.set("refresh_token", data.refresh_token, { expires: 30 });
+  setTokens(data.access_token, data.refresh_token);
 }
 
 export function logout(): void {

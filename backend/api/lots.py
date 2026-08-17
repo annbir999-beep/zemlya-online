@@ -822,7 +822,10 @@ async def get_lots(
 
 
 @router.get("/{lot_id}/report.pdf")
+# Рендер PDF (xhtml2pdf) — самая тяжёлая ручка на 2GB VPS: лимит от заваливания памяти.
+@limiter.limit("30/hour")
 async def lot_pdf_report(
+    request: Request,
     lot_id: int,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
@@ -900,6 +903,15 @@ async def lot_pdf_report(
     auction_form_ru = AUCTION_FORM_RU.get(lot.auction_form.value, "—") if lot.auction_form else "—"
     deal_type_ru = DEAL_TYPE_RU.get(lot.deal_type.value, "—") if lot.deal_type else "—"
 
+    # «% НЦ от КС» — данные уровня Инвестор+ (зеркало _lot_to_item и CSV). Вход в PDF
+    # открыт с Pro, поэтому поле гейтим внутри отчёта, а не только на входе.
+    if plan_rank(user) < RANK_INVESTOR:
+        pct_kc_cell = '<span style="color:#9ca3af">🔒 тариф Инвестор</span>'
+    elif lot.pct_price_to_cadastral is not None:
+        pct_kc_cell = f"{lot.pct_price_to_cadastral:.1f}%"
+    else:
+        pct_kc_cell = "—"
+
     html = f"""<!DOCTYPE html><html><head><meta charset="utf-8">
 <style>
 @font-face {{
@@ -954,7 +966,7 @@ h1 {{ font-size: 14pt; margin: 0 0 6px; }}
   </div>
   <div class="kpi-row">
     <div class="kpi-cell"><div class="label">Кадастровая стоимость</div>{fmt_p(lot.cadastral_cost)}</div>
-    <div class="kpi-cell"><div class="label">% НЦ от КС</div>{f"{lot.pct_price_to_cadastral:.1f}%" if lot.pct_price_to_cadastral is not None else "—"}</div>
+    <div class="kpi-cell"><div class="label">% НЦ от КС</div>{pct_kc_cell}</div>
   </div>
   <div class="kpi-row">
     <div class="kpi-cell"><div class="label">Дисконт к рынку</div>{f"{int(lot.discount_to_market_pct)}%" if lot.discount_to_market_pct else "—"}</div>
@@ -1198,7 +1210,10 @@ async def get_heatmap(db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/export")
+# До 5000 строк за запрос — лимит против выкачивания базы и нагрузки на Postgres.
+@limiter.limit("20/hour")
 async def export_lots_csv(
+    request: Request,
     # Используем ту же фильтрацию что и /api/lots — пробрасываем те же параметры
     status: Optional[str] = Query(None),
     region: Optional[List[str]] = Query(None, alias="region"),
@@ -1912,7 +1927,11 @@ async def get_region_data(
 
 
 @router.get("/{lot_id}/photo/{idx}")
+# Холодный кэш = поход через платный резидентный прокси. Лимит щедрый: галерея лота
+# и превью в каталоге тянут по нескольку картинок на страницу.
+@limiter.limit("600/hour")
 async def get_lot_photo(
+    request: Request,
     lot_id: int,
     idx: int,
     w: int = Query(1400, description="Ширина: 320 для миниатюр, 1400 для просмотра"),

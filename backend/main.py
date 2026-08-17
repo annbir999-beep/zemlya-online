@@ -27,11 +27,18 @@ async def lifespan(app: FastAPI):
     await engine.dispose()
 
 
+# В проде интерактивные схемы закрыты: /docs выкладывал полную карту API, включая
+# админские роуты. Локально (ENVIRONMENT != production) остаются как есть.
+_is_prod = settings.ENVIRONMENT.lower() in ("production", "prod")
+
 app = FastAPI(
     title="Торги Земли — API",
     description="Агрегатор земельных аукционов России",
     version="1.0.0",
     lifespan=lifespan,
+    docs_url=None if _is_prod else "/docs",
+    redoc_url=None if _is_prod else "/redoc",
+    openapi_url=None if _is_prod else "/openapi.json",
 )
 
 app.state.limiter = limiter

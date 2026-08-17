@@ -53,7 +53,10 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    # Без --reload: watcher на 2GB VPS лишний, а подхват полузаписанного файла при
+    # git pull ронял воркеры под нагрузкой. Код по-прежнему смонтирован (./backend:/app),
+    # поэтому деплой = git pull + docker compose restart backend, ребилд не нужен.
+    command: uvicorn main:app --host 0.0.0.0 --port 8000
 
   celery_worker:
     build: ./backend
