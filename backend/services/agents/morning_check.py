@@ -5,8 +5,10 @@
 """
 from __future__ import annotations
 
+import json
 import shutil
 from datetime import datetime, timezone, timedelta
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy import select, func, and_
@@ -41,10 +43,52 @@ _INGEST_SOURCES = [
 _DISK_WARN_PCT = 85
 
 
+# Бэкапы Postgres. 27.07.2026 строка бэкапа молча исчезла из crontab, и база
+# прожила 45 дней без единой копии — ни один алерт не сработал, потому что
+# мониторились очередь Celery и статусы лотов, но не возраст резервной копии.
+# Смотрим сами дампы, а не лог cron: пропало тогда именно расписание, лог при
+# этом просто перестал пополняться и выглядел «нормально старым».
+# Каталог /var/backups/sotka смонтирован в контейнер как /backups:ro.
+_BACKUP_DIR = "/backups"
+_BACKUP_MAX_AGE_H = 48          # cron суточный, 48ч = один пропущенный прогон терпим
+_BACKUP_MIN_MB = 50             # дамп ~475 МБ; собственный порог скрипта (10 КБ) слишком мягкий
+
+
 def _pct(part: int, total: int) -> str:
     if not total:
         return "0%"
     return f"{round(part / total * 100)}%"
+
+
+def _check_backups() -> dict[str, Any]:
+    """Возраст, размер и число локальных дампов + статус выгрузки в S3.
+
+    S3 берём из маркера last_run.json, который пишет scripts/backup_db.sh:
+    неудачная выгрузка не валит скрипт (локальная копия остаётся, exit 0),
+    поэтому по файлам офсайт-пропажу не увидеть. Маркера может не быть — тогда
+    про S3 честно говорим «нет данных», а не «всё хорошо».
+    """
+    info: dict[str, Any] = {"present": False, "count": 0, "s3": None}
+    try:
+        base = Path(_BACKUP_DIR)
+        dumps = sorted(base.glob("sotka_*.sql.gz"), key=lambda f: f.stat().st_mtime)
+        info["count"] = len(dumps)
+        if dumps:
+            st = dumps[-1].stat()
+            now_ts = datetime.now(timezone.utc).timestamp()
+            info["present"] = True
+            info["name"] = dumps[-1].name
+            info["size_mb"] = round(st.st_size / 1024 ** 2)
+            info["age_hours"] = round((now_ts - st.st_mtime) / 3600, 1)
+            # Резкое падение размера = усечённый дамп при формально свежем файле
+            if len(dumps) > 1:
+                info["prev_size_mb"] = round(dumps[-2].stat().st_size / 1024 ** 2)
+        marker = base / "last_run.json"
+        if marker.is_file():
+            info["s3"] = json.loads(marker.read_text()).get("s3")
+    except Exception as e:
+        info["error"] = f"{type(e).__name__}: {e}"
+    return info
 
 
 class MorningCheckAgent(BaseAgent):
@@ -147,6 +191,9 @@ class MorningCheckAgent(BaseAgent):
         except Exception as e:
             print(f"[agent:morning_check] disk check failed: {e}")
 
+        # ── Бэкапы БД ──
+        backup = _check_backups()
+
         metrics = {
             "active_lots": active,
             "stale_active": stale_active,
@@ -167,6 +214,7 @@ class MorningCheckAgent(BaseAgent):
             "disk_used_gb": round(disk_used_gb, 1),
             "disk_free_gb": round(disk_free_gb, 1),
             "disk_pct": disk_pct,
+            "backup": backup,
         }
 
         # ── Сборка отчёта ──
@@ -194,12 +242,58 @@ class MorningCheckAgent(BaseAgent):
                 f"⚠️ Очередь Celery раздута: {queue_depth} задач — проверить, не стакаются ли "
                 f"periodic-задачи (inspect active)"
             )
+        if backup.get("error"):
+            warnings.append(
+                f"⚠️ Проверка бэкапов не прошла: {backup['error']} — смонтирован ли "
+                f"/backups в контейнер воркера (docker-compose.yml)?"
+            )
+        elif not backup.get("present"):
+            warnings.append(
+                "⚠️ Бэкапов БД нет вовсе — проверить `crontab -l` и /var/backups/sotka. "
+                "Строка бэкапа уже исчезала молча (27.07: база прожила 45 дней без копий)"
+            )
+        else:
+            if backup["age_hours"] > _BACKUP_MAX_AGE_H:
+                warnings.append(
+                    f"⚠️ Последний бэкап БД {backup['age_hours']:.0f}ч назад "
+                    f"({backup['name']}) — суточный cron не отработал, смотреть "
+                    f"`crontab -l` и /var/log/sotka-backup.log"
+                )
+            prev_mb = backup.get("prev_size_mb")
+            if backup["size_mb"] < _BACKUP_MIN_MB:
+                warnings.append(
+                    f"⚠️ Бэкап подозрительно мал: {backup['size_mb']} МБ — дамп мог "
+                    f"оборваться, файл при этом выглядит свежим"
+                )
+            elif prev_mb and backup["size_mb"] < prev_mb * 0.5:
+                warnings.append(
+                    f"⚠️ Бэкап вдвое меньше предыдущего ({backup['size_mb']} против "
+                    f"{prev_mb} МБ) — проверить, полный ли дамп"
+                )
+            if backup.get("s3") == "failed":
+                warnings.append(
+                    "⚠️ Бэкап не ушёл в S3 (локальная копия есть, офсайта нет) — "
+                    "смотреть хвост /var/log/sotka-backup.log"
+                )
         if disk_pct >= _DISK_WARN_PCT:
             warnings.append(
                 f"⚠️ Диск занят на {disk_pct}% (свободно {disk_free_gb:.1f} ГБ) — на исходе "
                 f"места падает билд фронта. Чистить: docker builder prune -af, "
                 f"journalctl --vacuum-size=200M, docker system df"
             )
+
+        if backup.get("present"):
+            s3_label = {
+                "ok": "S3 ок",
+                "failed": "S3 НЕ УШЁЛ",
+                "not_configured": "без S3",
+            }.get(backup.get("s3"), "S3 н/д")
+            backup_line = (
+                f"{backup['size_mb']} МБ, {backup['age_hours']:.0f}ч назад, "
+                f"копий {backup['count']}, {s3_label}"
+            )
+        else:
+            backup_line = "НЕТ ФАЙЛОВ — проверить cron"
 
         report = (
             f"☀️ *Утренний отчёт — Торги Земли*\n"
@@ -219,7 +313,8 @@ class MorningCheckAgent(BaseAgent):
             # в выручке) съедал запятую в «(79%), свободно».
             f"🖥 *Сервер*\n"
             f"• Диск: {disk_used_gb:.1f} / {disk_total_gb:.1f} ГБ ({disk_pct}%), "
-            f"свободно {disk_free_gb:.1f} ГБ\n\n" +
+            f"свободно {disk_free_gb:.1f} ГБ\n"
+            f"• Бэкап БД: {backup_line}\n\n" +
             f"💰 *Деньги за сутки*\n"
             f"• Платежей: {pay_count}\n"
             f"• Выручка: {pay_sum:,.0f} ₽\n\n".replace(",", " ")

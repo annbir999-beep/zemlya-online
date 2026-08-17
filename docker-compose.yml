@@ -84,6 +84,10 @@ services:
         condition: service_started
     volumes:
       - ./backend:/app
+      # Только чтение: утренний health-check смотрит возраст и размер дампов
+      # Postgres. Пишет их cron на хосте (scripts/backup_db.sh), контейнеру тут
+      # нужно исключительно подглядывать.
+      - /var/backups/sotka:/backups:ro
     extra_hosts:
       - "api.telegram.org:149.154.167.220"
     # Логи по умолчанию не ротируются: json.log воркера дорос до 182 МБ и вместе

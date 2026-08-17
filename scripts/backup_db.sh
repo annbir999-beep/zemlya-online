@@ -50,11 +50,13 @@ find "$BACKUP_DIR" -name 'sotka_*.sql.gz' -mtime +"$KEEP_DAYS" -delete
 
 # Выгрузка в S3, если настроено
 KEEP_S3=30
+S3_STATUS="not_configured"
 if [ -n "${BACKUP_S3_BUCKET:-}" ] && command -v s3cmd >/dev/null 2>&1; then
     S3_HOST="${BACKUP_S3_ENDPOINT#https://}"
     s3() { s3cmd --host="$S3_HOST" --host-bucket="%(bucket)s.$S3_HOST" \
                  --access_key="$BACKUP_S3_ACCESS_KEY" --secret_key="$BACKUP_S3_SECRET_KEY" "$@"; }
     if s3 put "$FILE" "s3://$BACKUP_S3_BUCKET/db/"; then
+        S3_STATUS="ok"
         echo "[$(date '+%F %T')] uploaded to s3://$BACKUP_S3_BUCKET/db/"
         # Ротация в S3: имена содержат timestamp, лексикографическая сортировка = хронология
         s3 ls "s3://$BACKUP_S3_BUCKET/db/" | awk '{print $4}' | sort | head -n -"$KEEP_S3" \
@@ -62,10 +64,18 @@ if [ -n "${BACKUP_S3_BUCKET:-}" ] && command -v s3cmd >/dev/null 2>&1; then
                 [ -n "$obj" ] && s3 del "$obj" && echo "[$(date '+%F %T')] rotated out $obj"
               done
     else
+        S3_STATUS="failed"
         echo "[$(date '+%F %T')] WARN: s3 upload failed (local copy kept)" >&2
     fi
 else
     echo "[$(date '+%F %T')] s3 not configured — local backup only"
 fi
 
-echo "[$(date '+%F %T')] backup complete"
+# Маркер прогона для утреннего health-check. По самим файлам он видит только
+# факт свежего локального дампа, а неудачная выгрузка в S3 скрипт не валит
+# (локальная копия сохраняется, exit 0) — то есть офсайт мог пропасть молча.
+# Пишем рядом с дампами: ротация ищет 'sotka_*.sql.gz' и этот файл не тронет.
+printf '{"stamp":"%s","size_bytes":%s,"s3":"%s"}\n' \
+    "$STAMP" "$(stat -c%s "$FILE")" "$S3_STATUS" > "$BACKUP_DIR/last_run.json"
+
+echo "[$(date '+%F %T')] backup complete (s3: $S3_STATUS)"
