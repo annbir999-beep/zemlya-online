@@ -999,14 +999,23 @@ def enrich_nearby_features(self, batch_size: int = 35):
         raise self.retry(exc=exc)
 
 
-async def _enrich_nearby_features(batch_size: int):
+async def _enrich_nearby_features(batch_size: int, budget_s: float = 900):
     """Берёт лоты с координатами и без nearby_features (или старше 30 дней),
     дёргает OSM Overpass и сохраняет признаки + расстояния.
 
     Координаты лежат в Geography column `location` (PostGIS POINT) — берём
     через ST_Y/ST_X (lat = Y, lng = X в SRID 4326).
+
+    budget_s — сколько прогону отведено по часам. Порция сама по себе гарантии
+    не даёт: время на лот зависит от здоровья Overpass и плавает. Замеры 17.08
+    в пределах одного часа дали 25-30 с/лот и 39 с/лот (три ReadTimeout из пяти
+    лотов, httpx выжидает свои 40 с и уходит на запасной endpoint) — под 39 с
+    даже порция 35 выходит за лимит 20 минут. Поэтому останавливаемся по часам,
+    не добрав порцию: остаток заберёт следующий часовой запуск, а задача при
+    этом уходит штатно, а не через SoftTimeLimitExceeded.
     """
     import asyncio as _asyncio
+    import time as _time
     from datetime import datetime, timezone, timedelta
     from sqlalchemy import select, or_, and_, func
     from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
@@ -1048,7 +1057,14 @@ async def _enrich_nearby_features(batch_size: int):
 
         updated = 0
         fails_in_row = 0
+        started = _time.monotonic()
         for i, r in enumerate(rows, 1):
+            elapsed = _time.monotonic() - started
+            if elapsed > budget_s:
+                print(f"[nearby] бюджет {budget_s:.0f}с исчерпан на {i - 1}/{len(rows)} "
+                      f"— остаток возьмёт следующий запуск")
+                break
+
             # Сеть — строго ВНЕ транзакции. Раньше запрос в Overpass шёл между
             # UPDATE и коммитом (коммит был раз в 20 лотов), и при недоступности
             # сервиса транзакция висела открытой десятки минут, держа блокировки
