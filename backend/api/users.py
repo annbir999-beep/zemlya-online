@@ -55,7 +55,8 @@ class UserProfile(BaseModel):
 class UpdateProfileRequest(BaseModel):
     name: Optional[str] = None
     phone: Optional[str] = None
-    telegram_id: Optional[str] = None
+    # telegram_id сюда не входит: привязка только через бота (/link), иначе можно
+    # вписать чужой chat_id и слать ему алерты от имени бренда.
     notification_email: Optional[bool] = None
     notification_telegram: Optional[bool] = None
 
@@ -356,8 +357,6 @@ async def update_profile(
         user.name = data.name
     if data.phone is not None:
         user.phone = data.phone
-    if data.telegram_id is not None:
-        user.telegram_id = data.telegram_id
     if data.notification_email is not None:
         user.notification_email = data.notification_email
     if data.notification_telegram is not None:

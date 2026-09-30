@@ -22,7 +22,7 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 def create_access_token(user_id: int) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    return jwt.encode({"sub": str(user_id), "exp": expire}, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    return jwt.encode({"sub": str(user_id), "exp": expire, "type": "access"}, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
 def create_refresh_token(user_id: int) -> str:
@@ -31,11 +31,12 @@ def create_refresh_token(user_id: int) -> str:
 
 
 def decode_token(token: str) -> Optional[int]:
-    """Декодирует ACCESS-токен. Refresh-токен (type=refresh) сюда НЕ пройдёт —
-    его нельзя использовать как access (иначе долгоживущий refresh = вечный доступ)."""
+    """Декодирует ACCESS-токен. Refresh и reset сюда НЕ пройдут: refresh как access =
+    вечный доступ, reset из письма как access = вход в аккаунт по ссылке сброса.
+    Токены без поля type — выданные до его появления, живут не дольше access TTL."""
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        if payload.get("type") == "refresh":
+        if payload.get("type", "access") != "access":
             return None
         return int(payload["sub"])
     except (JWTError, KeyError, ValueError):

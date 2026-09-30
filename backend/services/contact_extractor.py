@@ -111,3 +111,18 @@ def extract_contacts(text: Optional[str]) -> dict:
             contacts["address"] = addr
 
     return contacts
+
+
+_REDACTED = "[контакты — в тарифе Pro]"
+
+
+def redact_contacts(text: Optional[str]) -> Optional[str]:
+    """Вырезает телефоны и email из текста извещения для тарифов ниже Pro.
+
+    Контакты администрации — Pro-фича (organizer_contacts), а извлекаются они
+    из того же текста; без вырезания полный текст отдавал бы их бесплатно.
+    """
+    if not text:
+        return text
+    text = _EMAIL_RE.sub(_REDACTED, text)
+    return _PHONE_RE.sub(_REDACTED, text)

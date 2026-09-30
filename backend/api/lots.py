@@ -2022,20 +2022,25 @@ async def get_lot(
                 )
             )).scalar_one_or_none() is not None
 
+    # Тексты извещения содержат те же телефоны/email, что уходят в organizer_contacts
+    # (Pro) — ниже Pro вырезаем их, иначе контакты читались бы прямо из текста.
+    from services.contact_extractor import redact_contacts
+    _txt = (lambda t: t) if rank >= RANK_PRO else redact_contacts
+
     # Пейволл премиум-полей — внутри _lot_to_item (единая точка для списка и детали).
     item = _lot_to_item(lot, rank=rank)
     data = item.model_dump()
     return LotDetail(
         **data,
-        description=lot.description,
+        description=_txt(lot.description),
         final_price=lot.final_price,
         price_per_sqm=lot.price_per_sqm,
         organizer_name=lot.organizer_name,
         auction_start_date=lot.auction_start_date.isoformat() if lot.auction_start_date else None,
         rosreestr_data=lot.rosreestr_data,
         ai_assessment=lot.ai_assessment if ai_visible else None,
-        full_description=lot.full_description,
-        technical_conditions=lot.technical_conditions,
+        full_description=_txt(lot.full_description),
+        technical_conditions=_txt(lot.technical_conditions),
         contract_terms=contract,
         nearby_features=lot.nearby_features if isinstance(lot.nearby_features, dict) else None,
         organizer_contacts=contacts,

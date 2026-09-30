@@ -465,6 +465,26 @@ async def create_payment(
     }
 
 
+async def _yookassa_get(path: str) -> Optional[dict]:
+    """GET к API ЮКассы для сверки уведомления. None — объекта нет в магазине
+    (поддельное уведомление); сетевые/5xx ошибки → 500, ЮКасса повторит доставку."""
+    import httpx
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                f"https://api.yookassa.ru/v3/{path}",
+                auth=(settings.YUKASSA_SHOP_ID, settings.YUKASSA_SECRET_KEY),
+            )
+    except httpx.HTTPError as e:
+        raise HTTPException(status_code=500, detail=f"yookassa verify failed: {type(e).__name__}")
+    if resp.status_code == 404:
+        return None
+    if resp.status_code != 200:
+        raise HTTPException(status_code=500, detail=f"yookassa verify HTTP {resp.status_code}")
+    return resp.json()
+
+
 @router.post("/webhook")
 async def yukassa_webhook(request: Request, db: AsyncSession = Depends(get_db)):
     """ЮКасса отправляет сюда уведомления об оплате.
@@ -481,8 +501,13 @@ async def yukassa_webhook(request: Request, db: AsyncSession = Depends(get_db)):
     if not payment_id:
         return {"status": "ignored"}
 
-    # Отмена платежа: помечаем pending-подписку, чтобы она не активировалась позже
+    # Отмена платежа: помечаем pending-подписку, чтобы она не активировалась позже.
+    # Как и для succeeded, телу не верим — статус берём из API ЮКассы.
     if event == "payment.canceled":
+        verified = await _yookassa_get(f"payments/{payment_id}")
+        if not verified or verified.get("status") != "canceled":
+            print(f"[payment-webhook] canceled не подтверждён для {payment_id} — ignored")
+            return {"status": "ignored"}
         result = await db.execute(
             select(Subscription).where(
                 Subscription.yukassa_payment_id == payment_id,
@@ -497,8 +522,15 @@ async def yukassa_webhook(request: Request, db: AsyncSession = Depends(get_db)):
 
     # Возврат средств: сами подписку не режем (частичные возвраты, споры) —
     # помечаем и уведомляем в TG для ручного даунгрейда.
+    # object.id здесь — id возврата. Без проверки через API любой мог бы пометить
+    # чужую оплаченную подписку refunded (повторный реф-бонус, промокоды new_users_only,
+    # ложный запрос Анне «даунгрейдни вручную»).
     if event == "refund.succeeded":
-        refund_payment_id = (data.get("object") or {}).get("payment_id") or payment_id
+        verified = await _yookassa_get(f"refunds/{payment_id}")
+        if not verified or verified.get("status") != "succeeded" or not verified.get("payment_id"):
+            print(f"[payment-webhook] refund не подтверждён для {payment_id} — ignored")
+            return {"status": "ignored"}
+        refund_payment_id = verified["payment_id"]
         result = await db.execute(
             select(Subscription).where(Subscription.yukassa_payment_id == refund_payment_id)
         )
